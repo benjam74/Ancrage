@@ -12,12 +12,12 @@
 
 <div class="path">
   {#each themes as t (t.theme.id)}
-    {@const [c, cd] = LEVEL_COLORS[t.level]}
+    {@const [c, cd, ci] = LEVEL_COLORS[t.level]}
     <div class="node-row">
       <button
         class="node"
         class:active={t.theme.id === activeId}
-        style="--c:var({c});--cd:var({cd})"
+        style="--c:var({c});--cd:var({cd});--ci:var({ci})"
         aria-label="{t.theme.name}, {t.level}, {t.mastery} % maîtrisé"
         aria-expanded={selected?.theme.id === t.theme.id}
         onclick={() => (open = t.theme.id)}
@@ -41,7 +41,7 @@
   <div class="panel" aria-live="polite">
     <div class="row"><h3>{selected.theme.name}</h3><span class="pill">{selected.level}</span></div>
     <div class="bar" style="--c:var({c})"><i style="width:{selected.mastery}%"></i></div>
-    <p class="muted">{selected.mastery} % maîtrisé · {selected.cards} carte{selected.cards > 1 ? 's' : ''} · {selected.due} due{selected.due > 1 ? 's' : ''} aujourd’hui</p>
+    <p class="muted">{selected.mastery} % maîtrisé · {selected.cards} carte{selected.cards > 1 ? 's' : ''} · {selected.due} à réviser aujourd’hui</p>
     {#if selected.cards === 0}
       <a class="btn ghost" href="#creer">Créer les premières cartes</a>
     {:else if selected.due > 0}

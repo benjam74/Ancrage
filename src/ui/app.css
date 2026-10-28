@@ -7,6 +7,8 @@
   --ok: #2f8f5b; --ok-bg: #d9f1e3; --ok-deep: #1f6a41; --ok-ink: #1f6a41;
   --bad: #c8412d; --bad-bg: #fbe2dc;
   --on-accent: #ffffff;
+  --sun-ink: #8a5f00; --coral-ink: #b63c24;
+  --on-ok: #ffffff; --on-petrol: #ffffff; --on-sun: #2a1d00; --on-coral: #ffffff; --on-ink-soft: #ffffff;
   --display: "Nunito", "Trebuchet MS", system-ui, sans-serif;
   --body: "Nunito Sans", "Segoe UI", system-ui, sans-serif;
   --r-sm: 10px; --r-md: 16px; --r-lg: 22px;
@@ -20,6 +22,8 @@
     --coral: #f06e52; --coral-deep: #b9452d; --sun: #f6c24a; --sun-deep: #b88a17;
     --ok: #4cc283; --ok-bg: #143a28; --ok-deep: #2e8a58; --ok-ink: #4cc283;
     --bad: #f2806a; --bad-bg: #3e1d17; --on-accent: #0c1c20;
+    --sun-ink: #f6c24a; --coral-ink: #f58a72;
+    --on-ok: #0c1c20; --on-petrol: #0c1c20; --on-sun: #0c1c20; --on-coral: #0c1c20; --on-ink-soft: #0c1c20;
     color-scheme: dark;
   }
 }
@@ -121,7 +125,7 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .end { display: grid; justify-items: center; gap: 20px; text-align: center; }
 .tiles { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 12px; width: 100%; }
 .stat-tile { border: 2px solid var(--c); border-radius: var(--r-md); overflow: hidden; background: var(--surface); }
-.stat-tile .h { background: var(--c); color: #fff; font-family: var(--display); font-weight: 900; font-size: 12px; letter-spacing: .06em; text-transform: uppercase; padding: 4px; }
+.stat-tile .h { background: var(--c); color: var(--h-ink, #fff); font-family: var(--display); font-weight: 900; font-size: 12px; letter-spacing: .06em; text-transform: uppercase; padding: 4px; }
 .stat-tile .v { font-family: var(--display); font-weight: 900; font-size: 26px; padding: 10px 4px; font-variant-numeric: tabular-nums; }
 
 @media (max-width: 520px) { .s-foot .btn { width: 100%; } }
@@ -191,8 +195,8 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .chips { display: flex; flex-wrap: wrap; gap: 8px; }
 .chip { display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border-radius: 99px; background: var(--surface); border: 2px solid var(--line); font-family: var(--display); font-weight: 900; font-size: 15px; font-variant-numeric: tabular-nums; }
 .chip svg { width: 20px; height: 20px; }
-.chip.streak { color: var(--coral); }
-.chip.xp { color: var(--sun-deep); }
+.chip.streak { color: var(--coral-ink); }
+.chip.xp { color: var(--sun-ink); }
 .chip.freeze { color: var(--petrol); }
 .chip.off { color: var(--ink-soft); }
 .hero-head { display: flex; align-items: center; gap: 20px; }
@@ -210,7 +214,7 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .node .disc { position: relative; width: 78px; height: 78px; display: grid; place-items: center; }
 .node .disc svg.lvl { position: absolute; inset: 0; width: 100%; height: 100%; }
 .node .disc svg.lvl circle { fill: none; stroke-width: 7; }
-.node .core { width: 58px; height: 58px; border-radius: 50%; display: grid; place-items: center; background: var(--c); box-shadow: 0 5px 0 var(--cd); color: #fff; font-family: var(--display); font-weight: 900; font-size: 22px; }
+.node .core { width: 58px; height: 58px; border-radius: 50%; display: grid; place-items: center; background: var(--c); box-shadow: 0 5px 0 var(--cd); color: var(--ci); font-family: var(--display); font-weight: 900; font-size: 22px; }
 .node .name { font-family: var(--display); font-weight: 800; font-size: 14px; line-height: 1.2; }
 .node .lvl-label { font-size: 12px; font-weight: 700; color: var(--ink-soft); }
 .node.active .disc::after { content: ""; position: absolute; inset: -6px; border-radius: 50%; border: 3px solid var(--sun); animation: pulse 1.8s ease-out infinite; }

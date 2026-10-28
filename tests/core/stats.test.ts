@@ -42,6 +42,12 @@ describe('mastery', () => {
     expect(mastery(mix(90, 100), NOW, s).level).toBe('Ancré');
     expect(mastery(mix(90, 100), NOW, s).pct).toBe(90);
   });
+
+  test('levels use the exact share: 179 of 200 (89.5 %) is not yet Ancré', () => {
+    const mix = (m: number, total: number) => [...Array.from({ length: m }, solid), ...Array.from({ length: total - m }, young)];
+    expect(mastery(mix(179, 200), NOW, s)).toMatchObject({ pct: 90, level: 'Solide' });
+    expect(mastery(mix(49, 200), NOW, s).level).toBe('Découverte');
+  });
 });
 
 describe('dailyCounts', () => {

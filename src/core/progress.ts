@@ -50,9 +50,13 @@ export function goalDays(roundEnds: number[]): number[] {
 
 /**
  * Walks every study day from the first goal day. A missed day uses a freeze if one is left,
- * otherwise resets the streak. Today only counts once its goal is reached.
+ * otherwise resets the streak; a rest day (nothing to review) is skipped. Today only counts once its goal is reached.
  */
-export function streakState(days: number[], todayStart: number): { current: number; freezes: number; todayDone: boolean } {
+export function streakState(
+  days: number[],
+  todayStart: number,
+  isRestDay: (dayStart: number) => boolean = () => false,
+): { current: number; freezes: number; todayDone: boolean } {
   const goals = new Set(days);
   const todayDone = goals.has(todayStart);
   if (days.length === 0) return { current: 0, freezes: 0, todayDone };
@@ -62,6 +66,8 @@ export function streakState(days: number[], todayStart: number): { current: numb
     if (goals.has(d)) {
       current++;
       if (current % FREEZE_EVERY === 0) freezes = Math.min(MAX_FREEZES, freezes + 1);
+    } else if (isRestDay(d)) {
+      // Nothing could be reviewed that day: it neither grows nor breaks the streak.
     } else if (freezes > 0) {
       freezes--;
     } else {
@@ -75,4 +81,44 @@ export function weekStart(now: number): number {
   const d = new Date(studyDayStart(now));
   d.setDate(d.getDate() - ((d.getDay() + 6) % 7));
   return studyDayStart(d.getTime() + 12 * HOUR);
+}
+
+/**
+ * A study day is a rest day when, at its start, no card was due before its end and no unseen card
+ * could be introduced. Derived from the log, so it needs no stored event.
+ */
+export function makeRestDayCheck(
+  cards: { cardId: string; createdAt: number }[],
+  entries: ReviewEntry[],
+  scheduler: Scheduler,
+  newPerDay: number,
+): (dayStart: number) => boolean {
+  const byCard = new Map<string, ReviewEntry[]>();
+  for (const e of entries) {
+    const list = byCard.get(e.cardId);
+    if (list) list.push(e);
+    else byCard.set(e.cardId, [e]);
+  }
+  const timelines = cards.map(({ cardId, createdAt }) => {
+    const log = (byCard.get(cardId) ?? []).sort(byTimeThenId);
+    let state = scheduler.initial(createdAt);
+    const steps = log.map((e) => {
+      state = scheduler.apply(state, e.rating, e.ts);
+      return { ts: e.ts, due: state.due.getTime() };
+    });
+    return { createdAt, steps };
+  });
+  return (dayStart) => {
+    const end = nextStudyDay(dayStart);
+    for (const { createdAt, steps } of timelines) {
+      if (createdAt >= end) continue;
+      let due: number | null = null;
+      for (const step of steps) {
+        if (step.ts >= dayStart) break;
+        due = step.due;
+      }
+      if (due === null ? newPerDay > 0 : due < end) return false;
+    }
+    return true;
+  };
 }

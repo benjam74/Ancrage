@@ -3,7 +3,7 @@ import { createEngine, type Engine } from '../core/engine';
 import { newId } from '../core/ids';
 import type { Card, Note, NoteFields, ReviewEntry, Theme } from '../core/model';
 import { validateFields } from '../core/validate';
-import { classifyEntries, goalDays, nextStudyDay, streakState, weekStart, xpBetween } from '../core/progress';
+import { classifyEntries, goalDays, makeRestDayCheck, nextStudyDay, streakState, weekStart, xpBetween } from '../core/progress';
 import { dailyCounts, forecast, mastery, retention, stateBreakdown, type Level } from '../core/stats';
 import type { CardState } from '../core/scheduler';
 import { buildDailyQueue, countNewIntroduced, nextDue, studyDayStart, type QueueCandidate } from '../core/queue';
@@ -54,6 +54,8 @@ export interface Progress {
   heatmap: number[];
   /** Cards due per study day for the next 7 days, today (with overdue) first. */
   forecast: number[];
+  /** Start of each study day `forecast` covers, for labels. */
+  forecastDays: number[];
   /** Share of correct answers on due cards over the last 30 days. */
   retention: number | null;
   breakdown: ReturnType<typeof stateBreakdown>;
@@ -132,7 +134,13 @@ export function createServices(repo: Repo, deviceId: string): Services {
       scheduler,
     );
     const roundEnds = events.filter((e) => e.type === 'round_completed').map((e) => e.ts);
-    return { themes, notes, active, reviews, roundEnds, scheduler, states, kinds, noteById };
+    const isRestDay = makeRestDayCheck(
+      active.map((c) => ({ cardId: c.id, createdAt: noteById.get(c.noteId)!.createdAt })),
+      reviews,
+      scheduler,
+      settings.newPerDay,
+    );
+    return { themes, notes, active, reviews, roundEnds, scheduler, states, kinds, noteById, isRestDay };
   }
 
   const services: Services = {
@@ -260,7 +268,10 @@ export function createServices(repo: Repo, deviceId: string): Services {
     async progress(now) {
       const snap = await snapshot();
       const todayStart = studyDayStart(now);
-      const streak = streakState(goalDays(snap.roundEnds), todayStart);
+      const streak = streakState(goalDays(snap.roundEnds), todayStart, snap.isRestDay);
+      const week = weekStart(now);
+      const forecastDays = [todayStart];
+      while (forecastDays.length < FORECAST_DAYS) forecastDays.push(nextStudyDay(forecastDays[forecastDays.length - 1]));
       const byTheme = new Map<string, CardState[]>();
       for (const card of snap.active) {
         const t = snap.noteById.get(card.noteId)!.themeId;
@@ -274,7 +285,7 @@ export function createServices(repo: Repo, deviceId: string): Services {
         freezes: streak.freezes,
         todayDone: streak.todayDone,
         xpToday: xpBetween(snap.reviews, snap.kinds, snap.roundEnds, todayStart, nextStudyDay(todayStart)),
-        xpWeek: xpBetween(snap.reviews, snap.kinds, snap.roundEnds, weekStart(now), Number.MAX_SAFE_INTEGER),
+        xpWeek: xpBetween(snap.reviews, snap.kinds, snap.roundEnds, week, weekStart(week + 8 * 86_400_000)),
         themes: [...snap.themes]
           .sort((a, b) => a.order - b.order)
           .map((theme) => {
@@ -285,6 +296,7 @@ export function createServices(repo: Repo, deviceId: string): Services {
           }),
         heatmap: dailyCounts(snap.reviews, todayStart, HEATMAP_DAYS),
         forecast: forecast(allStates, now, FORECAST_DAYS),
+        forecastDays,
         retention: retention(snap.reviews, snap.kinds, now - RETENTION_WINDOW),
         breakdown: stateBreakdown(allStates),
       };
@@ -298,7 +310,7 @@ export function createServices(repo: Repo, deviceId: string): Services {
       const roundEnds = [...before.roundEnds, now];
       return {
         xp: xpBetween(before.reviews, before.kinds, [now], startedAt, now + 1),
-        streak: streakState(goalDays(roundEnds), todayStart).current,
+        streak: streakState(goalDays(roundEnds), todayStart, before.isRestDay).current,
         firstGoalToday,
       };
     },

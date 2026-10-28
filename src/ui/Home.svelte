@@ -45,6 +45,7 @@
           <button class="btn sun wide" class:done={progress.todayDone} onclick={onstart}>{progress.todayDone ? 'Refaire une manche' : 'Commencer la séance'}</button>
         {:else}
           <p>{today.nextDue ? `Prochaine révision ${inHowLong(today.nextDue, Date.now())}.` : 'Ajoute des cartes pour commencer.'}</p>
+          {#if !progress.todayDone && progress.streak > 0}<p>Rien à réviser aujourd’hui : ta série est préservée.</p>{/if}
         {/if}
         <p class="hero-xp">{progress.xpToday} XP aujourd’hui</p>
       </section>

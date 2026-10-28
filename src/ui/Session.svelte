@@ -71,12 +71,13 @@
     if (id) await show(id);
     else {
       const now = Date.now();
-      roundResult = await services.completeRound(roundStartedAt, now);
+      // A round with no answer (empty queue) is not a finished round.
+      roundResult = round.answered > 0 ? await services.completeRound(roundStartedAt, now) : null;
       hasMore = (await services.today(now)).queue.length > 0;
       shown = null;
       result = null;
       ended = true;
-      countUp(roundResult.xp);
+      if (roundResult) countUp(roundResult.xp);
     }
   }
 
@@ -174,7 +175,7 @@
           </p>
         {/if}
         <div class="tiles three">
-          <div class="stat-tile" style="--c:var(--sun-deep)"><div class="h">XP gagnée</div><div class="v" aria-label="{roundResult?.xp ?? 0} XP">+{xpShown}</div></div>
+          <div class="stat-tile" style="--c:var(--sun);--h-ink:#2a1d00"><div class="h">XP gagnée</div><div class="v" aria-label="{roundResult?.xp ?? 0} XP">+{xpShown}</div></div>
           <div class="stat-tile" style="--c:var(--ok)"><div class="h">Précision</div><div class="v">{round.answered ? Math.round((round.correct / round.answered) * 100) : 0} %</div></div>
           <div class="stat-tile" style="--c:var(--petrol)"><div class="h">Durée</div><div class="v">{Math.max(1, Math.round((Date.now() - roundStartedAt) / 60_000))} min</div></div>
         </div>

@@ -100,6 +100,11 @@ describe('streakState', () => {
     expect(nextStudyDay(day(2026, 10, 25))).toBe(day(2026, 10, 26));
   });
 
+  test('a rest day (nothing to review) neither grows nor breaks the streak', () => {
+    const rest = new Set([day(2026, 10, 4), day(2026, 10, 5)]);
+    expect(streakState([...days(1, 3), ...days(6, 2)], day(2026, 10, 7), (d) => rest.has(d))).toEqual({ current: 5, freezes: 0, todayDone: true });
+  });
+
   test('no goal day at all', () => {
     expect(streakState([], day(2026, 10, 28))).toEqual({ current: 0, freezes: 0, todayDone: false });
   });

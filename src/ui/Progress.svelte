@@ -15,7 +15,7 @@
   // Forecast chart: one scale for bars, ticks and labels.
   const W = 340, H = 170, PAD = { l: 26, r: 8, t: 18, b: 24 };
   const dayLabels = $derived(
-    progress.forecast.map((_, i) => (i === 0 ? 'Auj.' : new Date(Date.now() + i * 86_400_000).toLocaleDateString('fr-FR', { weekday: 'short' }).replace('.', ''))),
+    progress.forecastDays.map((d, i) => (i === 0 ? 'Auj.' : new Date(d).toLocaleDateString('fr-FR', { weekday: 'short' }).replace('.', ''))),
   );
   const max = $derived(Math.max(4, Math.ceil(Math.max(...progress.forecast) / 4) * 4));
   const ticks = $derived([0, max / 4, max / 2, (3 * max) / 4, max]);
@@ -43,7 +43,7 @@
     <div class="panel kpi">
       <span class="eyebrow">Série</span>
       <span class="v">{progress.streak} jour{progress.streak > 1 ? 's' : ''}</span>
-      <span class="muted">{progress.freezes} gel{progress.freezes > 1 ? 's' : ''} en réserve · {progress.xpWeek} XP cette semaine.</span>
+      <span class="muted">{progress.freezes} gel{progress.freezes > 1 ? 's' : ''} en réserve · {progress.xpWeek.toLocaleString('fr-FR')} XP cette semaine.</span>
     </div>
   </div>
 

@@ -23,9 +23,10 @@ export function mastery(states: CardState[], now: number, scheduler: Scheduler):
   const mastered = states.filter(
     (c) => c.state !== State.New && c.stability >= MASTERED_STABILITY && scheduler.retrievability(c, now) >= MASTERED_RETRIEVABILITY,
   ).length;
-  const pct = states.length ? Math.round((mastered / states.length) * 100) : 0;
+  const exact = states.length ? (mastered / states.length) * 100 : 0;
   const reviewed = states.some((c) => c.state !== State.New);
-  return { cards: states.length, mastered, pct, level: reviewed ? levelOf(pct) : 'Nouveau' };
+  // The level uses the exact share; the rounded value is for display only.
+  return { cards: states.length, mastered, pct: Math.round(exact), level: reviewed ? levelOf(exact) : 'Nouveau' };
 }
 
 function previousStudyDay(dayStart: number): number {
