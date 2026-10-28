@@ -1,7 +1,7 @@
 import Dexie, { type EntityTable } from 'dexie';
 import { cardVariants } from '../core/cards';
 import { newId } from '../core/ids';
-import { DEFAULT_SETTINGS, type Card, type Note, type ReviewEntry, type Settings, type Theme } from '../core/model';
+import { DEFAULT_SETTINGS, type AppEvent, type Card, type Note, type ReviewEntry, type Settings, type Theme } from '../core/model';
 import { byTimeThenId } from '../core/scheduler';
 import type { Repo } from './repo';
 
@@ -14,6 +14,7 @@ class AncrageDb extends Dexie {
   cards!: EntityTable<Card, 'id'>;
   reviews!: EntityTable<ReviewEntry, 'id'>;
   settings!: EntityTable<SettingsRow, 'key'>;
+  events!: EntityTable<AppEvent, 'id'>;
 
   constructor(name: string) {
     super(name);
@@ -24,6 +25,7 @@ class AncrageDb extends Dexie {
       reviews: 'id, cardId, ts',
       settings: 'key',
     });
+    this.version(2).stores({ events: 'id, ts' });
   }
 }
 
@@ -82,6 +84,10 @@ export function createDexieRepo(name: string): Repo {
     async deleteTheme(id) {
       await db.themes.delete(id);
     },
+    async appendEvent(event) {
+      await db.events.add(event);
+    },
+    listEvents: () => db.events.orderBy('ts').toArray(),
     async getFlag(key) {
       return (await db.settings.get(`flag:${key}`))?.value === true;
     },

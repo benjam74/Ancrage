@@ -1,13 +1,14 @@
 <script lang="ts">
-  import { boot, type Services, type Today } from './app/services';
+  import { boot, type Progress as ProgressData, type Services, type Today } from './app/services';
   import type { Note } from './core/model';
   import Editor from './ui/Editor.svelte';
   import Home from './ui/Home.svelte';
   import Library from './ui/Library.svelte';
   import Nav from './ui/Nav.svelte';
+  import Progress from './ui/Progress.svelte';
   import Session from './ui/Session.svelte';
 
-  const VIEWS = ['accueil', 'creer', 'bibliotheque'] as const;
+  const VIEWS = ['accueil', 'creer', 'progres', 'bibliotheque'] as const;
   type View = (typeof VIEWS)[number];
   const fromHash = (): View => {
     const h = location.hash.slice(1);
@@ -16,13 +17,16 @@
 
   let services = $state<Services | null>(null);
   let today = $state<Today | null>(null);
+  let progress = $state<ProgressData | null>(null);
   let view = $state<View>(fromHash());
   let editing = $state<Note | null>(null);
   let inSession = $state(false);
   let error = $state('');
 
   async function refresh() {
-    if (services) today = await services.today(Date.now());
+    if (!services) return;
+    const now = Date.now();
+    [today, progress] = await Promise.all([services.today(now), services.progress(now)]);
   }
 
   function go(next: View) {
@@ -46,15 +50,17 @@
 
 {#if error}
   <main class="page"><h1>Ancrage</h1><p>Impossible d’ouvrir la base locale : {error}</p></main>
-{:else if services && today}
+{:else if services && today && progress}
   {#if inSession}
-    <Session {services} queue={today.queue} onexit={async () => { inSession = false; await refresh(); }} />
+    <Session {services} queue={today.queue} onexit={async () => { await refresh(); inSession = false; }} />
   {:else}
     <div class="app">
       <Nav current={view} onselect={(v) => { if (v === 'creer') editing = null; }} />
       <div class="main">
         {#if view === 'accueil'}
-          <Home {today} onstart={() => (inSession = true)} />
+          <Home {today} {progress} onstart={() => (inSession = true)} />
+        {:else if view === 'progres'}
+          <Progress {progress} />
         {:else if view === 'bibliotheque'}
           <Library {services} onedit={edit} onchange={refresh} />
         {:else}

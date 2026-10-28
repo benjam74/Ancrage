@@ -3,6 +3,9 @@ import { createEngine, type Engine } from '../core/engine';
 import { newId } from '../core/ids';
 import type { Card, Note, NoteFields, ReviewEntry, Theme } from '../core/model';
 import { validateFields } from '../core/validate';
+import { classifyEntries, goalDays, makeRestDayCheck, nextStudyDay, streakState, weekStart, xpBetween } from '../core/progress';
+import { dailyCounts, forecast, mastery, retention, stateBreakdown, type Level } from '../core/stats';
+import type { CardState } from '../core/scheduler';
 import { buildDailyQueue, countNewIntroduced, nextDue, studyDayStart, type QueueCandidate } from '../core/queue';
 import { makeScheduler } from '../core/scheduler';
 import { STARTER_THEMES, starterNotes } from '../data/starter';
@@ -32,6 +35,32 @@ export interface LibraryTheme {
   notes: { note: Note; cards: number }[];
 }
 
+export interface ThemeProgress {
+  theme: Theme;
+  cards: number;
+  due: number;
+  mastery: number;
+  level: Level;
+}
+
+export interface Progress {
+  streak: number;
+  freezes: number;
+  todayDone: boolean;
+  xpToday: number;
+  xpWeek: number;
+  themes: ThemeProgress[];
+  /** Reviews per study day over the last 20 weeks, oldest first. */
+  heatmap: number[];
+  /** Cards due per study day for the next 7 days, today (with overdue) first. */
+  forecast: number[];
+  /** Start of each study day `forecast` covers, for labels. */
+  forecastDays: number[];
+  /** Share of correct answers on due cards over the last 30 days. */
+  retention: number | null;
+  breakdown: ReturnType<typeof stateBreakdown>;
+}
+
 export interface Services {
   repo: Repo;
   engine: Engine;
@@ -46,7 +75,14 @@ export interface Services {
   examplesCount(): Promise<number>;
   library(): Promise<LibraryTheme[]>;
   newSlotsLeft(now: number): Promise<number>;
+  progress(now: number): Promise<Progress>;
+  /** Records a finished round; returns the XP it earned (answers since `startedAt` + round bonus). */
+  completeRound(startedAt: number, now: number): Promise<{ xp: number; streak: number; firstGoalToday: boolean }>;
 }
+
+const HEATMAP_DAYS = 20 * 7;
+const FORECAST_DAYS = 7;
+const RETENTION_WINDOW = 30 * 86_400_000;
 
 const SEEDED = 'starterSeeded';
 /** Starter notes are recognized by id, never by tag: a user may tag their own notes "exemple". */
@@ -69,6 +105,43 @@ export async function seedIfEmpty(repo: Repo, now: number = Date.now()): Promise
 
 export function createServices(repo: Repo, deviceId: string): Services {
   const engine = createEngine(repo, deviceId);
+
+  /** Everything progress needs, derived from the log and round events in one pass. */
+  async function snapshot() {
+    const [themes, notes, cards, reviews, events, settings] = await Promise.all([
+      repo.listThemes(),
+      repo.listNotes(),
+      repo.listCards(),
+      repo.listReviews(),
+      repo.listEvents(),
+      repo.getSettings(),
+    ]);
+    const scheduler = makeScheduler(settings);
+    const noteById = new Map(notes.map((n) => [n.id, n]));
+    const active = cards.filter((c) => !c.orphan && noteById.has(c.noteId));
+    const logByCard = new Map<string, ReviewEntry[]>();
+    for (const e of reviews) {
+      const list = logByCard.get(e.cardId);
+      if (list) list.push(e);
+      else logByCard.set(e.cardId, [e]);
+    }
+    const states = new Map<string, CardState>(
+      active.map((c) => [c.id, scheduler.replay(noteById.get(c.noteId)!.createdAt, logByCard.get(c.id) ?? [])]),
+    );
+    const kinds = classifyEntries(
+      cards.filter((c) => noteById.has(c.noteId)).map((c) => ({ cardId: c.id, createdAt: noteById.get(c.noteId)!.createdAt })),
+      reviews,
+      scheduler,
+    );
+    const roundEnds = events.filter((e) => e.type === 'round_completed').map((e) => e.ts);
+    const isRestDay = makeRestDayCheck(
+      active.map((c) => ({ cardId: c.id, createdAt: noteById.get(c.noteId)!.createdAt })),
+      reviews,
+      scheduler,
+      settings.newPerDay,
+    );
+    return { themes, notes, active, reviews, roundEnds, scheduler, states, kinds, noteById, isRestDay };
+  }
 
   const services: Services = {
     repo,
@@ -190,6 +263,56 @@ export function createServices(repo: Repo, deviceId: string): Services {
             .sort((a, b) => a.createdAt - b.createdAt)
             .map((note) => ({ note, cards: activeCards.get(note.id) ?? 0 })),
         }));
+    },
+
+    async progress(now) {
+      const snap = await snapshot();
+      const todayStart = studyDayStart(now);
+      const streak = streakState(goalDays(snap.roundEnds), todayStart, snap.isRestDay);
+      const week = weekStart(now);
+      const forecastDays = [todayStart];
+      while (forecastDays.length < FORECAST_DAYS) forecastDays.push(nextStudyDay(forecastDays[forecastDays.length - 1]));
+      const byTheme = new Map<string, CardState[]>();
+      for (const card of snap.active) {
+        const t = snap.noteById.get(card.noteId)!.themeId;
+        const list = byTheme.get(t);
+        if (list) list.push(snap.states.get(card.id)!);
+        else byTheme.set(t, [snap.states.get(card.id)!]);
+      }
+      const allStates = [...snap.states.values()];
+      return {
+        streak: streak.current,
+        freezes: streak.freezes,
+        todayDone: streak.todayDone,
+        xpToday: xpBetween(snap.reviews, snap.kinds, snap.roundEnds, todayStart, nextStudyDay(todayStart)),
+        xpWeek: xpBetween(snap.reviews, snap.kinds, snap.roundEnds, week, weekStart(week + 8 * 86_400_000)),
+        themes: [...snap.themes]
+          .sort((a, b) => a.order - b.order)
+          .map((theme) => {
+            const states = byTheme.get(theme.id) ?? [];
+            const m = mastery(states, now, snap.scheduler);
+            const due = states.filter((c) => c.state !== State.New && c.due.getTime() <= now).length;
+            return { theme, cards: m.cards, due, mastery: m.pct, level: m.level };
+          }),
+        heatmap: dailyCounts(snap.reviews, todayStart, HEATMAP_DAYS),
+        forecast: forecast(allStates, now, FORECAST_DAYS),
+        forecastDays,
+        retention: retention(snap.reviews, snap.kinds, now - RETENTION_WINDOW),
+        breakdown: stateBreakdown(allStates),
+      };
+    },
+
+    async completeRound(startedAt, now) {
+      const before = await snapshot();
+      const todayStart = studyDayStart(now);
+      const firstGoalToday = !goalDays(before.roundEnds).includes(todayStart);
+      await repo.appendEvent({ id: newId(now), type: 'round_completed', ts: now });
+      const roundEnds = [...before.roundEnds, now];
+      return {
+        xp: xpBetween(before.reviews, before.kinds, [now], startedAt, now + 1),
+        streak: streakState(goalDays(roundEnds), todayStart, before.isRestDay).current,
+        firstGoalToday,
+      };
     },
 
     async newSlotsLeft(now) {

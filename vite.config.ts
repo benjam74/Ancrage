@@ -6,5 +6,7 @@ export default defineConfig({
   test: {
     environment: 'node',
     include: ['tests/**/*.test.ts'],
+    // A fixed zone with a DST change, so day arithmetic is tested the same way everywhere.
+    env: { TZ: 'Europe/Paris' },
   },
 });
