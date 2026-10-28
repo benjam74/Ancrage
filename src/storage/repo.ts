@@ -16,6 +16,11 @@ export interface Repo {
   listReviews(cardId?: string): Promise<ReviewEntry[]>;
   /** The one permitted change to the log: correcting the grade of an answer. */
   amendReview(id: string, patch: { rating: Rating; correct: boolean }): Promise<void>;
+  /** Removes the note, its cards and their review log. */
+  deleteNote(id: string): Promise<void>;
+  deleteTheme(id: string): Promise<void>;
+  getFlag(key: string): Promise<boolean>;
+  setFlag(key: string): Promise<void>;
   getSettings(): Promise<Settings>;
   putSettings(settings: Settings): Promise<void>;
 }

@@ -14,3 +14,12 @@ export function inHowLong(target: number, now: number): string {
 
 export const RATING_LABEL = { 1: 'Again', 2: 'Hard', 3: 'Good', 4: 'Easy' } as const;
 export const MODE_LABEL = { recognition: 'Reconnaissance', production: 'Production', self: 'Auto-évaluation' } as const;
+
+export const TYPE_LABEL = {
+  basic: 'Recto / verso',
+  cloze: 'Texte à trous',
+  ordering: 'Remettre en ordre',
+  classify: 'Classement',
+  mcq: 'QCM',
+  scenario: 'Mise en situation',
+} as const;
