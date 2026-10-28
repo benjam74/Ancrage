@@ -6,13 +6,14 @@ Le principe d'Anki (cartes personnelles, planification FSRS) avec l'expérience 
 
 ## État
 
-Itération 1 : moteur terminé (sans interface). Il génère les cartes depuis les notes, corrige
-les réponses, convertit le résultat en note FSRS et reconstruit l'état de chaque carte en rejouant
-son historique de révisions.
+Itération 2 : séance jouable dans le navigateur.
 
-- Spec v1 : [`docs/specs/2026-10-28-ancrage-v1-design.md`](docs/specs/2026-10-28-ancrage-v1-design.md)
-- Audit rétro-ingénierie d'Anki : [`docs/research/2026-10-28-anki-audit.md`](docs/research/2026-10-28-anki-audit.md)
-- Maquette interactive (HTML autonome, à ouvrir dans un navigateur) : [`prototype/maquette.html`](prototype/maquette.html)
+- File du jour : révisions dues (entrelacées entre thèmes, plus en retard d'abord), puis 5 nouvelles cartes par jour.
+- Manches de 10 exercices ; une carte ratée revient une fois en fin de manche.
+- Les 6 types d'exercice, avec retour immédiat (réponse attendue, note FSRS, prochaine échéance) et correction « En fait je ne savais pas ».
+- Données stockées localement (IndexedDB). Un deck de démarrage de 23 notes de coaching et de PNL, tagué `exemple`, est chargé au premier lancement.
+
+Pas encore : éditeur de cartes (itération 3), XP, série et maîtrise (itération 4).
 
 ## Développement
 
@@ -23,6 +24,7 @@ npm install
 npm test           # tests unitaires (Vitest)
 npm run typecheck  # svelte-check
 npm run dev        # serveur de développement
+npm run build && npm run smoke   # parcours de bout en bout dans Chromium (Playwright requis)
 ```
 
 Code : `src/core/` (domaine pur, sans navigateur), `src/storage/` (persistance IndexedDB via Dexie).
