@@ -5,7 +5,8 @@
 
   let { services, onchange }: { services: Services; onchange: () => void } = $props();
 
-  let retention = $state('0.9');
+  // bind:value on a range input yields a number.
+  let retention = $state<number>(0.9);
   let newPerDay = $state('5');
   let errors = $state<{ desiredRetention?: string; newPerDay?: string }>({});
   let saved = $state('');
@@ -19,7 +20,7 @@
 
   async function load() {
     const s = await services.repo.getSettings();
-    retention = String(s.desiredRetention);
+    retention = s.desiredRetention;
     newPerDay = String(s.newPerDay);
     try {
       persisted = (await navigator.storage?.persisted?.()) ?? null;
@@ -45,8 +46,11 @@
     const a = document.createElement('a');
     a.href = url;
     a.download = fileName;
+    document.body.appendChild(a);
     a.click();
-    URL.revokeObjectURL(url);
+    a.remove();
+    // Safari needs the URL a little longer than the click.
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
     status = `Sauvegarde « ${fileName} » créée.`;
   }
 
@@ -70,7 +74,8 @@
       onchange();
       await load();
     } catch (err) {
-      importError = `La restauration a échoué, tes données n’ont pas été modifiées. (${String(err)})`;
+      console.error('Restore failed', err);
+      importError = 'La restauration a échoué, tes données n’ont pas été modifiées.';
     }
   }
 
@@ -86,8 +91,8 @@
   <form class="panel" onsubmit={save} novalidate>
     <h2>Planification</h2>
     <div class="field" class:invalid={!!errors.desiredRetention}>
-      <label for="s-retention">Rétention visée : {fr(Number(retention.replace(',', '.')) || 0)}</label>
-      <input id="s-retention" type="range" min={RETENTION_MIN} max={RETENTION_MAX} step="0.01" bind:value={retention} aria-describedby="s-retention-msg" />
+      <label for="s-retention">Rétention visée : {fr(+retention)}</label>
+      <input id="s-retention" type="range" min={RETENTION_MIN} max={RETENTION_MAX} step="0.01" bind:value={retention} aria-valuetext={fr(+retention)} aria-invalid={!!errors.desiredRetention} aria-describedby="s-retention-msg" />
       <span id="s-retention-msg" class={errors.desiredRetention ? 'error' : 'hint'}>
         {errors.desiredRetention ?? 'Probabilité de te souvenir d’une carte quand elle revient. Plus haut : plus de révisions, intervalles plus courts. 0,90 convient à la plupart des gens. Changer ce réglage recalcule tout ton historique, y compris l’XP passée.'}
       </span>

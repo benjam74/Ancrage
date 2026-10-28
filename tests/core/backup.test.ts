@@ -53,6 +53,31 @@ describe('backup format', () => {
     expect(parseBackup(mutate((o) => ((o.reviews as Record<string, unknown>[])[0].rating = 7))).ok).toBe(false);
   });
 
+  test.each([
+    ['retention out of range', (o: Record<string, any>) => (o.settings.desiredRetention = 5)],
+    ['negative new cards', (o: Record<string, any>) => (o.settings.newPerDay = -3)],
+    ['cloze without text', (o: Record<string, any>) => (o.notes[0].fields = { type: 'cloze' })],
+    ['mcq distractors not a list', (o: Record<string, any>) => (o.notes[0].fields = { type: 'mcq', question: 'Q', answer: 'A', distractors: 'x' })],
+    ['tags not strings', (o: Record<string, any>) => (o.notes[0].tags = [1, null])],
+    ['card pointing to a missing note', (o: Record<string, any>) => (o.cards[0].noteId = 'ghost')],
+    ['note pointing to a missing theme', (o: Record<string, any>) => (o.notes[0].themeId = 'ghost')],
+    ['duplicate ids', (o: Record<string, any>) => o.reviews.push({ ...o.reviews[0] })],
+    ['review without durationMs', (o: Record<string, any>) => delete o.reviews[0].durationMs],
+    ['review without deviceId', (o: Record<string, any>) => delete o.reviews[0].deviceId],
+    ['version 0', (o: Record<string, any>) => (o.version = 0)],
+    ['version 1.5', (o: Record<string, any>) => (o.version = 1.5)],
+    ['theme parentId not a string', (o: Record<string, any>) => (o.themes[0].parentId = 3)],
+  ])('rejects a damaged backup: %s', (_name, damage) => {
+    const res = parseBackup(mutate(damage as (o: Record<string, unknown>) => void));
+    expect(res.ok).toBe(false);
+    if (!res.ok) expect(res.error).toMatch(/Sauvegarde|version/);
+  });
+
+  test('settings are rebuilt from known keys only', () => {
+    const res = parseBackup(mutate((o) => ((o.settings as Record<string, unknown>).key = 'flag:x')));
+    expect(res.ok && res.dump.settings).toEqual(DEFAULT_SETTINGS);
+  });
+
   test('file name uses the local date', () => {
     expect(backupFileName(NOW)).toBe('ancrage-2026-10-28.json');
   });

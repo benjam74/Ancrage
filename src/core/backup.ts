@@ -1,4 +1,5 @@
 import type { AppEvent, Card, Note, ReviewEntry, Settings, Theme } from './model';
+import { validateSettings } from './settings';
 
 export const BACKUP_FORMAT = 'ancrage-backup';
 export const BACKUP_VERSION = 1;
@@ -28,20 +29,34 @@ export function summarize(dump: Dump): { themes: number; notes: number; reviews:
   return { themes: dump.themes.length, notes: dump.notes.length, reviews: dump.reviews.length };
 }
 
-const NOTE_TYPES = ['basic', 'cloze', 'ordering', 'classify', 'mcq', 'scenario'];
 const isObj = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
 const isStr = (v: unknown) => typeof v === 'string';
 const isNum = (v: unknown) => typeof v === 'number' && Number.isFinite(v);
+const isStrList = (v: unknown) => Array.isArray(v) && v.every(isStr);
+
+/** Field shape per note type, so a restored note can never crash the session or the library. */
+const FIELD_SHAPES: Record<string, Record<string, (v: unknown) => boolean>> = {
+  basic: { front: isStr, back: isStr, reverse: (v) => typeof v === 'boolean' },
+  cloze: { text: isStr },
+  ordering: { title: isStr, steps: isStrList },
+  classify: { statement: isStr, categories: isStrList, answer: isStr },
+  mcq: { question: isStr, answer: isStr, distractors: isStrList },
+  scenario: { situation: isStr, model: isStr, keyPoints: isStrList },
+};
+const fieldsOk = (f: unknown) =>
+  isObj(f) && isStr(f.type) && !!FIELD_SHAPES[f.type as string] &&
+  Object.entries(FIELD_SHAPES[f.type as string]).every(([key, ok]) => ok(f[key]));
 
 const CHECKS: Record<'themes' | 'notes' | 'cards' | 'reviews' | 'events', (r: Record<string, unknown>) => boolean> = {
-  themes: (r) => isStr(r.id) && isStr(r.name) && isNum(r.order),
+  themes: (r) => isStr(r.id) && isStr(r.name) && isNum(r.order) && (r.parentId === undefined || isStr(r.parentId)),
   notes: (r) =>
-    isStr(r.id) && isStr(r.themeId) && isObj(r.fields) && NOTE_TYPES.includes(r.fields.type as string) &&
-    Array.isArray(r.tags) && isNum(r.createdAt) && isNum(r.updatedAt),
-  cards: (r) => isStr(r.id) && isStr(r.noteId) && isStr(r.variant),
+    isStr(r.id) && isStr(r.themeId) && fieldsOk(r.fields) && isStrList(r.tags) &&
+    (r.source === undefined || isStr(r.source)) && isNum(r.createdAt) && isNum(r.updatedAt),
+  cards: (r) => isStr(r.id) && isStr(r.noteId) && isStr(r.variant) && (r.orphan === undefined || typeof r.orphan === 'boolean'),
   reviews: (r) =>
     isStr(r.id) && isStr(r.cardId) && isNum(r.ts) && [1, 2, 3, 4].includes(r.rating as number) &&
-    ['recognition', 'production', 'self'].includes(r.mode as string) && typeof r.correct === 'boolean',
+    ['recognition', 'production', 'self'].includes(r.mode as string) && typeof r.correct === 'boolean' &&
+    isNum(r.durationMs) && typeof r.hintUsed === 'boolean' && isStr(r.deviceId),
   events: (r) => isStr(r.id) && r.type === 'round_completed' && isNum(r.ts),
 };
 const LABELS = { themes: 'thèmes', notes: 'notes', cards: 'cartes', reviews: 'révisions', events: 'manches' } as const;
@@ -54,7 +69,8 @@ export function parseBackup(text: string): { ok: true; dump: Dump; exportedAt: n
     return { ok: false, error: 'Ce fichier n’est pas un JSON lisible.' };
   }
   if (!isObj(data) || data.format !== BACKUP_FORMAT) return { ok: false, error: 'Ce fichier n’est pas une sauvegarde Ancrage.' };
-  if (!isNum(data.version) || (data.version as number) > BACKUP_VERSION) {
+  if (!Number.isInteger(data.version) || (data.version as number) < 1) return { ok: false, error: 'Sauvegarde abîmée : sa version est illisible.' };
+  if ((data.version as number) > BACKUP_VERSION) {
     return { ok: false, error: 'Cette sauvegarde vient d’une version plus récente d’Ancrage. Mets l’application à jour.' };
   }
   for (const table of Object.keys(CHECKS) as (keyof typeof CHECKS)[]) {
@@ -62,12 +78,24 @@ export function parseBackup(text: string): { ok: true; dump: Dump; exportedAt: n
     if (!Array.isArray(rows)) return { ok: false, error: `Sauvegarde incomplète : la liste des ${LABELS[table]} manque.` };
     const bad = rows.findIndex((r) => !isObj(r) || !CHECKS[table](r));
     if (bad >= 0) return { ok: false, error: `Sauvegarde abîmée : l’élément ${bad + 1} des ${LABELS[table]} est invalide.` };
+    if (new Set(rows.map((r) => r.id)).size !== rows.length) return { ok: false, error: `Sauvegarde abîmée : des ${LABELS[table]} sont en double.` };
   }
-  const settings = data.settings;
-  if (!isObj(settings) || !isNum(settings.desiredRetention) || !isNum(settings.newPerDay)) {
-    return { ok: false, error: 'Sauvegarde abîmée : les réglages sont invalides.' };
-  }
-  if (!Array.isArray(data.flags) || !data.flags.every(isStr)) return { ok: false, error: 'Sauvegarde abîmée : les marqueurs sont invalides.' };
-  const { format: _f, version: _v, exportedAt, ...rest } = data;
-  return { ok: true, dump: rest as unknown as Dump, exportedAt: isNum(exportedAt) ? (exportedAt as number) : 0 };
+  const themeIds = new Set((data.themes as Theme[]).map((t) => t.id));
+  const noteIds = new Set((data.notes as Note[]).map((n) => n.id));
+  if ((data.notes as Note[]).some((n) => !themeIds.has(n.themeId))) return { ok: false, error: 'Sauvegarde abîmée : une note appartient à un thème absent.' };
+  if ((data.cards as Card[]).some((c) => !noteIds.has(c.noteId))) return { ok: false, error: 'Sauvegarde abîmée : une carte appartient à une note absente.' };
+  const raw = isObj(data.settings) ? data.settings : {};
+  const settings = validateSettings({ desiredRetention: raw.desiredRetention as number, newPerDay: raw.newPerDay as number });
+  if (!settings.ok) return { ok: false, error: 'Sauvegarde abîmée : les réglages sont invalides.' };
+  if (!isStrList(data.flags)) return { ok: false, error: 'Sauvegarde abîmée : les marqueurs sont invalides.' };
+  const dump: Dump = {
+    themes: data.themes as Theme[],
+    notes: data.notes as Note[],
+    cards: data.cards as Card[],
+    reviews: data.reviews as ReviewEntry[],
+    events: data.events as AppEvent[],
+    settings: settings.settings,
+    flags: data.flags as string[],
+  };
+  return { ok: true, dump, exportedAt: isNum(data.exportedAt) ? (data.exportedAt as number) : 0 };
 }

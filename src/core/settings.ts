@@ -4,7 +4,7 @@ export const RETENTION_MIN = 0.7;
 export const RETENTION_MAX = 0.97;
 export const NEW_PER_DAY_MAX = 50;
 
-const toNumber = (v: string | number) => (typeof v === 'number' ? v : v.trim() === '' ? NaN : Number(v.trim().replace(',', '.')));
+const toNumber = (v: unknown) => (typeof v === 'number' ? v : typeof v !== 'string' || v.trim() === '' ? NaN : Number(v.trim().replace(',', '.')));
 
 export function validateSettings(input: { desiredRetention: string | number; newPerDay: string | number }):
   | { ok: true; settings: Settings }

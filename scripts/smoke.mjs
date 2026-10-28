@@ -175,6 +175,12 @@ await app.keyboard.press('Escape');
 await ctx.setOffline(false);
 
 await app.goto(`${URL}#reglages`);
+const slider = app.locator('#s-retention');
+await slider.focus();
+for (let i = 0; i < 5; i++) await app.keyboard.press('ArrowLeft');
+await app.getByText('Rétention visée : 0,85').waitFor({ timeout: 3000 }).catch(() => fail('slider label should follow the value (0,85)'));
+await app.getByRole('button', { name: 'Enregistrer' }).click();
+await app.getByText('Réglages enregistrés.').waitFor({ timeout: 3000 }).catch(() => fail('saving the slider value should confirm'));
 await app.getByLabel('Nouvelles cartes par jour').fill('12,5');
 await app.getByRole('button', { name: 'Enregistrer' }).click();
 await app.getByText('Le nombre de nouvelles cartes doit être un entier entre 0 et 50.').waitFor({ timeout: 3000 }).catch(() => fail('invalid setting should be refused'));

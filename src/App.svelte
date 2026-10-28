@@ -25,7 +25,15 @@
   let inSession = $state(false);
   let error = $state('');
   let updateReady = $state(false);
-  const updateSW = registerSW({ onNeedRefresh: () => (updateReady = true) });
+  let reloadAfterSession = false;
+  // Another window may install the update: never reload in the middle of a round.
+  const updateSW = registerSW({
+    onNeedRefresh: () => (updateReady = true),
+    onNeedReload: () => {
+      if (inSession) reloadAfterSession = true;
+      else location.reload();
+    },
+  });
 
   async function refresh() {
     if (!services) return;
@@ -56,7 +64,7 @@
   <main class="page"><h1>Ancrage</h1><p>Impossible d’ouvrir la base locale : {error}</p></main>
 {:else if services && today && progress}
   {#if inSession}
-    <Session {services} queue={today.queue} onexit={async () => { await refresh(); inSession = false; }} />
+    <Session {services} queue={today.queue} onexit={async () => { if (reloadAfterSession) return location.reload(); await refresh(); inSession = false; }} />
   {:else}
     {#if updateReady}
       <div class="update" role="status">
