@@ -10,11 +10,12 @@
   let errors = $state<{ desiredRetention?: string; newPerDay?: string }>({});
   let saved = $state('');
   let persisted = $state<boolean | null>(null);
-  let pending = $state<{ dump: Dump; exportedAt: number; name: string } | null>(null);
+  // Raw state: IndexedDB cannot clone Svelte's reactive proxies (DataCloneError).
+  let pending = $state.raw<{ dump: Dump; exportedAt: number; name: string } | null>(null);
   let importError = $state('');
   let status = $state('');
 
-  const fr = (n: number) => n.toLocaleString('fr-FR', { maximumFractionDigits: 2 });
+  const fr = (n: number) => n.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
   async function load() {
     const s = await services.repo.getSettings();
@@ -51,6 +52,7 @@
 
   async function pick(e: Event) {
     importError = '';
+    status = '';
     pending = null;
     const file = (e.currentTarget as HTMLInputElement).files?.[0];
     if (!file) return;

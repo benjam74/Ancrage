@@ -152,12 +152,63 @@ await page.getByRole('heading', { name: 'Modifier une carte' }).waitFor();
 await page.getByRole('link', { name: 'Créer' }).click();
 await page.getByRole('heading', { name: 'Créer une carte' }).waitFor({ timeout: 3000 }).catch(() => fail('nav "Créer" should leave edit mode'));
 
+// --- iteration 5: PWA, offline, settings, backup ---
+const manifest = await (await fetch(`${URL}manifest.webmanifest`)).json();
+if (manifest.name !== 'Ancrage' || manifest.display !== 'standalone' || !manifest.icons?.some((i) => i.purpose === 'maskable')) fail('manifest is incomplete');
+
+const ctx = await browser.newContext({ acceptDownloads: true });
+const app = await ctx.newPage();
+app.on('pageerror', (e) => errors.push(e.message));
+await app.goto(URL);
+await app.locator('.hero').waitFor();
+await app.evaluate(() => navigator.serviceWorker.ready.then(() => true));
+await app.reload();
+await app.locator('.hero').waitFor();
+if (!(await app.evaluate(() => !!navigator.serviceWorker.controller))) fail('service worker does not control the page');
+await ctx.setOffline(true);
+await app.reload();
+await app.locator('.hero').waitFor({ timeout: 5000 }).catch(() => fail('app does not load offline'));
+await app.locator('.hero .btn').click();
+await app.locator('.s-inner').first().waitFor();
+await playRound(app);
+await app.keyboard.press('Escape');
+await ctx.setOffline(false);
+
+await app.goto(`${URL}#reglages`);
+await app.getByLabel('Nouvelles cartes par jour').fill('12,5');
+await app.getByRole('button', { name: 'Enregistrer' }).click();
+await app.getByText('Le nombre de nouvelles cartes doit être un entier entre 0 et 50.').waitFor({ timeout: 3000 }).catch(() => fail('invalid setting should be refused'));
+await app.getByLabel('Nouvelles cartes par jour').fill('8');
+await app.getByRole('button', { name: 'Enregistrer' }).click();
+await app.getByText('Réglages enregistrés.').waitFor();
+
+const [download] = await Promise.all([app.waitForEvent('download'), app.getByRole('button', { name: 'Télécharger une sauvegarde' }).click()]);
+if (!/^ancrage-\d{4}-\d{2}-\d{2}\.json$/.test(download.suggestedFilename())) fail(`unexpected backup name ${download.suggestedFilename()}`);
+const backupPath = `${OUT}/${download.suggestedFilename()}`;
+await download.saveAs(backupPath);
+const countReviews = (p) => p.evaluate(() => new Promise((resolve) => {
+  const req = indexedDB.open('ancrage');
+  req.onsuccess = () => { const r = req.result.transaction('reviews').objectStore('reviews').count(); r.onsuccess = () => resolve(r.result); };
+}));
+const reviewsBefore = await countReviews(app);
+
+const fresh = await (await browser.newContext()).newPage();
+await fresh.goto(`${URL}#reglages`);
+await fresh.getByLabel('Restaurer une sauvegarde').setInputFiles(backupPath);
+await fresh.getByRole('button', { name: 'Remplacer mes données' }).click();
+await fresh.getByText('Données restaurées.').waitFor({ timeout: 5000 }).catch(async () => fail(`restore failed: ${(await fresh.locator('main').innerText()).replace(/\s+/g, ' ').slice(-400)}`));
+if ((await countReviews(fresh)) !== reviewsBefore) fail('restored review count differs');
+if ((await fresh.getByLabel('Nouvelles cartes par jour').inputValue()) !== '8') fail('restored settings differ');
+await fresh.getByLabel('Restaurer une sauvegarde').setInputFiles({ name: 'x.json', mimeType: 'application/json', buffer: Buffer.from('{"format":"autre"}') });
+await fresh.getByText('Ce fichier n’est pas une sauvegarde Ancrage.').waitFor();
+await fresh.screenshot({ path: `${OUT}/settings.png`, fullPage: true });
+
 const mobile = await browser.newPage({ viewport: { width: 390, height: 844 }, colorScheme: 'dark' });
 mobile.on('pageerror', (e) => errors.push(e.message));
 await mobile.goto(URL);
 await mobile.locator('.hero').waitFor();
 await mobile.screenshot({ path: `${OUT}/mobile-dark.png`, fullPage: true });
-for (const view of ['accueil', 'creer', 'progres', 'bibliotheque']) {
+for (const view of ['accueil', 'creer', 'progres', 'bibliotheque', 'reglages']) {
   await mobile.goto(`${URL}#${view}`);
   await mobile.waitForTimeout(300);
   const width = await mobile.evaluate(() => document.documentElement.scrollWidth);
