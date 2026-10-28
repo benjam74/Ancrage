@@ -6,16 +6,32 @@ Le principe d'Anki (cartes personnelles, planification FSRS) avec l'expérience 
 
 ## État
 
-Itération 4 : la motivation façon Duolingo, alignée sur la rétention.
+v1 complète, utilisable au quotidien.
 
-- **XP** : 10 par carte due traitée (réussie ou non), 5 par nouvelle carte, 20 par manche ; 0 pour une révision en avance.
-- **Série** : +1 par jour où une manche est finie ; un gel gagné tous les 7 jours (2 au maximum) couvre un jour manqué.
-- **Accueil** : série, XP de la semaine, gels, anneau d'objectif du jour, parcours des thèmes avec leur palier de maîtrise.
-- **Maîtrise** : part des cartes d'un thème avec stabilité ≥ 21 jours et rappel ≥ 90 % (Nouveau, Découverte, En cours, Solide, Ancré).
-- **Progrès** : rétention réelle, cartes ancrées, régularité sur 20 semaines, révisions prévues sur 7 jours, état des cartes.
-- Déjà là : éditeur des 6 types d'exercice, bibliothèque, séance en manches de 10, données locales (IndexedDB).
+- **Séance** : file du jour (révisions dues, puis nouvelles cartes), manches de 10, 6 types d'exercice, retour immédiat avec la note FSRS et la prochaine échéance.
+- **Créer et Bibliothèque** : tes propres notes et thèmes, validation et aperçu en direct.
+- **Motivation** : XP alignée sur la rétention, série avec gels, objectif du jour, maîtrise par thème, page Progrès.
+- **Réglages** : rétention visée (0,70 à 0,97), nouvelles cartes par jour, sauvegarde et restauration JSON.
+- **Application installable** (PWA), qui fonctionne hors ligne après la première visite.
 
-Pas encore : installation PWA, fonctionnement hors ligne, sauvegarde JSON (itération 5), sync (v1.1), génération IA (v1.2).
+Prochaines versions : synchronisation entre appareils (v1.1), génération de cartes par IA (v1.2).
+
+## Installer l'application
+
+Une fois Ancrage hébergé (voir « Déploiement ») :
+
+- **Ordinateur (Chrome, Edge)** : icône d'installation dans la barre d'adresse.
+- **Android (Chrome)** : menu ⋮ → « Installer l'application ».
+- **iPhone, iPad (Safari)** : bouton Partager → « Sur l'écran d'accueil ».
+
+Tes données restent dans le navigateur de chaque appareil. Télécharge une sauvegarde depuis Réglages, régulièrement, et avant de changer d'appareil.
+
+## Déploiement
+
+Le workflow `.github/workflows/deploy.yml` publie l'application sur GitHub Pages, à l'adresse `https://<compte>.github.io/Ancrage/`. Il se lance à la main :
+
+1. Dans le dépôt, Settings → Pages → Source : « GitHub Actions ».
+2. Onglet Actions → « Deploy to GitHub Pages » → « Run workflow ».
 
 ## Développement
 
@@ -27,6 +43,7 @@ npm test           # tests unitaires (Vitest)
 npm run typecheck  # svelte-check
 npm run dev        # serveur de développement
 npm run build && npm run smoke   # parcours de bout en bout dans Chromium (Playwright requis)
+node scripts/make-icons.mjs      # régénère les icônes de l'application
 ```
 
 Code : `src/core/` (domaine pur, sans navigateur), `src/storage/` (persistance IndexedDB via Dexie).
@@ -34,7 +51,7 @@ Plan de l'itération : [`docs/superpowers/plans/2026-10-28-iteration-1-engine.md
 
 ## Stack
 
-PWA Svelte 5 + Vite + TypeScript, IndexedDB (Dexie), `ts-fsrs` 5.4.2, Vitest. Licence MIT.
+PWA Svelte 5 + Vite + TypeScript, IndexedDB (Dexie), `ts-fsrs` 5.4.2, `vite-plugin-pwa`, Vitest. Licence MIT.
 Aucun code d'Anki n'est réutilisé : seuls les principes le sont.
 
 ## Feuille de route

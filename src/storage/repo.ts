@@ -1,3 +1,4 @@
+import type { Dump } from '../core/backup';
 import type { AppEvent, Card, Note, Rating, ReviewEntry, Settings, Theme } from '../core/model';
 
 export interface Repo {
@@ -24,6 +25,10 @@ export interface Repo {
   listEvents(): Promise<AppEvent[]>;
   getFlag(key: string): Promise<boolean>;
   setFlag(key: string): Promise<void>;
+  /** Every table, each sorted by id, for backups. */
+  dumpAll(): Promise<Dump>;
+  /** Replaces the whole database with `dump`, all or nothing. */
+  restoreAll(dump: Dump): Promise<void>;
   getSettings(): Promise<Settings>;
   putSettings(settings: Settings): Promise<void>;
 }

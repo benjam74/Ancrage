@@ -32,6 +32,14 @@ class AncrageDb extends Dexie {
 export function createDexieRepo(name: string): Repo {
   const db = new AncrageDb(name);
 
+  async function readSettings(): Promise<Settings> {
+    const row = await db.settings.get('main');
+    return {
+      desiredRetention: row?.desiredRetention ?? DEFAULT_SETTINGS.desiredRetention,
+      newPerDay: row?.newPerDay ?? DEFAULT_SETTINGS.newPerDay,
+    };
+  }
+
   return {
     async putTheme(theme) {
       await db.themes.put(theme);
@@ -95,13 +103,35 @@ export function createDexieRepo(name: string): Repo {
       await db.settings.put({ key: `flag:${key}`, value: true });
     },
 
-    async getSettings() {
-      const row = await db.settings.get('main');
-      return {
-        desiredRetention: row?.desiredRetention ?? DEFAULT_SETTINGS.desiredRetention,
-        newPerDay: row?.newPerDay ?? DEFAULT_SETTINGS.newPerDay,
-      };
-    },
+    // One read transaction: a write from another tab cannot land halfway through the export.
+    dumpAll: () => db.transaction('r', [db.themes, db.notes, db.cards, db.reviews, db.events, db.settings], async () => {
+      const [themes, notes, cards, reviews, events, settingsRows, settings] = await Promise.all([
+        db.themes.orderBy('id').toArray(),
+        db.notes.orderBy('id').toArray(),
+        db.cards.orderBy('id').toArray(),
+        db.reviews.orderBy('id').toArray(),
+        db.events.orderBy('id').toArray(),
+        db.settings.toArray(),
+        readSettings(),
+      ]);
+      const flags = settingsRows.filter((r) => r.key.startsWith('flag:') && r.value).map((r) => r.key.slice(5)).sort();
+      return { themes, notes, cards, reviews, events, settings, flags };
+    }),
+    restoreAll: (dump) =>
+      db.transaction('rw', [db.themes, db.notes, db.cards, db.reviews, db.events, db.settings], async () => {
+        await Promise.all([db.themes.clear(), db.notes.clear(), db.cards.clear(), db.reviews.clear(), db.events.clear(), db.settings.clear()]);
+        await db.themes.bulkAdd(dump.themes);
+        await db.notes.bulkAdd(dump.notes);
+        await db.cards.bulkAdd(dump.cards);
+        await db.reviews.bulkAdd(dump.reviews);
+        await db.events.bulkAdd(dump.events);
+        await db.settings.bulkAdd([
+          { key: 'main', desiredRetention: dump.settings.desiredRetention, newPerDay: dump.settings.newPerDay },
+          ...dump.flags.map((f) => ({ key: `flag:${f}`, value: true })),
+        ]);
+      }),
+
+    getSettings: readSettings,
     async putSettings(settings) {
       await db.settings.put({ ...settings, key: 'main' });
     },

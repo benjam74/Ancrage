@@ -3,6 +3,8 @@ import { createEngine, type Engine } from '../core/engine';
 import { newId } from '../core/ids';
 import type { Card, Note, NoteFields, ReviewEntry, Theme } from '../core/model';
 import { validateFields } from '../core/validate';
+import { validateSettings } from '../core/settings';
+import { backupFileName, serializeBackup, type Dump } from '../core/backup';
 import { classifyEntries, goalDays, makeRestDayCheck, nextStudyDay, streakState, weekStart, xpBetween } from '../core/progress';
 import { dailyCounts, forecast, mastery, retention, stateBreakdown, type Level } from '../core/stats';
 import type { CardState } from '../core/scheduler';
@@ -76,6 +78,10 @@ export interface Services {
   library(): Promise<LibraryTheme[]>;
   newSlotsLeft(now: number): Promise<number>;
   progress(now: number): Promise<Progress>;
+  updateSettings(input: { desiredRetention: string | number; newPerDay: string | number }): Promise<ReturnType<typeof validateSettings>>;
+  exportBackup(now: number): Promise<{ fileName: string; text: string }>;
+  /** Replaces all local data with the backup, all or nothing. */
+  importBackup(dump: Dump): Promise<void>;
   /** Records a finished round; returns the XP it earned (answers since `startedAt` + round bonus). */
   completeRound(startedAt: number, now: number): Promise<{ xp: number; streak: number; firstGoalToday: boolean }>;
 }
@@ -301,6 +307,18 @@ export function createServices(repo: Repo, deviceId: string): Services {
         breakdown: stateBreakdown(allStates),
       };
     },
+
+    async updateSettings(input) {
+      const res = validateSettings(input);
+      if (res.ok) await repo.putSettings(res.settings);
+      return res;
+    },
+
+    async exportBackup(now) {
+      return { fileName: backupFileName(now), text: serializeBackup(await repo.dumpAll(), now) };
+    },
+
+    importBackup: (dump) => repo.restoreAll(dump),
 
     async completeRound(startedAt, now) {
       const before = await snapshot();
