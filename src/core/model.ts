@@ -29,6 +29,8 @@ export interface Card {
   id: string;
   noteId: string;
   variant: string;
+  /** Set when the note no longer produces this variant but the card has history worth keeping. */
+  orphan?: boolean;
 }
 
 export type Mode = 'recognition' | 'production' | 'self';

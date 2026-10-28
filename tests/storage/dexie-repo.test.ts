@@ -1,0 +1,113 @@
+import 'fake-indexeddb/auto';
+import { beforeEach, describe, expect, test } from 'vitest';
+import { createDexieRepo } from '../../src/storage/dexie-repo';
+import type { Repo } from '../../src/storage/repo';
+import { newId } from '../../src/core/ids';
+import { DEFAULT_SETTINGS, type Note, type ReviewEntry } from '../../src/core/model';
+
+const T0 = Date.UTC(2026, 9, 1);
+
+function cloze(text: string, id = 'n1'): Note {
+  return { id, themeId: 't1', fields: { type: 'cloze', text }, tags: [], createdAt: T0, updatedAt: T0 };
+}
+
+function review(cardId: string, ts: number, id = newId(ts)): ReviewEntry {
+  return { id, cardId, ts, rating: 3, mode: 'production', correct: true, durationMs: 2000, hintUsed: false, deviceId: 'd' };
+}
+
+let repo: Repo;
+beforeEach(() => {
+  repo = createDexieRepo(`test-${newId()}`);
+});
+
+describe('notes and cards', () => {
+  test('a cloze with 3 gaps creates 3 cards', async () => {
+    const cards = await repo.putNote(cloze('{{a}} {{b}} {{c}}'));
+    expect(cards.map((c) => c.variant)).toEqual(['a', 'b', 'c']);
+    expect(await repo.getNote('n1')).toMatchObject({ id: 'n1' });
+  });
+
+  test('adding a gap in front keeps existing card ids', async () => {
+    const before = await repo.putNote(cloze('{{a}} {{b}} {{c}}'));
+    const after = await repo.putNote(cloze('{{z}} {{a}} {{b}} {{c}}'));
+    expect(after).toHaveLength(4);
+    for (const card of before) expect(after.find((c) => c.variant === card.variant)?.id).toBe(card.id);
+  });
+
+  test('a removed gap without history is deleted', async () => {
+    await repo.putNote(cloze('{{a}} {{b}}'));
+    const after = await repo.putNote(cloze('{{a}}'));
+    expect(after.map((c) => c.variant)).toEqual(['a']);
+    expect(await repo.listCards('n1')).toHaveLength(1);
+  });
+
+  test('a removed gap with history is kept as orphan', async () => {
+    const cards = await repo.putNote(cloze('{{a}} {{b}}'));
+    const b = cards.find((c) => c.variant === 'b')!;
+    await repo.appendReview(review(b.id, T0));
+    const after = await repo.putNote(cloze('{{a}}'));
+    expect(after.map((c) => c.variant)).toEqual(['a']);
+    expect((await repo.listCards('n1')).find((c) => c.id === b.id)?.orphan).toBe(true);
+  });
+
+  test('a gap that comes back reuses its orphan card', async () => {
+    const cards = await repo.putNote(cloze('{{a}} {{b}}'));
+    const b = cards.find((c) => c.variant === 'b')!;
+    await repo.appendReview(review(b.id, T0));
+    await repo.putNote(cloze('{{a}}'));
+    const back = await repo.putNote(cloze('{{a}} {{b}}'));
+    const revived = back.find((c) => c.variant === 'b')!;
+    expect(revived.id).toBe(b.id);
+    expect(revived.orphan).toBeFalsy();
+  });
+});
+
+describe('review log', () => {
+  test('lists a card reviews sorted by time then id', async () => {
+    await repo.appendReview(review('c1', T0 + 2000, 'B'));
+    await repo.appendReview(review('c1', T0 + 1000, 'Z'));
+    await repo.appendReview(review('c1', T0 + 2000, 'A'));
+    await repo.appendReview(review('c2', T0, 'X'));
+    expect((await repo.listReviews('c1')).map((e) => e.id)).toEqual(['Z', 'A', 'B']);
+    expect(await repo.listReviews()).toHaveLength(4);
+  });
+
+  test('appending an existing id is rejected', async () => {
+    await repo.appendReview(review('c1', T0, 'A'));
+    await expect(repo.appendReview(review('c1', T0 + 1, 'A'))).rejects.toThrow();
+  });
+
+  test('amendReview changes only rating and correct', async () => {
+    const e = review('c1', T0, 'A');
+    await repo.appendReview(e);
+    await repo.amendReview('A', { rating: 1, correct: false });
+    expect(await repo.listReviews('c1')).toEqual([{ ...e, rating: 1, correct: false }]);
+  });
+});
+
+describe('amendReview edge cases', () => {
+  test('amending with identical values succeeds', async () => {
+    await repo.appendReview(review('c1', T0, 'A'));
+    await expect(repo.amendReview('A', { rating: 3, correct: true })).resolves.toBeUndefined();
+  });
+
+  test('amending an unknown id is rejected', async () => {
+    await expect(repo.amendReview('missing', { rating: 1, correct: false })).rejects.toThrow('not found');
+  });
+});
+
+describe('themes and settings', () => {
+  test('stores themes', async () => {
+    await repo.putTheme({ id: 't1', name: 'Méta-modèle', order: 0 });
+    expect(await repo.listThemes()).toEqual([{ id: 't1', name: 'Méta-modèle', order: 0 }]);
+  });
+
+  test('returns default settings on an empty database', async () => {
+    expect(await repo.getSettings()).toEqual(DEFAULT_SETTINGS);
+  });
+
+  test('stores settings', async () => {
+    await repo.putSettings({ desiredRetention: 0.85, newPerDay: 8 });
+    expect(await repo.getSettings()).toEqual({ desiredRetention: 0.85, newPerDay: 8 });
+  });
+});
