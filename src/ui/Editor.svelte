@@ -1,0 +1,153 @@
+<script lang="ts">
+  import { untrack } from 'svelte';
+  import type { Services } from '../app/services';
+  import { FIELD_SPECS, draftToFields, emptyDraft, fieldsToDraft, type Draft } from '../core/draft';
+  import type { Note, NoteType, Theme } from '../core/model';
+  import { validateFields } from '../core/validate';
+  import { TYPE_LABEL } from './format';
+  import Preview from './Preview.svelte';
+
+  let { services, editing, onsaved }: { services: Services; editing: Note | null; onsaved: () => void } = $props();
+
+  const TYPES: NoteType[] = ['basic', 'cloze', 'ordering', 'classify', 'mcq', 'scenario'];
+  const ICONS: Record<NoteType, string> = {
+    basic: '<rect x="3" y="5" width="13" height="10" rx="2.5"/><path d="M8 19h10.5a2.5 2.5 0 0 0 2.5-2.5V9"/>',
+    cloze: '<path d="M3 8h5M16 8h5M3 16h18"/><rect x="9.5" y="5" width="5" height="6" rx="1.5" stroke-dasharray="2 2"/>',
+    ordering: '<path d="M9 6h12M9 12h12M9 18h12M4 4.5v3M3 16.5h2l-2 3h2"/>',
+    classify: '<rect x="3" y="14" width="5" height="6" rx="1.5"/><rect x="9.5" y="14" width="5" height="6" rx="1.5"/><rect x="16" y="14" width="5" height="6" rx="1.5"/><path d="M12 3v7m0 0-3-3m3 3 3-3"/>',
+    mcq: '<circle cx="6" cy="6.5" r="2.5"/><circle cx="6" cy="17.5" r="2.5" fill="currentColor"/><path d="M11 6.5h10M11 17.5h10"/>',
+    scenario: '<path d="M4 5h12a2 2 0 0 1 2 2v6a2 2 0 0 1-2 2H9l-4 3.5V15H4a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2z"/>',
+  };
+
+  const initial = untrack(() => editing);
+  let type = $state<NoteType>(initial?.fields.type ?? 'cloze');
+  let drafts = $state<Record<NoteType, Draft>>(
+    Object.fromEntries(TYPES.map((t) => [t, initial && initial.fields.type === t ? fieldsToDraft(initial.fields) : emptyDraft(t)])) as Record<NoteType, Draft>,
+  );
+  let themes = $state<Theme[]>([]);
+  let themeId = $state(initial?.themeId ?? '');
+  let newThemeName = $state('');
+  let tags = $state(initial?.tags.join(', ') ?? '');
+  let source = $state(initial?.source ?? '');
+  let level = $state<'debutant' | 'avance'>('debutant');
+  let submitted = $state(false);
+  let message = $state('');
+  let pool = $state<Note[]>([]);
+
+  const fields = $derived(draftToFields(type, drafts[type]));
+  const errors = $derived(submitted ? validateFields(fields) : {});
+
+  async function loadThemes() {
+    themes = [...(await services.repo.listThemes())].sort((a, b) => a.order - b.order);
+    if (!themeId && themes.length) themeId = themes[0].id;
+  }
+
+  $effect(() => {
+    const id = themeId;
+    const self = untrack(() => editing?.id);
+    if (!id || id === '__new') return;
+    services.repo.listNotes(id).then((notes) => (pool = notes.filter((n) => n.id !== self)));
+  });
+
+  async function createTheme() {
+    if (!newThemeName.trim()) return;
+    const t = await services.createTheme(newThemeName);
+    newThemeName = '';
+    await loadThemes();
+    themeId = t.id;
+  }
+
+  async function save(e: SubmitEvent) {
+    e.preventDefault();
+    submitted = true;
+    message = '';
+    if (!themeId || themeId === '__new') return;
+    const now = Date.now();
+    const res = await services.saveNote({ id: editing?.id, themeId, fields, tags: tags.split(','), source }, now);
+    if (!res.ok) return;
+    const theme = themes.find((t) => t.id === themeId)?.name ?? '';
+    if (editing) return onsaved();
+    const slots = await services.newSlotsLeft(now);
+    message = `Ajouté à « ${theme} » : ${res.cards} carte${res.cards > 1 ? 's' : ''}.${slots === 0 ? ' Elles apparaîtront à partir de demain, la limite de nouvelles cartes du jour étant atteinte.' : ''}`;
+    drafts[type] = emptyDraft(type);
+    submitted = false;
+    onsaved();
+  }
+
+  loadThemes();
+</script>
+
+<main class="page wide">
+  <header>
+    <p class="eyebrow">{editing ? 'Modifier la note' : 'Nouvelle note'}</p>
+    <h1>{editing ? 'Modifier une carte' : 'Créer une carte'}</h1>
+  </header>
+
+  <div class="types" role="group" aria-label="Type d'exercice">
+    {#each TYPES as t (t)}
+      <button type="button" class="type-btn" aria-pressed={type === t} disabled={!!editing && editing.fields.type !== t} onclick={() => { type = t; submitted = false; }}>
+        <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">{@html ICONS[t]}</svg>
+        {TYPE_LABEL[t]}
+      </button>
+    {/each}
+  </div>
+
+  {#if message}<p class="notice" role="status">{message}</p>{/if}
+
+  <div class="editor">
+    <form class="form" onsubmit={save} autocomplete="off" novalidate>
+      <div class="field" class:invalid={submitted && (!themeId || themeId === '__new')}>
+        <label for="f-theme">Thème</label>
+        <select id="f-theme" bind:value={themeId}>
+          {#each themes as t (t.id)}<option value={t.id}>{t.name}</option>{/each}
+          <option value="__new">Nouveau thème…</option>
+        </select>
+        {#if themeId === '__new' || themes.length === 0}
+          <div class="actions">
+            <input class="inline-input" style="flex:1" aria-label="Nom du nouveau thème" bind:value={newThemeName} placeholder="Ex. Écoute active" />
+            <button type="button" class="btn small" onclick={createTheme} disabled={!newThemeName.trim()}>Créer le thème</button>
+          </div>
+          {#if submitted}<span class="error">Choisis ou crée un thème.</span>{/if}
+        {/if}
+      </div>
+
+      {#each FIELD_SPECS[type] as spec (type + spec.key)}
+        {@const id = `f-${type}-${spec.key}`}
+        {#if spec.kind === 'check'}
+          <label class="check"><input type="checkbox" {id} bind:checked={drafts[type][spec.key] as boolean} />{spec.label}</label>
+        {:else}
+          <div class="field" class:invalid={!!errors[spec.key]}>
+            <label for={id}>{spec.label}</label>
+            {#if spec.kind === 'text' || spec.kind === 'list'}
+              <input {id} bind:value={drafts[type][spec.key] as string} aria-invalid={!!errors[spec.key]} aria-describedby={`${id}-msg`} />
+            {:else}
+              <textarea {id} bind:value={drafts[type][spec.key] as string} aria-invalid={!!errors[spec.key]} aria-describedby={`${id}-msg`}></textarea>
+            {/if}
+            <span id={`${id}-msg`} class={errors[spec.key] ? 'error' : 'hint'}>{errors[spec.key] ?? spec.hint ?? ''}</span>
+          </div>
+        {/if}
+      {/each}
+
+      <div class="field">
+        <label for="f-tags">Tags</label>
+        <input id="f-tags" bind:value={tags} placeholder="Séparés par des virgules" />
+      </div>
+      <div class="field">
+        <label for="f-source">Source</label>
+        <input id="f-source" bind:value={source} placeholder="Ex. Formation PNL, module 2" />
+      </div>
+      <button class="btn wide">{editing ? 'Enregistrer les modifications' : 'Ajouter au thème'}</button>
+    </form>
+
+    <aside class="preview" aria-label="Aperçu">
+      <div class="row">
+        <p class="eyebrow">Aperçu</p>
+        <div class="seg" role="group" aria-label="Niveau de la carte">
+          <button type="button" aria-pressed={level === 'debutant'} onclick={() => (level = 'debutant')}>Carte nouvelle</button>
+          <button type="button" aria-pressed={level === 'avance'} onclick={() => (level = 'avance')}>Carte solide</button>
+        </div>
+      </div>
+      <Preview {fields} {pool} {level} />
+    </aside>
+  </div>
+</main>

@@ -1,6 +1,7 @@
 <script lang="ts">
   import { boot, type Services, type Today } from './app/services';
   import type { Note } from './core/model';
+  import Editor from './ui/Editor.svelte';
   import Home from './ui/Home.svelte';
   import Library from './ui/Library.svelte';
   import Nav from './ui/Nav.svelte';
@@ -57,7 +58,9 @@
         {:else if view === 'bibliotheque'}
           <Library {services} onedit={edit} onchange={refresh} />
         {:else}
-          <main class="page"><h1>Créer</h1><p class="muted">L’éditeur arrive.</p></main>
+          {#key editing?.id ?? 'new'}
+            <Editor {services} {editing} onsaved={async () => { await refresh(); if (editing) { editing = null; go('bibliotheque'); } }} />
+          {/key}
         {/if}
       </div>
     </div>
