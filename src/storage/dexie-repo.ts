@@ -5,7 +5,8 @@ import { DEFAULT_SETTINGS, type Card, type Note, type ReviewEntry, type Settings
 import { byTimeThenId } from '../core/scheduler';
 import type { Repo } from './repo';
 
-type SettingsRow = Settings & { key: 'main' };
+/** The `settings` table holds the settings row (`main`) and one-time flags (`flag:<name>`). */
+type SettingsRow = { key: string } & Partial<Settings> & { value?: boolean };
 
 class AncrageDb extends Dexie {
   themes!: EntityTable<Theme, 'id'>;
@@ -71,11 +72,29 @@ export function createDexieRepo(name: string): Repo {
       if (!updated) throw new Error(`review ${id} not found`);
     },
 
+    deleteNote: (id) =>
+      db.transaction('rw', db.notes, db.cards, db.reviews, async () => {
+        const cardIds = (await db.cards.where('noteId').equals(id).toArray()).map((c) => c.id);
+        await db.reviews.where('cardId').anyOf(cardIds).delete();
+        await db.cards.bulkDelete(cardIds);
+        await db.notes.delete(id);
+      }),
+    async deleteTheme(id) {
+      await db.themes.delete(id);
+    },
+    async getFlag(key) {
+      return (await db.settings.get(`flag:${key}`))?.value === true;
+    },
+    async setFlag(key) {
+      await db.settings.put({ key: `flag:${key}`, value: true });
+    },
+
     async getSettings() {
       const row = await db.settings.get('main');
-      if (!row) return { ...DEFAULT_SETTINGS };
-      const { key: _key, ...settings } = row;
-      return settings;
+      return {
+        desiredRetention: row?.desiredRetention ?? DEFAULT_SETTINGS.desiredRetention,
+        newPerDay: row?.newPerDay ?? DEFAULT_SETTINGS.newPerDay,
+      };
     },
     async putSettings(settings) {
       await db.settings.put({ ...settings, key: 'main' });

@@ -111,6 +111,33 @@ describe('amendReview edge cases', () => {
   });
 });
 
+describe('deletions and flags', () => {
+  test('deleteNote removes the note, its cards and their log only', async () => {
+    const [a] = await repo.putNote(cloze('{{a}}', 'n1'));
+    const [b] = await repo.putNote(cloze('{{b}}', 'n2'));
+    await repo.appendReview(review(a.id, T0, 'RA'));
+    await repo.appendReview(review(b.id, T0, 'RB'));
+    await repo.deleteNote('n1');
+    expect(await repo.getNote('n1')).toBeUndefined();
+    expect(await repo.listCards('n1')).toEqual([]);
+    expect((await repo.listReviews()).map((e) => e.id)).toEqual(['RB']);
+    expect(await repo.getNote('n2')).toBeDefined();
+  });
+
+  test('deleteTheme removes the theme', async () => {
+    await repo.putTheme({ id: 't9', name: 'X', order: 0 });
+    await repo.deleteTheme('t9');
+    expect(await repo.listThemes()).toEqual([]);
+  });
+
+  test('flags start unset and stay set', async () => {
+    expect(await repo.getFlag('starterSeeded')).toBe(false);
+    await repo.setFlag('starterSeeded');
+    expect(await repo.getFlag('starterSeeded')).toBe(true);
+    expect(await repo.getSettings()).toEqual(DEFAULT_SETTINGS);
+  });
+});
+
 describe('themes and settings', () => {
   test('stores themes', async () => {
     await repo.putTheme({ id: 't1', name: 'Méta-modèle', order: 0 });
