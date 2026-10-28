@@ -6,15 +6,31 @@ Le principe d'Anki (cartes personnelles, planification FSRS) avec l'expérience 
 
 ## État
 
-Itération 0 : audit et conception. Pas encore de code applicatif.
+Itération 1 : moteur terminé (sans interface). Il génère les cartes depuis les notes, corrige
+les réponses, convertit le résultat en note FSRS et reconstruit l'état de chaque carte en rejouant
+son historique de révisions.
 
 - Spec v1 : [`docs/specs/2026-10-28-ancrage-v1-design.md`](docs/specs/2026-10-28-ancrage-v1-design.md)
 - Audit rétro-ingénierie d'Anki : [`docs/research/2026-10-28-anki-audit.md`](docs/research/2026-10-28-anki-audit.md)
 - Maquette interactive (HTML autonome, à ouvrir dans un navigateur) : [`prototype/maquette.html`](prototype/maquette.html)
 
-## Stack prévue
+## Développement
 
-PWA Svelte 5 + Vite + TypeScript, IndexedDB (Dexie), `ts-fsrs`, Vitest, Playwright.
+Prérequis : Node 22.
+
+```bash
+npm install
+npm test           # tests unitaires (Vitest)
+npm run typecheck  # svelte-check
+npm run dev        # serveur de développement
+```
+
+Code : `src/core/` (domaine pur, sans navigateur), `src/storage/` (persistance IndexedDB via Dexie).
+Plan de l'itération : [`docs/superpowers/plans/2026-10-28-iteration-1-engine.md`](docs/superpowers/plans/2026-10-28-iteration-1-engine.md).
+
+## Stack
+
+PWA Svelte 5 + Vite + TypeScript, IndexedDB (Dexie), `ts-fsrs` 5.4.2, Vitest. Licence MIT.
 Aucun code d'Anki n'est réutilisé : seuls les principes le sont.
 
 ## Feuille de route
