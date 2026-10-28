@@ -101,6 +101,52 @@ describe('examples', () => {
   });
 });
 
+describe('review fixes', () => {
+  test('removeExamples never deletes a personal note tagged "exemple"', async () => {
+    await seedIfEmpty(repo, NOW);
+    const t = await aTheme();
+    const mine = await services.saveNote({ themeId: t.id, fields: { type: 'basic', front: 'Mon exemple', back: 'R', reverse: false }, tags: ['exemple'] }, NOW);
+    if (!mine.ok) throw new Error('setup');
+    expect(await services.examplesCount()).toBeGreaterThanOrEqual(20);
+    await services.removeExamples();
+    expect(await repo.getNote(mine.note.id)).toBeDefined();
+    expect(await services.examplesCount()).toBe(0);
+  });
+
+  test('saveNote tells how many of the note cards are in today’s queue', async () => {
+    const t = await aTheme();
+    const first = await services.saveNote({ themeId: t.id, fields: { type: 'cloze', text: '{{a}} {{b}} {{c}}' }, tags: [] }, NOW);
+    expect(first.ok && first.today).toBe(3);
+  });
+
+  test('saveNote counts only the cards that fit in today’s new-card limit', async () => {
+    await repo.putSettings({ desiredRetention: 0.9, newPerDay: 1 });
+    const t = await aTheme();
+    const res = await services.saveNote({ themeId: t.id, fields: { type: 'cloze', text: '{{a}} {{b}} {{c}}' }, tags: [] }, NOW);
+    expect(res.ok && res.today).toBe(1);
+  });
+
+  test('saveNote counts a note queued behind older new cards as not today', async () => {
+    await seedIfEmpty(repo, NOW);
+    const t = await aTheme();
+    const res = await services.saveNote({ themeId: t.id, fields: { type: 'cloze', text: '{{x}}' }, tags: [] }, NOW);
+    expect(res.ok && res.today).toBe(0);
+  });
+
+  test('saveNote refuses a theme that no longer exists', async () => {
+    const res = await services.saveNote({ themeId: 'deleted', fields: { type: 'basic', front: 'Q', back: 'R', reverse: false }, tags: [] }, NOW);
+    expect(res.ok).toBe(false);
+    if (!res.ok) expect(res.errors).toHaveProperty('themeId');
+    expect(await repo.listNotes()).toEqual([]);
+  });
+
+  test('saveNote de-duplicates tags', async () => {
+    const t = await aTheme();
+    const res = await services.saveNote({ themeId: t.id, fields: { type: 'basic', front: 'Q', back: 'R', reverse: false }, tags: ['pnl', ' pnl', 'Base', ''] }, NOW);
+    expect(res.ok && res.note.tags).toEqual(['pnl', 'Base']);
+  });
+});
+
 describe('library and slots', () => {
   test('newSlotsLeft drops as new cards are answered today', async () => {
     await seedIfEmpty(repo, NOW);

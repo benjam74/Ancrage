@@ -33,6 +33,7 @@
   let submitted = $state(false);
   let message = $state('');
   let pool = $state<Note[]>([]);
+  let saveErrors = $state<Record<string, string>>({});
 
   const fields = $derived(draftToFields(type, drafts[type]));
   const errors = $derived(submitted ? validateFields(fields) : {});
@@ -57,18 +58,31 @@
     themeId = t.id;
   }
 
+  function when(cards: number, today: number): string {
+    if (today >= cards) return cards > 1 ? 'Tu les verras dans la séance du jour.' : 'Tu la verras dans la séance du jour.';
+    if (today === 0) {
+      return cards > 1
+        ? 'Elles apparaîtront dans les prochains jours, après les nouvelles cartes déjà en attente.'
+        : 'Elle apparaîtra dans les prochains jours, après les nouvelles cartes déjà en attente.';
+    }
+    return `${today} aujourd’hui, les autres dans les prochains jours.`;
+  }
+
   async function save(e: SubmitEvent) {
     e.preventDefault();
     submitted = true;
     message = '';
+    saveErrors = {};
     if (!themeId || themeId === '__new') return;
-    const now = Date.now();
-    const res = await services.saveNote({ id: editing?.id, themeId, fields, tags: tags.split(','), source }, now);
-    if (!res.ok) return;
-    const theme = themes.find((t) => t.id === themeId)?.name ?? '';
+    const res = await services.saveNote({ id: editing?.id, themeId, fields, tags: tags.split(','), source }, Date.now());
+    if (!res.ok) {
+      saveErrors = res.errors;
+      if (res.errors.themeId) await loadThemes();
+      return;
+    }
     if (editing) return onsaved();
-    const slots = await services.newSlotsLeft(now);
-    message = `Ajouté à « ${theme} » : ${res.cards} carte${res.cards > 1 ? 's' : ''}.${slots === 0 ? ' Elles apparaîtront à partir de demain, la limite de nouvelles cartes du jour étant atteinte.' : ''}`;
+    const theme = themes.find((t) => t.id === themeId)?.name ?? '';
+    message = `Ajouté à « ${theme} » : ${res.cards} carte${res.cards > 1 ? 's' : ''}. ${when(res.cards, res.today)}`;
     drafts[type] = emptyDraft(type);
     submitted = false;
     onsaved();
@@ -104,12 +118,24 @@
         </select>
         {#if themeId === '__new' || themes.length === 0}
           <div class="actions">
-            <input class="inline-input" style="flex:1" aria-label="Nom du nouveau thème" bind:value={newThemeName} placeholder="Ex. Écoute active" />
+            <input
+              class="inline-input"
+              style="flex:1"
+              aria-label="Nom du nouveau thème"
+              bind:value={newThemeName}
+              placeholder="Ex. Écoute active"
+              onkeydown={(e) => { if (e.key === 'Enter') { e.preventDefault(); createTheme(); } }}
+            />
             <button type="button" class="btn small" onclick={createTheme} disabled={!newThemeName.trim()}>Créer le thème</button>
           </div>
           {#if submitted}<span class="error">Choisis ou crée un thème.</span>{/if}
         {/if}
+        {#if saveErrors.themeId}<span class="error" role="alert">{saveErrors.themeId}</span>{/if}
       </div>
+
+      {#if editing && type === 'cloze'}
+        <p class="hint muted">Changer le texte d’un trou fait repartir sa carte à zéro. Les autres trous gardent leur historique.</p>
+      {/if}
 
       {#each FIELD_SPECS[type] as spec (type + spec.key)}
         {@const id = `f-${type}-${spec.key}`}

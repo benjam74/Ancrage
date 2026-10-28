@@ -14,12 +14,14 @@
   let message = $state('');
   let warning = $state('');
 
-  const hasExamples = $derived(lib.some((t) => t.notes.some((n) => n.note.tags.includes('exemple'))));
+  let examples = $state(0);
   const totalNotes = $derived(lib.reduce((sum, t) => sum + t.notes.length, 0));
 
   async function load() {
-    lib = await services.library();
+    [lib, examples] = await Promise.all([services.library(), services.examplesCount()]);
   }
+
+  const plural = (n: number, word: string) => `${n} ${word}${n > 1 ? 's' : ''}`;
 
   function summary(f: NoteFields): string {
     switch (f.type) {
@@ -68,7 +70,7 @@
   async function removeExamples() {
     const res = await services.removeExamples();
     confirmExamples = false;
-    await done(`Exemples retirés : ${res.notes} notes et ${res.themes} thèmes.`);
+    await done(`Exemples retirés : ${plural(res.notes, 'note')} et ${plural(res.themes, 'thème')}.`);
   }
 
   load();
@@ -90,12 +92,12 @@
   {#if message}<p class="notice" role="status">{message}</p>{/if}
   {#if warning}<p class="notice warn" role="alert">{warning}</p>{/if}
 
-  {#if hasExamples}
+  {#if examples > 0}
     <section class="panel">
       <div class="row">
         <p>Le deck de démarrage est chargé. Retire-le quand tu as tes propres cartes.</p>
         {#if confirmExamples}
-          <span class="confirm">Supprimer les notes d’exemple et leur historique ?
+          <span class="confirm">Supprimer les {examples} notes d’exemple et leur historique ? Tes propres notes sont conservées.
             <button class="btn small danger" onclick={removeExamples}>Oui, retirer</button>
             <button class="btn small ghost" onclick={() => (confirmExamples = false)}>Annuler</button>
           </span>

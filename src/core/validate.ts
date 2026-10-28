@@ -4,6 +4,8 @@ import type { NoteFields } from './model';
 
 const REQUIRED = 'Ce champ est obligatoire.';
 
+const distinctCount = (items: string[]) => new Set(items.map(normalizeAnswer).filter(Boolean)).size;
+
 /** One French message per invalid field, keyed by field name. Empty when the note is valid. */
 export function validateFields(fields: NoteFields): Record<string, string> {
   const errors: Record<string, string> = {};
@@ -26,10 +28,12 @@ export function validateFields(fields: NoteFields): Record<string, string> {
     case 'ordering':
       required('title', fields.title);
       if (fields.steps.length < 2) errors.steps = 'Il faut au moins 2 étapes différentes.';
+      else if (distinctCount(fields.steps) !== fields.steps.length) errors.steps = 'Chaque étape doit être différente.';
       break;
     case 'classify':
       required('statement', fields.statement);
-      if (fields.categories.length < 2) errors.categories = 'Il faut au moins 2 catégories différentes.';
+      if (distinctCount(fields.categories) < 2) errors.categories = 'Il faut au moins 2 catégories différentes.';
+      else if (distinctCount(fields.categories) !== fields.categories.length) errors.categories = 'Chaque catégorie doit être différente.';
       if (!fields.answer.trim()) errors.answer = REQUIRED;
       else if (!fields.categories.some((c) => checkChoice(c, fields.answer))) errors.answer = 'La bonne catégorie doit figurer dans la liste.';
       break;

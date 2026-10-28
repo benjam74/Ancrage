@@ -46,6 +46,11 @@ describe('validateFields', () => {
     expect(Object.keys(validateFields({ type: 'scenario', situation: '', model: '', keyPoints: [] })).sort()).toEqual(['model', 'situation']);
   });
 
+  test('steps and categories must be distinct', () => {
+    expect(validateFields({ type: 'ordering', title: 'T', steps: ['A', 'a ', 'B'] })).toHaveProperty('steps');
+    expect(validateFields({ type: 'classify', statement: 'S', categories: ['Omission', 'omission'], answer: 'Omission' })).toHaveProperty('categories');
+  });
+
   test('messages are in French', () => {
     expect(validateFields({ type: 'cloze', text: 'x' }).text).toMatch(/trou/i);
   });

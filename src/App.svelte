@@ -51,7 +51,7 @@
     <Session {services} queue={today.queue} onexit={async () => { inSession = false; await refresh(); }} />
   {:else}
     <div class="app">
-      <Nav current={view} />
+      <Nav current={view} onselect={(v) => { if (v === 'creer') editing = null; }} />
       <div class="main">
         {#if view === 'accueil'}
           <Home {today} onstart={() => (inSession = true)} />

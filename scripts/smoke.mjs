@@ -98,7 +98,10 @@ await page.getByText('Ajoute des cartes pour commencer.').waitFor();
 await page.goto(`${URL}#creer`);
 await page.getByLabel('Thème', { exact: true }).selectOption('__new');
 await page.getByLabel('Nom du nouveau thème').fill('Écoute active');
-await page.getByRole('button', { name: 'Créer le thème' }).click();
+await page.getByLabel('Nom du nouveau thème').press('Enter');
+await page
+  .waitForFunction(() => document.querySelector('#f-theme')?.selectedOptions[0]?.textContent === 'Écoute active', null, { timeout: 3000 })
+  .catch(() => fail('Enter in the new theme field should create the theme'));
 await page.getByRole('button', { name: 'Texte à trous' }).click();
 await page.getByLabel('Texte', { exact: true }).fill('Reformuler sans gap');
 await page.getByRole('button', { name: 'Ajouter au thème' }).click();
@@ -107,7 +110,7 @@ if (!/trou/i.test(await page.locator('.field .error').first().innerText())) fail
 await page.getByLabel('Texte', { exact: true }).fill("L'écoute active repose sur la {{reformulation}} et le {{questionnement}}.");
 await page.screenshot({ path: `${OUT}/editor.png`, fullPage: true });
 await page.getByRole('button', { name: 'Ajouter au thème' }).click();
-await page.getByText(/Ajouté à « Écoute active » : 2 cartes/).waitFor();
+await page.getByText(/Ajouté à « Écoute active » : 2 cartes\. Tu les verras dans la séance du jour\./).waitFor();
 
 await page.goto(`${URL}#accueil`);
 const mine = await page.locator('.hero-meta').innerText();
@@ -126,6 +129,10 @@ await page.getByLabel('Texte', { exact: true }).fill("L'écoute active repose su
 await page.getByRole('button', { name: 'Enregistrer les modifications' }).click();
 await page.getByText("L'écoute active repose sur la [reformulation] et le [silence].").waitFor();
 await page.screenshot({ path: `${OUT}/library.png`, fullPage: true });
+await page.getByRole('button', { name: 'Modifier' }).click();
+await page.getByRole('heading', { name: 'Modifier une carte' }).waitFor();
+await page.getByRole('link', { name: 'Créer' }).click();
+await page.getByRole('heading', { name: 'Créer une carte' }).waitFor({ timeout: 3000 }).catch(() => fail('nav "Créer" should leave edit mode'));
 
 const mobile = await browser.newPage({ viewport: { width: 390, height: 844 }, colorScheme: 'dark' });
 mobile.on('pageerror', (e) => errors.push(e.message));

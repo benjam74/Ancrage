@@ -24,7 +24,8 @@ export interface NoteInput {
   source?: string;
 }
 
-export type SaveResult = { ok: true; note: Note; cards: number } | { ok: false; errors: Record<string, string> };
+/** `today`: how many of the note's cards are in today's queue (the others wait for later days). */
+export type SaveResult = { ok: true; note: Note; cards: number; today: number } | { ok: false; errors: Record<string, string> };
 
 export interface LibraryTheme {
   theme: Theme;
@@ -42,27 +43,34 @@ export interface Services {
   renameTheme(id: string, name: string): Promise<void>;
   deleteTheme(id: string): Promise<{ ok: boolean; reason?: string }>;
   removeExamples(): Promise<{ notes: number; themes: number }>;
+  examplesCount(): Promise<number>;
   library(): Promise<LibraryTheme[]>;
   newSlotsLeft(now: number): Promise<number>;
 }
 
 const SEEDED = 'starterSeeded';
+/** Starter notes are recognized by id, never by tag: a user may tag their own notes "exemple". */
+const STARTER_NOTE_IDS = new Set(starterNotes(0).map((n) => n.id));
 export const EXAMPLE_TAG = 'exemple';
 
 /** Seeds the starter deck once in the database's life, so removing the examples is permanent. */
 export async function seedIfEmpty(repo: Repo, now: number = Date.now()): Promise<boolean> {
   if (await repo.getFlag(SEEDED)) return false;
-  await repo.setFlag(SEEDED);
-  if ((await repo.listNotes()).length > 0) return false;
+  if ((await repo.listNotes()).length > 0) {
+    await repo.setFlag(SEEDED);
+    return false;
+  }
+  // Starter ids are fixed, so an interrupted seed is completed on the next launch without duplicates.
   for (const theme of STARTER_THEMES) await repo.putTheme(theme);
   for (const note of starterNotes(now)) await repo.putNote(note);
+  await repo.setFlag(SEEDED);
   return true;
 }
 
 export function createServices(repo: Repo, deviceId: string): Services {
   const engine = createEngine(repo, deviceId);
 
-  return {
+  const services: Services = {
     repo,
     engine,
 
@@ -109,19 +117,21 @@ export function createServices(repo: Repo, deviceId: string): Services {
 
     async saveNote(input, now) {
       const errors = validateFields(input.fields);
+      if (!(await repo.listThemes()).some((t) => t.id === input.themeId)) errors.themeId = 'Ce thème n’existe plus. Choisis-en un autre.';
       if (Object.keys(errors).length) return { ok: false, errors };
       const existing = input.id ? await repo.getNote(input.id) : undefined;
       const note: Note = {
         id: existing?.id ?? newId(now),
         themeId: input.themeId,
         fields: input.fields,
-        tags: input.tags.map((t) => t.trim()).filter(Boolean),
+        tags: [...new Set(input.tags.map((t) => t.trim()).filter(Boolean))],
         ...(input.source?.trim() ? { source: input.source.trim() } : {}),
         createdAt: existing?.createdAt ?? now,
         updatedAt: now,
       };
       const cards = await repo.putNote(note);
-      return { ok: true, note, cards: cards.length };
+      const queue = new Set((await services.today(now)).queue);
+      return { ok: true, note, cards: cards.length, today: cards.filter((c) => queue.has(c.id)).length };
     },
 
     deleteNote: (id) => repo.deleteNote(id),
@@ -150,7 +160,7 @@ export function createServices(repo: Repo, deviceId: string): Services {
     },
 
     async removeExamples() {
-      const examples = (await repo.listNotes()).filter((n) => n.tags.includes(EXAMPLE_TAG));
+      const examples = (await repo.listNotes()).filter((n) => STARTER_NOTE_IDS.has(n.id));
       for (const n of examples) await repo.deleteNote(n.id);
       const starterIds = new Set(STARTER_THEMES.map((t) => t.id));
       let themes = 0;
@@ -161,6 +171,10 @@ export function createServices(repo: Repo, deviceId: string): Services {
         }
       }
       return { notes: examples.length, themes };
+    },
+
+    async examplesCount() {
+      return (await repo.listNotes()).filter((n) => STARTER_NOTE_IDS.has(n.id)).length;
     },
 
     async library() {
@@ -183,6 +197,7 @@ export function createServices(repo: Repo, deviceId: string): Services {
       return Math.max(0, settings.newPerDay - countNewIntroduced(reviews, studyDayStart(now)));
     },
   };
+  return services;
 }
 
 function deviceId(): string {
