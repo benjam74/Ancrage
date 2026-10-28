@@ -200,12 +200,12 @@ const reviewsBefore = await countReviews(app);
 
 const fresh = await (await browser.newContext()).newPage();
 await fresh.goto(`${URL}#reglages`);
-await fresh.getByLabel('Restaurer une sauvegarde').setInputFiles(backupPath);
+await fresh.getByLabel('Ouvrir une sauvegarde').setInputFiles(backupPath);
 await fresh.getByRole('button', { name: 'Remplacer mes données' }).click();
 await fresh.getByText('Données restaurées.').waitFor({ timeout: 5000 }).catch(async () => fail(`restore failed: ${(await fresh.locator('main').innerText()).replace(/\s+/g, ' ').slice(-400)}`));
 if ((await countReviews(fresh)) !== reviewsBefore) fail('restored review count differs');
 if ((await fresh.getByLabel('Nouvelles cartes par jour').inputValue()) !== '8') fail('restored settings differ');
-await fresh.getByLabel('Restaurer une sauvegarde').setInputFiles({ name: 'x.json', mimeType: 'application/json', buffer: Buffer.from('{"format":"autre"}') });
+await fresh.getByLabel('Ouvrir une sauvegarde').setInputFiles({ name: 'x.json', mimeType: 'application/json', buffer: Buffer.from('{"format":"autre"}') });
 await fresh.getByText('Ce fichier n’est pas une sauvegarde Ancrage.').waitFor();
 await fresh.screenshot({ path: `${OUT}/settings.png`, fullPage: true });
 

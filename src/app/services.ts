@@ -5,6 +5,8 @@ import type { Card, Note, NoteFields, ReviewEntry, Theme } from '../core/model';
 import { validateFields } from '../core/validate';
 import { validateSettings } from '../core/settings';
 import { backupFileName, serializeBackup, type Dump } from '../core/backup';
+import { mergeDumps } from '../core/merge';
+import { cardVariants } from '../core/cards';
 import { classifyEntries, goalDays, makeRestDayCheck, nextStudyDay, streakState, weekStart, xpBetween } from '../core/progress';
 import { dailyCounts, forecast, mastery, retention, stateBreakdown, type Level } from '../core/stats';
 import type { CardState } from '../core/scheduler';
@@ -82,6 +84,8 @@ export interface Services {
   exportBackup(now: number): Promise<{ fileName: string; text: string }>;
   /** Replaces all local data with the backup, all or nothing. */
   importBackup(dump: Dump): Promise<void>;
+  /** Merges a backup from another device into local data; nothing local is lost. */
+  mergeBackup(dump: Dump): Promise<void>;
   /** Records a finished round; returns the XP it earned (answers since `startedAt` + round bonus). */
   completeRound(startedAt: number, now: number): Promise<{ xp: number; streak: number; firstGoalToday: boolean }>;
 }
@@ -107,6 +111,15 @@ export async function seedIfEmpty(repo: Repo, now: number = Date.now()): Promise
   for (const note of starterNotes(now)) await repo.putNote(note);
   await repo.setFlag(SEEDED);
   return true;
+}
+
+/** Writes a merged snapshot, then creates the cards its notes need (one per new variant). */
+export async function applyMerged(repo: Repo, merged: Dump): Promise<void> {
+  await repo.restoreAll(merged);
+  for (const note of merged.notes) {
+    const have = new Set(merged.cards.filter((c) => c.noteId === note.id && !c.orphan).map((c) => c.variant));
+    if (cardVariants(note.fields).some((v) => !have.has(v))) await repo.putNote(note);
+  }
 }
 
 export function createServices(repo: Repo, deviceId: string): Services {
@@ -319,6 +332,10 @@ export function createServices(repo: Repo, deviceId: string): Services {
     },
 
     importBackup: (dump) => repo.restoreAll(dump),
+
+    async mergeBackup(dump) {
+      await applyMerged(repo, mergeDumps(await repo.dumpAll(), dump));
+    },
 
     async completeRound(startedAt, now) {
       const before = await snapshot();
