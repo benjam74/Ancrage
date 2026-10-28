@@ -25,6 +25,8 @@
   let result = $state<Result | null>(null);
   let ended = $state(false);
   let hasMore = $state(false);
+  let roundResult = $state<{ xp: number; streak: number; firstGoalToday: boolean } | null>(null);
+  let xpShown = $state(0);
   let error = $state('');
   let busy = false;
 
@@ -68,9 +70,12 @@
     const id = currentCard(round);
     if (id) await show(id);
     else {
-      hasMore = (await services.today(Date.now())).queue.length > 0;
+      const now = Date.now();
+      roundResult = await services.completeRound(roundStartedAt, now);
+      hasMore = (await services.today(now)).queue.length > 0;
       shown = null;
       ended = true;
+      countUp(roundResult.xp);
     }
   }
 
@@ -84,6 +89,17 @@
     const outcome = grade ? ({ kind: 'self', grade } as const) : ({ kind: 'auto', correct, durationMs, hintUsed: false } as const);
     const { entry, state } = await services.engine.answer(shown.cardId, shown.mode, outcome, Date.now());
     result = { correct, entry, state, corrected: false };
+  }
+
+  function countUp(target: number) {
+    xpShown = 0;
+    const step = Math.max(1, Math.ceil(target / 30));
+    const tick = () => {
+      xpShown = Math.min(target, xpShown + step);
+      if (xpShown < target) requestAnimationFrame(tick);
+    };
+    if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) xpShown = target;
+    else requestAnimationFrame(tick);
   }
 
   const record = (correct: boolean, grade?: 1 | 2 | 3) => once(() => recordNow(correct, grade))();
@@ -151,7 +167,13 @@
     {:else if ended}
       <div class="s-inner end">
         <h1>Manche terminée</h1>
-        <div class="tiles">
+        {#if roundResult}
+          <p class="muted" aria-live="polite">
+            {roundResult.firstGoalToday ? 'Objectif du jour atteint. ' : ''}Série : {roundResult.streak} jour{roundResult.streak > 1 ? 's' : ''}.
+          </p>
+        {/if}
+        <div class="tiles three">
+          <div class="stat-tile" style="--c:var(--sun-deep)"><div class="h">XP gagnée</div><div class="v" aria-label="{roundResult?.xp ?? 0} XP">+{xpShown}</div></div>
           <div class="stat-tile" style="--c:var(--ok)"><div class="h">Précision</div><div class="v">{round.answered ? Math.round((round.correct / round.answered) * 100) : 0} %</div></div>
           <div class="stat-tile" style="--c:var(--petrol)"><div class="h">Durée</div><div class="v">{Math.max(1, Math.round((Date.now() - roundStartedAt) / 60_000))} min</div></div>
         </div>
