@@ -26,6 +26,22 @@
   let ended = $state(false);
   let hasMore = $state(false);
   let error = $state('');
+  let busy = false;
+
+  /** Serializes user actions: a double click must not answer or advance twice. */
+  function once(action: () => Promise<void>): () => Promise<void> {
+    return async () => {
+      if (busy) return;
+      busy = true;
+      try {
+        await action();
+      } catch (e) {
+        error = String(e);
+      } finally {
+        busy = false;
+      }
+    };
+  }
 
   const progress = $derived(round.total ? (round.done / round.total) * 100 : 0);
 
@@ -58,7 +74,7 @@
     }
   }
 
-  async function record(correct: boolean, grade?: 1 | 2 | 3) {
+  async function recordNow(correct: boolean, grade?: 1 | 2 | 3) {
     if (!shown || result) return;
     if (shown.retry) {
       result = { correct, entry: null, state: null, corrected: false };
@@ -70,32 +86,34 @@
     result = { correct, entry, state, corrected: false };
   }
 
-  async function check() {
-    if (!shown || !answer || result) return;
-    await record(isCorrect(shown.ex, answer));
-  }
+  const record = (correct: boolean, grade?: 1 | 2 | 3) => once(() => recordNow(correct, grade))();
 
-  async function correct() {
+  const check = once(async () => {
+    if (!shown || !answer || result) return;
+    await recordNow(isCorrect(shown.ex, answer));
+  });
+
+  const correct = once(async () => {
     if (!result?.entry) return;
     const flipped = !result.correct;
     const state = await services.engine.correctLast(result.entry.id, flipped, Date.now());
     const log = await services.repo.listReviews(result.entry.cardId);
     result = { correct: flipped, entry: log[log.length - 1], state, corrected: true };
-  }
+  });
 
-  async function proceed() {
+  const proceed = once(async () => {
     if (!result) return;
     round = advance(round, result.correct);
     await next();
-  }
+  });
 
-  async function nextRound() {
+  const nextRound = once(async () => {
     const { queue: fresh } = await services.today(Date.now());
     round = startRound(fresh);
     roundStartedAt = Date.now();
     ended = false;
     await next();
-  }
+  });
 
   function onkey(e: KeyboardEvent) {
     if (e.key === 'Escape') return onexit();
