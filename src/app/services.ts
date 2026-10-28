@@ -6,7 +6,7 @@ import { validateFields } from '../core/validate';
 import { validateSettings } from '../core/settings';
 import { backupFileName, serializeBackup, type Dump } from '../core/backup';
 import { mergeDumps } from '../core/merge';
-import { cardVariants } from '../core/cards';
+import { applyMerged } from '../sync/sync';
 import { classifyEntries, goalDays, makeRestDayCheck, nextStudyDay, streakState, weekStart, xpBetween } from '../core/progress';
 import { dailyCounts, forecast, mastery, retention, stateBreakdown, type Level } from '../core/stats';
 import type { CardState } from '../core/scheduler';
@@ -111,15 +111,6 @@ export async function seedIfEmpty(repo: Repo, now: number = Date.now()): Promise
   for (const note of starterNotes(now)) await repo.putNote(note);
   await repo.setFlag(SEEDED);
   return true;
-}
-
-/** Writes a merged snapshot, then creates the cards its notes need (one per new variant). */
-export async function applyMerged(repo: Repo, merged: Dump): Promise<void> {
-  await repo.restoreAll(merged);
-  for (const note of merged.notes) {
-    const have = new Set(merged.cards.filter((c) => c.noteId === note.id && !c.orphan).map((c) => c.variant));
-    if (cardVariants(note.fields).some((v) => !have.has(v))) await repo.putNote(note);
-  }
 }
 
 export function createServices(repo: Repo, deviceId: string): Services {
