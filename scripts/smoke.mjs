@@ -87,6 +87,46 @@ const reviews = await page.evaluate(() => new Promise((resolve, reject) => {
 }));
 if (reviews < 5) fail(`expected at least 5 persisted reviews, got ${reviews}`);
 
+// --- iteration 3: remove examples, create a theme and a note, play it, edit it ---
+await page.goto(`${URL}#bibliotheque`);
+await page.getByRole('button', { name: 'Retirer les exemples' }).click();
+await page.getByRole('button', { name: 'Oui, retirer' }).click();
+await page.getByText(/Exemples retirés/).waitFor();
+await page.goto(`${URL}#accueil`);
+await page.getByText('Ajoute des cartes pour commencer.').waitFor();
+
+await page.goto(`${URL}#creer`);
+await page.getByLabel('Thème', { exact: true }).selectOption('__new');
+await page.getByLabel('Nom du nouveau thème').fill('Écoute active');
+await page.getByRole('button', { name: 'Créer le thème' }).click();
+await page.getByRole('button', { name: 'Texte à trous' }).click();
+await page.getByLabel('Texte', { exact: true }).fill('Reformuler sans gap');
+await page.getByRole('button', { name: 'Ajouter au thème' }).click();
+await page.locator('.field .error').first().waitFor();
+if (!/trou/i.test(await page.locator('.field .error').first().innerText())) fail('expected a cloze validation message');
+await page.getByLabel('Texte', { exact: true }).fill("L'écoute active repose sur la {{reformulation}} et le {{questionnement}}.");
+await page.screenshot({ path: `${OUT}/editor.png`, fullPage: true });
+await page.getByRole('button', { name: 'Ajouter au thème' }).click();
+await page.getByText(/Ajouté à « Écoute active » : 2 cartes/).waitFor();
+
+await page.goto(`${URL}#accueil`);
+const mine = await page.locator('.hero-meta').innerText();
+if (!/2\s+nouvelles cartes/.test(mine)) fail(`expected the 2 new cards of my note on home, got "${mine}"`);
+await page.getByRole('button', { name: 'Commencer la séance' }).click();
+await page.locator('.s-inner').first().waitFor();
+await playRound(page);
+const end = page.getByRole('button', { name: /Terminer|Manche suivante/ });
+if ((await end.innerText()).includes('Terminer')) await end.click(); else await page.keyboard.press('Escape');
+
+await page.reload();
+await page.goto(`${URL}#bibliotheque`);
+await page.getByText("L'écoute active repose sur la [reformulation]").waitFor();
+await page.getByRole('button', { name: 'Modifier' }).click();
+await page.getByLabel('Texte', { exact: true }).fill("L'écoute active repose sur la {{reformulation}} et le {{silence}}.");
+await page.getByRole('button', { name: 'Enregistrer les modifications' }).click();
+await page.getByText("L'écoute active repose sur la [reformulation] et le [silence].").waitFor();
+await page.screenshot({ path: `${OUT}/library.png`, fullPage: true });
+
 const mobile = await browser.newPage({ viewport: { width: 390, height: 844 }, colorScheme: 'dark' });
 mobile.on('pageerror', (e) => errors.push(e.message));
 await mobile.goto(URL);

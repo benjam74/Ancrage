@@ -6,14 +6,14 @@ Le principe d'Anki (cartes personnelles, planification FSRS) avec l'expérience 
 
 ## État
 
-Itération 2 : séance jouable dans le navigateur.
+Itération 3 : tu crées tes propres cartes.
 
-- File du jour : révisions dues (entrelacées entre thèmes, plus en retard d'abord), puis 5 nouvelles cartes par jour.
-- Manches de 10 exercices ; une carte ratée revient une fois en fin de manche.
-- Les 6 types d'exercice, avec retour immédiat (réponse attendue, note FSRS, prochaine échéance) et correction « En fait je ne savais pas ».
-- Données stockées localement (IndexedDB). Un deck de démarrage de 23 notes de coaching et de PNL, tagué `exemple`, est chargé au premier lancement.
+- **Créer** : les 6 types d'exercice, avec validation champ par champ et un aperçu en direct (carte nouvelle ou carte solide). Le nombre de cartes générées est affiché.
+- **Bibliothèque** : thèmes (créer, renommer, supprimer si vide), notes (modifier, supprimer avec confirmation), bouton « Retirer les exemples ».
+- **Séance** : file du jour (révisions dues puis 5 nouvelles cartes par jour), manches de 10, retour immédiat avec la note FSRS et la prochaine échéance.
+- Données locales (IndexedDB). Le deck de démarrage (tagué `exemple`) n'est chargé qu'une fois.
 
-Pas encore : éditeur de cartes (itération 3), XP, série et maîtrise (itération 4).
+Pas encore : XP, série, maîtrise par thème (itération 4), installation PWA et sauvegarde JSON (itération 5).
 
 ## Développement
 
