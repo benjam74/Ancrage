@@ -250,3 +250,6 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .update { position: sticky; top: 0; z-index: 30; display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 10px 16px; padding-block: calc(10px + env(safe-area-inset-top, 0px)) 10px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); background: var(--surface); border-bottom: 2px solid var(--line); font-weight: 700; }
 @media (max-width: 760px) { .nav { overflow-x: auto; justify-content: flex-start; } .nav a { flex: 1 0 auto; } }
 input[type="range"] { accent-color: var(--petrol); padding-inline: 0; }
+.row2 { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr); gap: 12px; }
+@media (max-width: 520px) { .row2 { grid-template-columns: minmax(0,1fr); } }
+p.error { font-weight: 700; color: var(--bad); }

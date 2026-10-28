@@ -1,9 +1,11 @@
 <script lang="ts">
+  import type { CloudSync } from '../app/cloud';
   import type { Services } from '../app/services';
+  import SyncSettings from './SyncSettings.svelte';
   import { parseBackup, summarize, type Dump } from '../core/backup';
   import { RETENTION_MAX, RETENTION_MIN } from '../core/settings';
 
-  let { services, onchange }: { services: Services; onchange: () => void } = $props();
+  let { services, cloud, onchange }: { services: Services; cloud: CloudSync; onchange: () => void } = $props();
 
   // bind:value on a range input yields a number.
   let retention = $state<number>(0.9);
@@ -108,6 +110,8 @@
       <button class="btn">Enregistrer</button>
     </div>
   </form>
+
+  <SyncSettings {cloud} onsynced={async () => { onchange(); await load(); }} />
 
   <section class="panel">
     <h2>Sauvegarde</h2>

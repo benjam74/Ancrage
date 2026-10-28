@@ -175,6 +175,7 @@ await app.keyboard.press('Escape');
 await ctx.setOffline(false);
 
 await app.goto(`${URL}#reglages`);
+await app.getByRole('heading', { name: 'Synchronisation' }).waitFor({ timeout: 3000 }).catch(() => fail('settings should show the sync section'));
 const slider = app.locator('#s-retention');
 await slider.focus();
 for (let i = 0; i < 5; i++) await app.keyboard.press('ArrowLeft');
