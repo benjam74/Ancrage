@@ -30,6 +30,8 @@ export interface Repo {
   dumpAll(): Promise<Dump>;
   /** Replaces the whole database with `dump`, all or nothing. */
   restoreAll(dump: Dump): Promise<void>;
+  /** Reads, transforms and rewrites the whole database in one transaction (no write can slip in between). */
+  mergeIntoLocal(merge: (local: Dump) => Dump): Promise<{ changed: boolean; dump: Dump }>;
   getSettings(): Promise<Settings>;
   /** `ts` dates the change for last-writer-wins sync. */
   putSettings(settings: Settings, ts?: number): Promise<void>;

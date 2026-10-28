@@ -1,4 +1,3 @@
-import type { Dump } from '../core/backup';
 import type { RemoteStore } from './remote';
 
 /**
@@ -20,7 +19,7 @@ export interface AuthSession {
 
 type Fetch = typeof fetch;
 type Clock = () => number;
-type AuthResult = { ok: true; session: AuthSession } | { ok: false; error: string };
+type AuthResult = { ok: true; session: AuthSession } | { ok: false; error: string; network?: boolean };
 
 const TABLE = 'ancrage_snapshots';
 const REFRESH_MARGIN_MS = 60_000;
@@ -75,9 +74,11 @@ async function auth(config: SyncConfig, path: string, payload: object, fetchFn: 
     if (status >= 200 && status < 300) {
       return { ok: false, error: 'Compte créé. Confirme ton adresse avec le lien reçu par e-mail, puis connecte-toi.' };
     }
+    // A server failure (5xx, paused free project) is not a wrong password: keep the session.
+    if (status >= 500) return { ok: false, error: NETWORK_ERROR, network: true };
     return { ok: false, error: authError(body) };
   } catch (e) {
-    return { ok: false, error: (e as Error).message };
+    return { ok: false, error: (e as Error).message, network: true };
   }
 }
 
@@ -94,30 +95,44 @@ export function createSupabaseRemote(
   fetchFn: Fetch = fetch,
   now: Clock = Date.now,
 ): RemoteStore {
+  async function refreshNow(session: AuthSession): Promise<string> {
+    const res = await auth(config, 'token?grant_type=refresh_token', { refresh_token: session.refreshToken }, fetchFn, now);
+    if (res.ok) {
+      saveSession({ ...res.session, email: res.session.email || session.email });
+      return res.session.accessToken;
+    }
+    // Offline or server down: keep the session and try again later.
+    if (res.network) throw new Error(NETWORK_ERROR);
+    saveSession(null);
+    throw new Error('Session expirée : reconnecte-toi.');
+  }
+
   async function token(): Promise<string> {
     const session = getSession();
     if (!session) throw new Error('Connecte-toi pour synchroniser.');
     if (session.expiresAt - now() > REFRESH_MARGIN_MS) return session.accessToken;
-    const res = await auth(config, 'token?grant_type=refresh_token', { refresh_token: session.refreshToken }, fetchFn, now);
-    if (!res.ok) {
-      saveSession(null);
-      throw new Error('Session expirée : reconnecte-toi.');
-    }
-    saveSession({ ...res.session, email: res.session.email || session.email });
-    return res.session.accessToken;
+    return refreshNow(session);
   }
 
   async function rest(query: string, init: RequestInit) {
-    const headers = {
-      apikey: config.anonKey,
-      Authorization: `Bearer ${await token()}`,
-      'Content-Type': 'application/json',
-      Prefer: 'return=representation',
-    };
-    const res = await call(fetchFn, `${base(config)}/rest/v1/${TABLE}${query}`, { ...init, headers });
+    const send = async (accessToken: string) =>
+      call(fetchFn, `${base(config)}/rest/v1/${TABLE}${query}`, {
+        ...init,
+        headers: { apikey: config.anonKey, Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json', Prefer: 'return=representation' },
+      });
+    let res = await send(await token());
     if (res.status === 401) {
-      saveSession(null);
-      throw new Error('Session expirée : reconnecte-toi.');
+      // The token may have expired earlier than this device's clock thinks: refresh once, then retry.
+      const session = getSession();
+      if (!session) throw new Error('Connecte-toi pour synchroniser.');
+      res = await send(await refreshNow(session));
+      if (res.status === 401) {
+        saveSession(null);
+        throw new Error('Session expirée : reconnecte-toi.');
+      }
+    }
+    if (res.status === 404 && /PGRST205|ancrage_snapshots/.test(JSON.stringify(res.body))) {
+      throw new Error('La table ancrage_snapshots est absente du projet : exécute le script SQL du guide de synchronisation.');
     }
     return res;
   }
@@ -126,16 +141,17 @@ export function createSupabaseRemote(
     async get() {
       const { status, body } = await rest('?select=data,version', { method: 'GET' });
       if (status !== 200 || !Array.isArray(body)) throw new Error('Lecture impossible sur le serveur de synchronisation.');
-      return body.length ? { dump: body[0].data as Dump, version: Number(body[0].version) } : null;
+      return body.length ? { data: body[0].data as unknown, version: Number(body[0].version) } : null;
     },
-    async put(dump, expected) {
+    // Writes ask only for the version back: the snapshot is not echoed (bandwidth).
+    async put(data, expected) {
       if (expected === null) {
-        const { status } = await rest('', { method: 'POST', body: JSON.stringify({ data: dump, version: 1 }) });
+        const { status } = await rest('?select=version', { method: 'POST', body: JSON.stringify({ data, version: 1 }) });
         if (status === 409) return { ok: false, conflict: true };
         if (status < 200 || status >= 300) throw new Error('Écriture impossible sur le serveur de synchronisation.');
         return { ok: true, version: 1 };
       }
-      const { status, body } = await rest(`?version=eq.${expected}`, { method: 'PATCH', body: JSON.stringify({ data: dump, version: expected + 1 }) });
+      const { status, body } = await rest(`?version=eq.${expected}&select=version`, { method: 'PATCH', body: JSON.stringify({ data, version: expected + 1 }) });
       if (status < 200 || status >= 300) throw new Error('Écriture impossible sur le serveur de synchronisation.');
       return Array.isArray(body) && body.length ? { ok: true, version: expected + 1 } : { ok: false, conflict: true };
     },

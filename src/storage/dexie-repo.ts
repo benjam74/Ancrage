@@ -3,6 +3,8 @@ import { cardVariants } from '../core/cards';
 import { newId } from '../core/ids';
 import { DEFAULT_SETTINGS, type AppEvent, type Card, type Note, type ReviewEntry, type Settings, type Theme, type Tombstone } from '../core/model';
 import { byTimeThenId } from '../core/scheduler';
+import { canonical } from '../core/canonical';
+import type { Dump } from '../core/backup';
 import type { Repo } from './repo';
 
 /** The `settings` table holds the settings row (`main`) and one-time flags (`flag:<name>`). */
@@ -41,6 +43,39 @@ export function createDexieRepo(name: string): Repo {
       newPerDay: row?.newPerDay ?? DEFAULT_SETTINGS.newPerDay,
     };
   }
+
+  // One read transaction: a write from another tab cannot land halfway through the export.
+  const dumpAll = (): Promise<Dump> =>
+    db.transaction('r', [db.themes, db.notes, db.cards, db.reviews, db.events, db.settings, db.tombstones], async () => {
+      const [themes, notes, cards, reviews, events, settingsRows, settings, tombstones] = await Promise.all([
+        db.themes.orderBy('id').toArray(),
+        db.notes.orderBy('id').toArray(),
+        db.cards.orderBy('id').toArray(),
+        db.reviews.orderBy('id').toArray(),
+        db.events.orderBy('id').toArray(),
+        db.settings.toArray(),
+        readSettings(),
+        db.tombstones.orderBy('id').toArray(),
+      ]);
+      const flags = settingsRows.filter((r) => r.key.startsWith('flag:') && r.value).map((r) => r.key.slice(5)).sort();
+      const settingsUpdatedAt = settingsRows.find((r) => r.key === 'main')?.updatedAt ?? 0;
+      return { themes, notes, cards, reviews, events, settings, flags, tombstones, settingsUpdatedAt };
+    });
+
+  const restoreAll = (dump: Dump): Promise<void> =>
+      db.transaction('rw', [db.themes, db.notes, db.cards, db.reviews, db.events, db.settings, db.tombstones], async () => {
+        await Promise.all([db.themes.clear(), db.notes.clear(), db.cards.clear(), db.reviews.clear(), db.events.clear(), db.settings.clear(), db.tombstones.clear()]);
+        await db.tombstones.bulkAdd(dump.tombstones);
+        await db.themes.bulkAdd(dump.themes);
+        await db.notes.bulkAdd(dump.notes);
+        await db.cards.bulkAdd(dump.cards);
+        await db.reviews.bulkAdd(dump.reviews);
+        await db.events.bulkAdd(dump.events);
+        await db.settings.bulkAdd([
+          { key: 'main', desiredRetention: dump.settings.desiredRetention, newPerDay: dump.settings.newPerDay, updatedAt: dump.settingsUpdatedAt },
+          ...dump.flags.map((f) => ({ key: `flag:${f}`, value: true })),
+        ]);
+      });
 
   return {
     async putTheme(theme) {
@@ -108,35 +143,15 @@ export function createDexieRepo(name: string): Repo {
       await db.settings.put({ key: `flag:${key}`, value: true });
     },
 
-    // One read transaction: a write from another tab cannot land halfway through the export.
-    dumpAll: () => db.transaction('r', [db.themes, db.notes, db.cards, db.reviews, db.events, db.settings, db.tombstones], async () => {
-      const [themes, notes, cards, reviews, events, settingsRows, settings, tombstones] = await Promise.all([
-        db.themes.orderBy('id').toArray(),
-        db.notes.orderBy('id').toArray(),
-        db.cards.orderBy('id').toArray(),
-        db.reviews.orderBy('id').toArray(),
-        db.events.orderBy('id').toArray(),
-        db.settings.toArray(),
-        readSettings(),
-        db.tombstones.orderBy('id').toArray(),
-      ]);
-      const flags = settingsRows.filter((r) => r.key.startsWith('flag:') && r.value).map((r) => r.key.slice(5)).sort();
-      const settingsUpdatedAt = settingsRows.find((r) => r.key === 'main')?.updatedAt ?? 0;
-      return { themes, notes, cards, reviews, events, settings, flags, tombstones, settingsUpdatedAt };
-    }),
-    restoreAll: (dump) =>
+    dumpAll,
+    restoreAll,
+    mergeIntoLocal: (merge) =>
       db.transaction('rw', [db.themes, db.notes, db.cards, db.reviews, db.events, db.settings, db.tombstones], async () => {
-        await Promise.all([db.themes.clear(), db.notes.clear(), db.cards.clear(), db.reviews.clear(), db.events.clear(), db.settings.clear(), db.tombstones.clear()]);
-        await db.tombstones.bulkAdd(dump.tombstones);
-        await db.themes.bulkAdd(dump.themes);
-        await db.notes.bulkAdd(dump.notes);
-        await db.cards.bulkAdd(dump.cards);
-        await db.reviews.bulkAdd(dump.reviews);
-        await db.events.bulkAdd(dump.events);
-        await db.settings.bulkAdd([
-          { key: 'main', desiredRetention: dump.settings.desiredRetention, newPerDay: dump.settings.newPerDay, updatedAt: dump.settingsUpdatedAt },
-          ...dump.flags.map((f) => ({ key: `flag:${f}`, value: true })),
-        ]);
+        const local = await dumpAll();
+        const next = merge(local);
+        const changed = canonical(next) !== canonical(local);
+        if (changed) await restoreAll(next);
+        return { changed, dump: next };
       }),
 
     getSettings: readSettings,

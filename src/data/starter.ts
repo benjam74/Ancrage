@@ -46,6 +46,7 @@ export function starterNotes(now: number): Note[] {
     tags: ['exemple'],
     source: 'Deck de démarrage Ancrage',
     createdAt: now + i,
-    updatedAt: now + i,
+    // Oldest possible version: a removal or an edit made on another device always wins a merge.
+    updatedAt: 0,
   }));
 }

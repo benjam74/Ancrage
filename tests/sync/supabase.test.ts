@@ -38,7 +38,7 @@ describe('Supabase auth', () => {
   test('network down gives a French message', async () => {
     const srv = fakeSupabase();
     srv.setOffline(true);
-    expect(await signIn(config, 'b@ex.fr', 'x', srv.fetchFn, srv.now)).toEqual({ ok: false, error: 'Impossible de joindre le serveur. Vérifie ta connexion et l’adresse du projet.' });
+    expect(await signIn(config, 'b@ex.fr', 'x', srv.fetchFn, srv.now)).toMatchObject({ ok: false, error: 'Impossible de joindre le serveur. Vérifie ta connexion et l’adresse du projet.' });
   });
 });
 
@@ -80,6 +80,59 @@ describe('Supabase remote', () => {
     await remote.get();
     expect(session().accessToken).not.toBe(first);
     expect(srv.calls.some((c) => c.path.includes('grant_type=refresh_token'))).toBe(true);
+  });
+});
+
+describe('offline and expired tokens', () => {
+  test('an expired token while offline keeps the session and says the network is down', async () => {
+    const srv = fakeSupabase();
+    await signUp(config, 'b@ex.fr', 'secret12', srv.fetchFn, srv.now);
+    const res = await signIn(config, 'b@ex.fr', 'secret12', srv.fetchFn, srv.now);
+    if (!res.ok) throw new Error(res.error);
+    let session: AuthSession | null = res.session;
+    const remote = createSupabaseRemote(config, () => session, (s) => (session = s), srv.fetchFn, srv.now);
+    srv.advance(7200);
+    srv.setOffline(true);
+    await expect(remote.get()).rejects.toThrow(/joindre le serveur/);
+    expect(session).not.toBeNull();
+    srv.setOffline(false);
+    expect(await remote.get()).toBeNull();
+  });
+
+  test('a 401 from the table triggers one refresh, then the request succeeds', async () => {
+    const srv = fakeSupabase();
+    await signUp(config, 'b@ex.fr', 'secret12', srv.fetchFn, srv.now);
+    const res = await signIn(config, 'b@ex.fr', 'secret12', srv.fetchFn, srv.now);
+    if (!res.ok) throw new Error(res.error);
+    // The device clock believes the token is fresh, the server says it expired.
+    let session: AuthSession | null = { ...res.session, expiresAt: Number.MAX_SAFE_INTEGER };
+    const remote = createSupabaseRemote(config, () => session, (s) => (session = s), srv.fetchFn, srv.now);
+    srv.advance(7200);
+    expect(await remote.get()).toBeNull();
+    expect(session).not.toBeNull();
+  });
+
+  test('a missing table gives a setup hint', async () => {
+    const srv = fakeSupabase({ noTable: true });
+    await signUp(config, 'b@ex.fr', 'secret12', srv.fetchFn, srv.now);
+    const res = await signIn(config, 'b@ex.fr', 'secret12', srv.fetchFn, srv.now);
+    if (!res.ok) throw new Error(res.error);
+    const session: AuthSession | null = res.session;
+    const remote = createSupabaseRemote(config, () => session, () => {}, srv.fetchFn, srv.now);
+    await expect(remote.get()).rejects.toThrow(/table ancrage_snapshots/);
+  });
+
+  test('writes ask only for the version back, not the whole snapshot', async () => {
+    const srv = fakeSupabase();
+    await signUp(config, 'b@ex.fr', 'secret12', srv.fetchFn, srv.now);
+    const res = await signIn(config, 'b@ex.fr', 'secret12', srv.fetchFn, srv.now);
+    if (!res.ok) throw new Error(res.error);
+    const session: AuthSession | null = res.session;
+    const remote = createSupabaseRemote(config, () => session, () => {}, srv.fetchFn, srv.now);
+    await remote.put(empty, null);
+    await remote.put(empty, 1);
+    const writes = srv.calls.filter((c) => c.method !== 'GET' && c.path.startsWith('/rest/'));
+    expect(writes.every((c) => c.path.includes('select=version'))).toBe(true);
   });
 });
 

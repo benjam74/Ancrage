@@ -134,7 +134,7 @@
       <div class="confirm" style="color:inherit">
         <span>
           « {pending.name} » : {sum.themes} thème{sum.themes > 1 ? 's' : ''}, {sum.notes} note{sum.notes > 1 ? 's' : ''}, {sum.reviews} révision{sum.reviews > 1 ? 's' : ''}{pending.exportedAt ? `, exportée le ${new Date(pending.exportedAt).toLocaleDateString('fr-FR')}` : ''}.
-          « Fusionner » ajoute ce qui manque et garde la version la plus récente de chaque note. « Remplacer » efface d’abord les données de cet appareil.
+          « Fusionner » ajoute ce qui manque et garde la version la plus récente de chaque note. « Remplacer » efface d’abord les données de cet appareil ; si la synchronisation est active, la prochaine synchronisation y rajoutera la copie du serveur.
         </span>
         <button class="btn small" onclick={() => apply('merge')}>Fusionner avec mes données</button>
         <button class="btn small danger" onclick={() => apply('replace')}>Remplacer mes données</button>

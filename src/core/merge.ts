@@ -1,15 +1,16 @@
 import type { Dump } from './backup';
+import { canonical } from './canonical';
 import { cardVariants } from './cards';
 import type { Card, Note, ReviewEntry, Theme, Tombstone } from './model';
 
 const byId = <T extends { id: string }>(a: T, b: T) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
 
-/** Deterministic winner between two versions of one record: later `updatedAt`, then larger JSON. */
+/** Deterministic winner between two versions of one record: later `updatedAt`, then larger canonical JSON. */
 function newer<T extends { updatedAt?: number }>(x: T, y: T): T {
   const tx = x.updatedAt ?? 0;
   const ty = y.updatedAt ?? 0;
   if (tx !== ty) return tx > ty ? x : y;
-  return JSON.stringify(x) >= JSON.stringify(y) ? x : y;
+  return canonical(x) >= canonical(y) ? x : y;
 }
 
 function unite<T extends { id: string }>(a: T[], b: T[], pick: (x: T, y: T) => T): T[] {
@@ -21,7 +22,7 @@ function unite<T extends { id: string }>(a: T[], b: T[], pick: (x: T, y: T) => T
   return [...out.values()].sort(byId);
 }
 
-const same = <T>(x: T, y: T) => (JSON.stringify(x) >= JSON.stringify(y) ? x : y);
+const same = <T>(x: T, y: T) => (canonical(x) >= canonical(y) ? x : y);
 
 /**
  * Cards follow their note: one card per (note, variant), the smallest id kept and the others'
@@ -76,7 +77,7 @@ export function mergeDumps(a: Dump, b: Dump): Dump {
   const settingsFromA =
     a.settingsUpdatedAt !== b.settingsUpdatedAt
       ? a.settingsUpdatedAt > b.settingsUpdatedAt
-      : JSON.stringify(a.settings) >= JSON.stringify(b.settings);
+      : canonical(a.settings) >= canonical(b.settings);
 
   return {
     themes,

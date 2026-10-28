@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import { mergeDumps, reconcileCards } from '../../src/core/merge';
+import { canonical } from '../../src/core/canonical';
 import type { Dump } from '../../src/core/backup';
 import { DEFAULT_SETTINGS, type Note, type ReviewEntry } from '../../src/core/model';
 
@@ -138,6 +139,20 @@ describe('conflicts', () => {
     const m = mergeDumps(a, b);
     expect(m.themes.map((t) => t.id)).toEqual(['t1']);
     expect(m.notes.map((n) => n.id)).toEqual(['n9']);
+  });
+});
+
+describe('tie-breaks', () => {
+  test('equal timestamps pick the same winner whatever the key order (jsonb reorders keys)', () => {
+    const a = base();
+    const b = base();
+    a.notes[1] = { updatedAt: T + 5, id: 'n2', themeId: 't1', fields: { text: '{{x}} A', type: 'cloze' }, tags: [], createdAt: T } as Note;
+    b.notes[1] = note('n2', '{{x}} B', T + 5);
+    const reordered = JSON.parse(canonical(b.notes[1])) as Note;
+    const b2 = { ...b, notes: [b.notes[0], reordered] };
+    const w1 = mergeDumps(a, b).notes[1].fields;
+    const w2 = mergeDumps(a, b2).notes[1].fields;
+    expect(w1).toEqual(w2);
   });
 });
 

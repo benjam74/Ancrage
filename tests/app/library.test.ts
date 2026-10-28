@@ -56,6 +56,16 @@ describe('saveNote', () => {
   });
 });
 
+describe('clock skew', () => {
+  test('an edit made on a device whose clock is behind still wins over the stored version', async () => {
+    const t = await aTheme();
+    const first = await services.saveNote({ themeId: t.id, fields: { type: 'basic', front: 'Q', back: 'R', reverse: false }, tags: [] }, NOW + 60_000);
+    if (!first.ok) throw new Error('setup');
+    const edit = await services.saveNote({ id: first.note.id, themeId: t.id, fields: { type: 'basic', front: 'Q2', back: 'R', reverse: false }, tags: [] }, NOW);
+    expect(edit.ok && edit.note.updatedAt).toBeGreaterThan(NOW + 60_000);
+  });
+});
+
 describe('themes', () => {
   test('createTheme trims the name and appends it after existing themes', async () => {
     await repo.putTheme({ id: 'x', name: 'X', order: 4 });

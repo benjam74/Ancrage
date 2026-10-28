@@ -52,9 +52,11 @@
     go('creer');
   }
 
+  let lastSync = 0;
   /** Background sync: refreshes the screen when it brought something, stays silent otherwise. */
   async function syncInBackground() {
     if (!cloud || inSession) return;
+    lastSync = Date.now();
     const res = await cloud.sync();
     if (res.state === 'ok' && !inSession) await refresh();
   }
@@ -69,6 +71,7 @@
     .catch((e) => (error = String(e)));
 </script>
 
+<svelte:document onvisibilitychange={() => { if (document.visibilityState === 'visible' && Date.now() - lastSync > 60_000) void syncInBackground(); }} />
 <svelte:window onhashchange={() => { view = fromHash(); if (view !== 'creer') editing = null; window.scrollTo(0, 0); }} />
 
 {#if error}

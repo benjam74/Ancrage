@@ -7,7 +7,7 @@ Sans compte, tu peux aussi passer d'un appareil à l'autre par fichier : Réglag
 ## 1. Créer le projet (5 min)
 
 1. Crée un compte sur https://supabase.com, puis **New project**. Choisis une région européenne si tes cartes contiennent des informations personnelles.
-2. Dans **Project Settings → API**, note l'**URL du projet** (`https://xxxx.supabase.co`) et la clé **anon public**. Cette clé est publique par conception : la sécurité vient des règles de la table ci-dessous.
+2. Dans **Project Settings → API** (ou **API Keys** sur les tableaux de bord récents), note l'**URL du projet** (`https://xxxx.supabase.co`) et la clé **anon public**, appelée **Publishable key** sur les nouveaux tableaux de bord. Elle s'utilise telle quelle. Cette clé est publique par conception : la sécurité vient des règles de la table ci-dessous.
 
 ## 2. Créer la table (2 min)
 
@@ -23,17 +23,21 @@ create table public.ancrage_snapshots (
 
 alter table public.ancrage_snapshots enable row level security;
 
+grant select, insert, update on public.ancrage_snapshots to authenticated;
+
 create policy "Chacun lit sa copie" on public.ancrage_snapshots
-  for select using (user_id = auth.uid());
+  for select to authenticated using (user_id = auth.uid());
 create policy "Chacun crée sa copie" on public.ancrage_snapshots
-  for insert with check (user_id = auth.uid());
+  for insert to authenticated with check (user_id = auth.uid());
 create policy "Chacun met à jour sa copie" on public.ancrage_snapshots
-  for update using (user_id = auth.uid()) with check (user_id = auth.uid());
+  for update to authenticated using (user_id = auth.uid()) with check (user_id = auth.uid());
 ```
 
 Chaque utilisateur ne voit et ne modifie que sa propre ligne.
 
 ## 3. Choisir la confirmation d'e-mail
+
+Dans **Authentication → URL Configuration**, mets l'adresse de ton application dans **Site URL** (par exemple `https://benjam74.github.io/Ancrage/`). Sinon le lien de confirmation renvoie vers `localhost`.
 
 Dans **Authentication → Sign In / Providers → Email** :
 
@@ -58,5 +62,6 @@ La synchronisation se fait à l'ouverture de l'application, après chaque manche
 
 ## Limites connues
 
+- Un projet gratuit se met en veille après une semaine sans activité. La synchronisation échoue alors avec « Impossible de joindre le serveur » ; rouvre le projet depuis le tableau de bord Supabase. Tes données locales ne sont pas touchées.
 - Les deux appareils doivent avoir une heure système juste : « la plus récente » se décide sur l'horloge de chaque appareil.
 - La copie complète est envoyée à chaque synchronisation. C'est rapide jusqu'à plusieurs dizaines de milliers de révisions.

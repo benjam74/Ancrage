@@ -1,5 +1,5 @@
 /** A small stand-in for Supabase Auth (GoTrue) and the ancrage_snapshots table (PostgREST), behind `fetch`. */
-export function fakeSupabase(opts: { confirmEmail?: boolean } = {}) {
+export function fakeSupabase(opts: { confirmEmail?: boolean; noTable?: boolean } = {}) {
   const users = new Map<string, { password: string; id: string; confirmed: boolean }>();
   const tokens = new Map<string, { userId: string; expiresAt: number }>();
   const refresh = new Map<string, string>();
@@ -46,6 +46,9 @@ export function fakeSupabase(opts: { confirmEmail?: boolean } = {}) {
         refresh.delete(body.refresh_token);
         return json(200, issue(userId, emailOf(userId)));
       }
+    }
+    if (url.pathname === '/rest/v1/ancrage_snapshots' && opts.noTable) {
+      return json(404, { code: 'PGRST205', message: "Could not find the table 'public.ancrage_snapshots' in the schema cache" });
     }
     if (url.pathname === '/rest/v1/ancrage_snapshots') {
       const auth = tokens.get((headers.authorization ?? '').replace('Bearer ', ''));

@@ -5,8 +5,7 @@ import type { Card, Note, NoteFields, ReviewEntry, Theme } from '../core/model';
 import { validateFields } from '../core/validate';
 import { validateSettings } from '../core/settings';
 import { backupFileName, serializeBackup, type Dump } from '../core/backup';
-import { mergeDumps } from '../core/merge';
-import { applyMerged } from '../sync/sync';
+import { mergeIntoLocal } from '../sync/sync';
 import { classifyEntries, goalDays, makeRestDayCheck, nextStudyDay, streakState, weekStart, xpBetween } from '../core/progress';
 import { dailyCounts, forecast, mastery, retention, stateBreakdown, type Level } from '../core/stats';
 import type { CardState } from '../core/scheduler';
@@ -210,14 +209,18 @@ export function createServices(repo: Repo, deviceId: string): Services {
         tags: [...new Set(input.tags.map((t) => t.trim()).filter(Boolean))],
         ...(input.source?.trim() ? { source: input.source.trim() } : {}),
         createdAt: existing?.createdAt ?? now,
-        updatedAt: now,
+        // A device whose clock is behind must still produce the newest version.
+        updatedAt: Math.max(now, (existing?.updatedAt ?? 0) + 1),
       };
       const cards = await repo.putNote(note);
       const queue = new Set((await services.today(now)).queue);
       return { ok: true, note, cards: cards.length, today: cards.filter((c) => queue.has(c.id)).length };
     },
 
-    deleteNote: (id) => repo.deleteNote(id),
+    async deleteNote(id) {
+      const note = await repo.getNote(id);
+      await repo.deleteNote(id, Math.max(Date.now(), (note?.updatedAt ?? 0) + 1));
+    },
 
     async createTheme(name) {
       const clean = name.trim();
@@ -238,7 +241,8 @@ export function createServices(repo: Repo, deviceId: string): Services {
     async deleteTheme(id) {
       const count = (await repo.listNotes(id)).length;
       if (count > 0) return { ok: false, reason: `Ce thème contient ${count} note${count > 1 ? 's' : ''}. Déplace-les ou supprime-les d’abord.` };
-      await repo.deleteTheme(id);
+      const theme = (await repo.listThemes()).find((t) => t.id === id);
+      await repo.deleteTheme(id, Math.max(Date.now(), (theme?.updatedAt ?? 0) + 1));
       return { ok: true };
     },
 
@@ -325,7 +329,7 @@ export function createServices(repo: Repo, deviceId: string): Services {
     importBackup: (dump) => repo.restoreAll(dump),
 
     async mergeBackup(dump) {
-      await applyMerged(repo, mergeDumps(await repo.dumpAll(), dump));
+      await mergeIntoLocal(repo, dump);
     },
 
     async completeRound(startedAt, now) {

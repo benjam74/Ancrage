@@ -36,7 +36,11 @@
       const conf = cloud.configure({ url, anonKey });
       if (!conf.ok) return void (error = conf.error);
       const res = mode === 'in' ? await cloud.signIn(email, password) : await cloud.signUp(email, password);
-      if (!res.ok) return void (error = res.error ?? 'Connexion impossible.');
+      if (!res.ok) {
+        // Creating an account that needs e-mail confirmation is a success, not an error.
+        if (res.error?.startsWith('Compte créé')) return void (message = res.error);
+        return void (error = res.error ?? 'Connexion impossible.');
+      }
       password = '';
       signedIn = true;
       await syncNow();
@@ -44,6 +48,7 @@
 
   async function syncNow() {
     status = await cloud.sync();
+    signedIn = !!cloud.email();
     if (status.state === 'ok') {
       message = 'Synchronisé.';
       onsynced();
@@ -60,10 +65,10 @@
 
 <section class="panel" aria-labelledby="sync-title">
   <h2 id="sync-title">Synchronisation</h2>
-  <p>Utilise Ancrage sur ton ordinateur et ton téléphone avec un projet Supabase gratuit, à toi. La mise en place prend dix minutes : voir le guide « Synchronisation » du README.</p>
+  <p>Utilise Ancrage sur ton ordinateur et ton téléphone avec un projet Supabase gratuit, à toi. La mise en place prend dix minutes : <a href="https://github.com/benjam74/Ancrage/blob/main/docs/sync-supabase.md" target="_blank" rel="noopener">guide de synchronisation</a>.</p>
 
   {#if signedIn}
-    <p><b>Connecté : {cloud.email()}</b></p>
+    <p><b>Connecté : {email}</b></p>
     <p class="muted">
       {status.state === 'ok' ? `Dernière synchronisation ${ago(status.at)}.` : status.state === 'error' ? `Échec ${ago(status.at)} : ${status.message}` : 'Pas encore synchronisé.'}
       La synchronisation se fait à l’ouverture et après chaque manche.

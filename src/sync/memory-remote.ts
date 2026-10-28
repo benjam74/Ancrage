@@ -1,4 +1,3 @@
-import type { Dump } from '../core/backup';
 import type { RemoteStore } from './remote';
 
 /** In-memory remote with the same contract as the server one, for tests and demos. */
@@ -8,12 +7,12 @@ export function createMemoryRemote(opts: { latencyMs?: number } = {}): RemoteSto
   return {
     async get() {
       await wait();
-      return stored ? { dump: JSON.parse(stored.json) as Dump, version: stored.version } : null;
+      return stored ? { data: JSON.parse(stored.json) as unknown, version: stored.version } : null;
     },
-    async put(dump, expected) {
+    async put(data, expected) {
       await wait();
       if ((stored?.version ?? null) !== expected) return { ok: false, conflict: true };
-      stored = { json: JSON.stringify(dump), version: (stored?.version ?? 0) + 1 };
+      stored = { json: JSON.stringify(data), version: (stored?.version ?? 0) + 1 };
       return { ok: true, version: stored.version };
     },
   };

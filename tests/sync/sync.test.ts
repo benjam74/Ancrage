@@ -5,6 +5,7 @@ import { createDexieRepo } from '../../src/storage/dexie-repo';
 import { newId } from '../../src/core/ids';
 import { createMemoryRemote } from '../../src/sync/memory-remote';
 import { syncOnce } from '../../src/sync/sync';
+import { parseBackup } from '../../src/core/backup';
 
 const NOW = new Date(2026, 9, 28, 10, 0).getTime();
 const ok = { kind: 'auto', correct: true, durationMs: 2000, hintUsed: false } as const;
@@ -63,8 +64,8 @@ describe('syncOnce', () => {
     await Promise.all([syncOnce(a.repo, remote), syncOnce(b.repo, remote)]);
     await syncOnce(a.repo, remote);
     await syncOnce(b.repo, remote);
-    const remoteNow = await remote.get();
-    expect(remoteNow?.dump.reviews).toHaveLength(4);
+    const remoteNow = parseBackup(JSON.stringify((await remote.get())?.data));
+    expect(remoteNow.ok && remoteNow.dump.reviews).toHaveLength(4);
     expect((await a.repo.dumpAll()).reviews).toHaveLength(4);
     expect((await b.repo.dumpAll()).reviews).toHaveLength(4);
   });
@@ -75,6 +76,41 @@ describe('syncOnce', () => {
     const before = await a.repo.dumpAll();
     const stubborn = { get: async () => null, put: async () => ({ ok: false as const, conflict: true as const }) };
     await expect(syncOnce(a.repo, stubborn)).rejects.toThrow(/conflit/);
+    expect(await a.repo.dumpAll()).toEqual(before);
+  });
+});
+
+describe('real multi-device use', () => {
+  test('removed examples stay removed when a freshly seeded device joins', async () => {
+    const remote = createMemoryRemote();
+    const a = device('a');
+    await seedIfEmpty(a.repo, NOW);
+    await a.removeExamples();
+    await syncOnce(a.repo, remote);
+    const b = device('b');
+    await seedIfEmpty(b.repo, NOW + 86_400_000);
+    await syncOnce(b.repo, remote);
+    await syncOnce(a.repo, remote);
+    expect(await a.examplesCount()).toBe(0);
+    expect(await b.examplesCount()).toBe(0);
+    expect((await a.repo.listThemes()).length).toBe(0);
+  });
+
+  test('a remote snapshot from a newer version is refused with a French message', async () => {
+    const a = device('a');
+    await seedIfEmpty(a.repo, NOW);
+    const before = await a.repo.dumpAll();
+    const future = { get: async () => ({ data: { format: 'ancrage-backup', version: 99 }, version: 1 }), put: async () => ({ ok: true as const, version: 2 }) };
+    await expect(syncOnce(a.repo, future)).rejects.toThrow(/plus récente/);
+    expect(await a.repo.dumpAll()).toEqual(before);
+  });
+
+  test('a damaged remote snapshot is refused and local data is untouched', async () => {
+    const a = device('a');
+    await seedIfEmpty(a.repo, NOW);
+    const before = await a.repo.dumpAll();
+    const broken = { get: async () => ({ data: { format: 'ancrage-backup', version: 2, notes: 'oops' }, version: 1 }), put: async () => ({ ok: true as const, version: 2 }) };
+    await expect(syncOnce(a.repo, broken)).rejects.toThrow(/abîmée|incomplète/);
     expect(await a.repo.dumpAll()).toEqual(before);
   });
 });
