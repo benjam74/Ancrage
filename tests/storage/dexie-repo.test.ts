@@ -1,5 +1,6 @@
 import 'fake-indexeddb/auto';
 import { beforeEach, describe, expect, test } from 'vitest';
+import Dexie from 'dexie';
 import { createDexieRepo } from '../../src/storage/dexie-repo';
 import type { Repo } from '../../src/storage/repo';
 import { newId } from '../../src/core/ids';
@@ -135,6 +136,27 @@ describe('deletions and flags', () => {
     await repo.setFlag('starterSeeded');
     expect(await repo.getFlag('starterSeeded')).toBe(true);
     expect(await repo.getSettings()).toEqual(DEFAULT_SETTINGS);
+  });
+});
+
+describe('events and migration', () => {
+  test('events are appended and listed by time', async () => {
+    await repo.appendEvent({ id: 'b', type: 'round_completed', ts: T0 + 2 });
+    await repo.appendEvent({ id: 'a', type: 'round_completed', ts: T0 + 1 });
+    expect((await repo.listEvents()).map((e) => e.id)).toEqual(['a', 'b']);
+  });
+
+  test('a version 1 database opens with its data intact and no events', async () => {
+    const name = `v1-${newId()}`;
+    const old = new Dexie(name);
+    old.version(1).stores({ themes: 'id', notes: 'id, themeId', cards: 'id, noteId', reviews: 'id, cardId, ts', settings: 'key' });
+    await old.table('notes').put(cloze('{{a}}', 'kept'));
+    await old.table('reviews').put(review('c1', T0, 'R1'));
+    old.close();
+    const upgraded = createDexieRepo(name);
+    expect(await upgraded.getNote('kept')).toBeDefined();
+    expect((await upgraded.listReviews()).map((e) => e.id)).toEqual(['R1']);
+    expect(await upgraded.listEvents()).toEqual([]);
   });
 });
 

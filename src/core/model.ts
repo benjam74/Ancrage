@@ -56,3 +56,10 @@ export interface Settings {
 }
 
 export const DEFAULT_SETTINGS: Settings = { desiredRetention: 0.9, newPerDay: 5 };
+
+/** Facts that are not answers. Only round completions are stored: everything else is derived from the log. */
+export interface AppEvent {
+  id: string;
+  type: 'round_completed';
+  ts: number;
+}

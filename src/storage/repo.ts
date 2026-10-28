@@ -1,4 +1,4 @@
-import type { Card, Note, Rating, ReviewEntry, Settings, Theme } from '../core/model';
+import type { AppEvent, Card, Note, Rating, ReviewEntry, Settings, Theme } from '../core/model';
 
 export interface Repo {
   putTheme(theme: Theme): Promise<void>;
@@ -19,6 +19,9 @@ export interface Repo {
   /** Removes the note, its cards and their review log. */
   deleteNote(id: string): Promise<void>;
   deleteTheme(id: string): Promise<void>;
+  appendEvent(event: AppEvent): Promise<void>;
+  /** Sorted by time. */
+  listEvents(): Promise<AppEvent[]>;
   getFlag(key: string): Promise<boolean>;
   setFlag(key: string): Promise<void>;
   getSettings(): Promise<Settings>;
