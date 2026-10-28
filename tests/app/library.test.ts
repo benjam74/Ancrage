@@ -66,7 +66,9 @@ describe('themes', () => {
   test('renameTheme changes only the name', async () => {
     const t = await aTheme();
     await services.renameTheme(t.id, ' Recadrage de sens ');
-    expect((await repo.listThemes()).find((x) => x.id === t.id)).toEqual({ ...t, name: 'Recadrage de sens' });
+    const renamed = (await repo.listThemes()).find((x) => x.id === t.id)!;
+    expect(renamed).toMatchObject({ id: t.id, order: t.order, name: 'Recadrage de sens' });
+    expect(renamed.updatedAt).toBeGreaterThanOrEqual(t.updatedAt ?? 0);
   });
 
   test('a theme with notes cannot be deleted; an empty one can', async () => {

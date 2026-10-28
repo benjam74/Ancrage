@@ -219,7 +219,7 @@ export function createServices(repo: Repo, deviceId: string): Services {
       const clean = name.trim();
       if (!clean) throw new Error('Le nom du thème est obligatoire.');
       const themes = await repo.listThemes();
-      const theme: Theme = { id: newId(), name: clean, order: Math.max(-1, ...themes.map((t) => t.order)) + 1 };
+      const theme: Theme = { id: newId(), name: clean, order: Math.max(-1, ...themes.map((t) => t.order)) + 1, updatedAt: Date.now() };
       await repo.putTheme(theme);
       return theme;
     },
@@ -228,7 +228,7 @@ export function createServices(repo: Repo, deviceId: string): Services {
       const clean = name.trim();
       const theme = (await repo.listThemes()).find((t) => t.id === id);
       if (!theme || !clean) return;
-      await repo.putTheme({ ...theme, name: clean });
+      await repo.putTheme({ ...theme, name: clean, updatedAt: Math.max(Date.now(), (theme.updatedAt ?? 0) + 1) });
     },
 
     async deleteTheme(id) {

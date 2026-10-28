@@ -1,8 +1,8 @@
-import type { AppEvent, Card, Note, ReviewEntry, Settings, Theme } from './model';
+import type { AppEvent, Card, Note, ReviewEntry, Settings, Theme, Tombstone } from './model';
 import { validateSettings } from './settings';
 
 export const BACKUP_FORMAT = 'ancrage-backup';
-export const BACKUP_VERSION = 1;
+export const BACKUP_VERSION = 2;
 
 /** A full snapshot of the local database. */
 export interface Dump {
@@ -13,6 +13,9 @@ export interface Dump {
   events: AppEvent[];
   settings: Settings;
   flags: string[];
+  tombstones: Tombstone[];
+  /** When the settings were last changed (0: never), for last-writer-wins sync. */
+  settingsUpdatedAt: number;
 }
 
 export function serializeBackup(dump: Dump, now: number): string {
@@ -48,7 +51,9 @@ const fieldsOk = (f: unknown) =>
   Object.entries(FIELD_SHAPES[f.type as string]).every(([key, ok]) => ok(f[key]));
 
 const CHECKS: Record<'themes' | 'notes' | 'cards' | 'reviews' | 'events', (r: Record<string, unknown>) => boolean> = {
-  themes: (r) => isStr(r.id) && isStr(r.name) && isNum(r.order) && (r.parentId === undefined || isStr(r.parentId)),
+  themes: (r) =>
+    isStr(r.id) && isStr(r.name) && isNum(r.order) && (r.parentId === undefined || isStr(r.parentId)) &&
+    (r.updatedAt === undefined || isNum(r.updatedAt)),
   notes: (r) =>
     isStr(r.id) && isStr(r.themeId) && fieldsOk(r.fields) && isStrList(r.tags) &&
     (r.source === undefined || isStr(r.source)) && isNum(r.createdAt) && isNum(r.updatedAt),
@@ -88,6 +93,13 @@ export function parseBackup(text: string): { ok: true; dump: Dump; exportedAt: n
   const settings = validateSettings({ desiredRetention: raw.desiredRetention as number, newPerDay: raw.newPerDay as number });
   if (!settings.ok) return { ok: false, error: 'Sauvegarde abîmée : les réglages sont invalides.' };
   if (!isStrList(data.flags)) return { ok: false, error: 'Sauvegarde abîmée : les marqueurs sont invalides.' };
+  // Version 1 had no sync data.
+  const tombstones = data.tombstones ?? [];
+  if (!Array.isArray(tombstones) || !tombstones.every((t) => isObj(t) && isStr(t.id) && (t.kind === 'note' || t.kind === 'theme') && isNum(t.ts))) {
+    return { ok: false, error: 'Sauvegarde abîmée : les suppressions enregistrées sont invalides.' };
+  }
+  const settingsUpdatedAt = data.settingsUpdatedAt ?? 0;
+  if (!isNum(settingsUpdatedAt)) return { ok: false, error: 'Sauvegarde abîmée : les réglages sont invalides.' };
   const dump: Dump = {
     themes: data.themes as Theme[],
     notes: data.notes as Note[],
@@ -96,6 +108,8 @@ export function parseBackup(text: string): { ok: true; dump: Dump; exportedAt: n
     events: data.events as AppEvent[],
     settings: settings.settings,
     flags: data.flags as string[],
+    tombstones: tombstones as Tombstone[],
+    settingsUpdatedAt: settingsUpdatedAt as number,
   };
   return { ok: true, dump, exportedAt: isNum(data.exportedAt) ? (data.exportedAt as number) : 0 };
 }

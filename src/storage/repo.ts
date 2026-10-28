@@ -18,8 +18,9 @@ export interface Repo {
   /** The one permitted change to the log: correcting the grade of an answer. */
   amendReview(id: string, patch: { rating: Rating; correct: boolean }): Promise<void>;
   /** Removes the note, its cards and their review log. */
-  deleteNote(id: string): Promise<void>;
-  deleteTheme(id: string): Promise<void>;
+  /** Also records a tombstone dated `ts`, so sync does not bring the note back. */
+  deleteNote(id: string, ts?: number): Promise<void>;
+  deleteTheme(id: string, ts?: number): Promise<void>;
   appendEvent(event: AppEvent): Promise<void>;
   /** Sorted by time. */
   listEvents(): Promise<AppEvent[]>;
@@ -30,5 +31,6 @@ export interface Repo {
   /** Replaces the whole database with `dump`, all or nothing. */
   restoreAll(dump: Dump): Promise<void>;
   getSettings(): Promise<Settings>;
-  putSettings(settings: Settings): Promise<void>;
+  /** `ts` dates the change for last-writer-wins sync. */
+  putSettings(settings: Settings, ts?: number): Promise<void>;
 }

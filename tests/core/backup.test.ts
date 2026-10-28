@@ -11,6 +11,8 @@ const dump: Dump = {
   events: [{ id: 'e', type: 'round_completed', ts: NOW }],
   settings: { ...DEFAULT_SETTINGS },
   flags: ['starterSeeded'],
+  tombstones: [{ id: 'old', kind: 'note', ts: NOW - 1 }],
+  settingsUpdatedAt: NOW - 2,
 };
 
 const mutate = (f: (o: Record<string, unknown>) => void) => {
@@ -38,8 +40,18 @@ describe('backup format', () => {
     if (!res.ok) expect(res.error).toMatch(/sauvegarde Ancrage/);
   });
 
+  test('reads a version 1 backup with empty sync data', () => {
+    const res = parseBackup(mutate((o) => { o.version = 1; delete o.tombstones; delete o.settingsUpdatedAt; }));
+    expect(res.ok && res.dump.tombstones).toEqual([]);
+    expect(res.ok && res.dump.settingsUpdatedAt).toBe(0);
+  });
+
+  test('rejects a damaged tombstone', () => {
+    expect(parseBackup(mutate((o) => ((o.tombstones as unknown[])[0] = { id: 1 }))).ok).toBe(false);
+  });
+
   test('rejects a backup from a newer version', () => {
-    const res = parseBackup(mutate((o) => (o.version = 2)));
+    const res = parseBackup(mutate((o) => (o.version = 3)));
     expect(res.ok).toBe(false);
     if (!res.ok) expect(res.error).toMatch(/plus récente/);
   });

@@ -13,6 +13,15 @@ export interface Theme {
   parentId?: string;
   name: string;
   order: number;
+  /** Last rename or creation, for last-writer-wins sync. */
+  updatedAt?: number;
+}
+
+/** Remembers a deletion so a merge with another device does not bring the item back. */
+export interface Tombstone {
+  id: string;
+  kind: 'note' | 'theme';
+  ts: number;
 }
 
 export interface Note {

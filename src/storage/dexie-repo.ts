@@ -1,12 +1,12 @@
 import Dexie, { type EntityTable } from 'dexie';
 import { cardVariants } from '../core/cards';
 import { newId } from '../core/ids';
-import { DEFAULT_SETTINGS, type AppEvent, type Card, type Note, type ReviewEntry, type Settings, type Theme } from '../core/model';
+import { DEFAULT_SETTINGS, type AppEvent, type Card, type Note, type ReviewEntry, type Settings, type Theme, type Tombstone } from '../core/model';
 import { byTimeThenId } from '../core/scheduler';
 import type { Repo } from './repo';
 
 /** The `settings` table holds the settings row (`main`) and one-time flags (`flag:<name>`). */
-type SettingsRow = { key: string } & Partial<Settings> & { value?: boolean };
+type SettingsRow = { key: string } & Partial<Settings> & { value?: boolean; updatedAt?: number };
 
 class AncrageDb extends Dexie {
   themes!: EntityTable<Theme, 'id'>;
@@ -15,6 +15,7 @@ class AncrageDb extends Dexie {
   reviews!: EntityTable<ReviewEntry, 'id'>;
   settings!: EntityTable<SettingsRow, 'key'>;
   events!: EntityTable<AppEvent, 'id'>;
+  tombstones!: EntityTable<Tombstone, 'id'>;
 
   constructor(name: string) {
     super(name);
@@ -26,6 +27,7 @@ class AncrageDb extends Dexie {
       settings: 'key',
     });
     this.version(2).stores({ events: 'id, ts' });
+    this.version(3).stores({ tombstones: 'id' });
   }
 }
 
@@ -82,16 +84,19 @@ export function createDexieRepo(name: string): Repo {
       if (!updated) throw new Error(`review ${id} not found`);
     },
 
-    deleteNote: (id) =>
-      db.transaction('rw', db.notes, db.cards, db.reviews, async () => {
+    deleteNote: (id, ts = Date.now()) =>
+      db.transaction('rw', [db.notes, db.cards, db.reviews, db.tombstones], async () => {
+        await db.tombstones.put({ id, kind: 'note', ts });
         const cardIds = (await db.cards.where('noteId').equals(id).toArray()).map((c) => c.id);
         await db.reviews.where('cardId').anyOf(cardIds).delete();
         await db.cards.bulkDelete(cardIds);
         await db.notes.delete(id);
       }),
-    async deleteTheme(id) {
-      await db.themes.delete(id);
-    },
+    deleteTheme: (id, ts = Date.now()) =>
+      db.transaction('rw', [db.themes, db.tombstones], async () => {
+        await db.tombstones.put({ id, kind: 'theme', ts });
+        await db.themes.delete(id);
+      }),
     async appendEvent(event) {
       await db.events.add(event);
     },
@@ -104,8 +109,8 @@ export function createDexieRepo(name: string): Repo {
     },
 
     // One read transaction: a write from another tab cannot land halfway through the export.
-    dumpAll: () => db.transaction('r', [db.themes, db.notes, db.cards, db.reviews, db.events, db.settings], async () => {
-      const [themes, notes, cards, reviews, events, settingsRows, settings] = await Promise.all([
+    dumpAll: () => db.transaction('r', [db.themes, db.notes, db.cards, db.reviews, db.events, db.settings, db.tombstones], async () => {
+      const [themes, notes, cards, reviews, events, settingsRows, settings, tombstones] = await Promise.all([
         db.themes.orderBy('id').toArray(),
         db.notes.orderBy('id').toArray(),
         db.cards.orderBy('id').toArray(),
@@ -113,27 +118,30 @@ export function createDexieRepo(name: string): Repo {
         db.events.orderBy('id').toArray(),
         db.settings.toArray(),
         readSettings(),
+        db.tombstones.orderBy('id').toArray(),
       ]);
       const flags = settingsRows.filter((r) => r.key.startsWith('flag:') && r.value).map((r) => r.key.slice(5)).sort();
-      return { themes, notes, cards, reviews, events, settings, flags };
+      const settingsUpdatedAt = settingsRows.find((r) => r.key === 'main')?.updatedAt ?? 0;
+      return { themes, notes, cards, reviews, events, settings, flags, tombstones, settingsUpdatedAt };
     }),
     restoreAll: (dump) =>
-      db.transaction('rw', [db.themes, db.notes, db.cards, db.reviews, db.events, db.settings], async () => {
-        await Promise.all([db.themes.clear(), db.notes.clear(), db.cards.clear(), db.reviews.clear(), db.events.clear(), db.settings.clear()]);
+      db.transaction('rw', [db.themes, db.notes, db.cards, db.reviews, db.events, db.settings, db.tombstones], async () => {
+        await Promise.all([db.themes.clear(), db.notes.clear(), db.cards.clear(), db.reviews.clear(), db.events.clear(), db.settings.clear(), db.tombstones.clear()]);
+        await db.tombstones.bulkAdd(dump.tombstones);
         await db.themes.bulkAdd(dump.themes);
         await db.notes.bulkAdd(dump.notes);
         await db.cards.bulkAdd(dump.cards);
         await db.reviews.bulkAdd(dump.reviews);
         await db.events.bulkAdd(dump.events);
         await db.settings.bulkAdd([
-          { key: 'main', desiredRetention: dump.settings.desiredRetention, newPerDay: dump.settings.newPerDay },
+          { key: 'main', desiredRetention: dump.settings.desiredRetention, newPerDay: dump.settings.newPerDay, updatedAt: dump.settingsUpdatedAt },
           ...dump.flags.map((f) => ({ key: `flag:${f}`, value: true })),
         ]);
       }),
 
     getSettings: readSettings,
-    async putSettings(settings) {
-      await db.settings.put({ ...settings, key: 'main' });
+    async putSettings(settings, ts = Date.now()) {
+      await db.settings.put({ key: 'main', desiredRetention: settings.desiredRetention, newPerDay: settings.newPerDay, updatedAt: ts });
     },
   };
 }
