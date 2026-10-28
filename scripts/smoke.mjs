@@ -210,6 +210,87 @@ await fresh.getByLabel('Ouvrir une sauvegarde').setInputFiles({ name: 'x.json', 
 await fresh.getByText('Ce fichier n’est pas une sauvegarde Ancrage.').waitFor();
 await fresh.screenshot({ path: `${OUT}/settings.png`, fullPage: true });
 
+// --- v1.1: sync through a fake Supabase (network-level), and merge by file ---
+const cloud = { users: new Map(), tokens: new Map(), rows: new Map() };
+const fakeSupabase = async (route) => {
+  const req = route.request();
+  const url = new globalThis.URL(req.url());
+  const reply = (status, body) => route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body), headers: { 'access-control-allow-origin': '*' } });
+  if (req.method() === 'OPTIONS') return route.fulfill({ status: 204, headers: { 'access-control-allow-origin': '*', 'access-control-allow-headers': '*', 'access-control-allow-methods': '*' } });
+  if (req.headers().apikey !== 'anon-key') return reply(401, { message: 'Invalid API key' });
+  const body = req.postData() ? JSON.parse(req.postData()) : {};
+  const issue = (email) => { const t = `t-${Math.random()}`; cloud.tokens.set(t, email); return { access_token: t, refresh_token: `r-${t}`, expires_in: 3600, user: { email } }; };
+  if (url.pathname === '/auth/v1/signup') { cloud.users.set(body.email, body.password); return reply(200, issue(body.email)); }
+  if (url.pathname === '/auth/v1/token') return cloud.users.get(body.email) === body.password ? reply(200, issue(body.email)) : reply(400, { error_description: 'Invalid login credentials' });
+  const who = cloud.tokens.get((req.headers().authorization ?? '').replace('Bearer ', ''));
+  if (!who) return reply(401, { message: 'JWT expired' });
+  const row = cloud.rows.get(who);
+  if (req.method() === 'GET') return reply(200, row ? [row] : []);
+  if (req.method() === 'POST') { if (row) return reply(409, {}); cloud.rows.set(who, { data: body.data, version: body.version }); return reply(201, [{ version: body.version }]); }
+  if (req.method() === 'PATCH') {
+    const expected = Number(url.searchParams.get('version').replace('eq.', ''));
+    if (!row || row.version !== expected) return reply(200, []);
+    cloud.rows.set(who, { data: body.data, version: body.version });
+    return reply(200, [{ version: body.version }]);
+  }
+  return reply(404, {});
+};
+const syncDevice = async (name) => {
+  const c = await browser.newContext({ serviceWorkers: 'block' });
+  await c.route('https://projet.supabase.co/**', fakeSupabase);
+  const p = await c.newPage();
+  p.on('pageerror', (e) => errors.push(`${name}: ${e.message}`));
+  return p;
+};
+const fillSync = async (p) => {
+  await p.goto(`${URL}#reglages`);
+  await p.getByLabel('Adresse du projet').fill('https://projet.supabase.co');
+  await p.getByLabel('Clé publique (anon)').fill('anon-key');
+  await p.getByLabel('E-mail').fill('benjamin@exemple.fr');
+  await p.getByLabel('Mot de passe').fill('secret12');
+};
+const devA = await syncDevice('A');
+await devA.goto(URL);
+await devA.locator('.hero .btn').click();
+await devA.locator('.s-inner').first().waitFor();
+await playRound(devA);
+await devA.getByRole('button', { name: /Terminer|Manche suivante/ }).click().catch(() => devA.keyboard.press('Escape'));
+await fillSync(devA);
+await devA.getByRole('button', { name: 'Créer le compte' }).click();
+await devA.getByText('Connecté : benjamin@exemple.fr').waitFor({ timeout: 5000 }).catch(async () => fail(`sync sign-up failed: ${(await devA.locator('main').innerText()).slice(-300)}`));
+await devA.getByText('Synchronisé.').waitFor({ timeout: 5000 }).catch(() => fail('first sync should succeed'));
+const reviewsA = await countReviews(devA);
+
+const devB = await syncDevice('B');
+await devB.goto(URL);
+await devB.locator('.hero').waitFor();
+await fillSync(devB);
+await devB.getByRole('button', { name: 'Se connecter' }).click();
+await devB.getByText('Synchronisé.').waitFor({ timeout: 5000 }).catch(async () => fail(`device B sync failed: ${(await devB.locator('main').innerText()).slice(-300)}`));
+if ((await countReviews(devB)) !== reviewsA || reviewsA < 5) fail(`device B should have the ${reviewsA} reviews of A, has ${await countReviews(devB)}`);
+await devB.goto(`${URL}#accueil`);
+await devB.locator('.chip.streak').waitFor();
+if (!(await devB.locator('.chip.streak').innerText()).startsWith('1')) fail('device B should show the streak earned on A');
+await devB.screenshot({ path: `${OUT}/device-b-synced.png`, fullPage: true });
+
+// Merge by file: a third profile with its own round merges the backup of A.
+const devC = await (await browser.newContext({ acceptDownloads: true, serviceWorkers: 'block' })).newPage();
+await devC.goto(URL);
+await devC.locator('.hero .btn').click();
+await devC.locator('.s-inner').first().waitFor();
+await playRound(devC);
+await devC.getByRole('button', { name: /Terminer|Manche suivante/ }).click().catch(() => devC.keyboard.press('Escape'));
+const reviewsC = await countReviews(devC);
+await devA.goto(`${URL}#reglages`);
+const [fileA] = await Promise.all([devA.waitForEvent('download'), devA.getByRole('button', { name: 'Télécharger une sauvegarde' }).click()]);
+const pathA = `${OUT}/device-a.json`;
+await fileA.saveAs(pathA);
+await devC.goto(`${URL}#reglages`);
+await devC.getByLabel('Ouvrir une sauvegarde').setInputFiles(pathA);
+await devC.getByRole('button', { name: 'Fusionner avec mes données' }).click();
+await devC.getByText('Sauvegarde fusionnée avec tes données.').waitFor();
+if ((await countReviews(devC)) !== reviewsA + reviewsC) fail(`merge should keep ${reviewsA} + ${reviewsC} reviews, has ${await countReviews(devC)}`);
+
 const mobile = await browser.newPage({ viewport: { width: 390, height: 844 }, colorScheme: 'dark' });
 mobile.on('pageerror', (e) => errors.push(e.message));
 await mobile.goto(URL);
