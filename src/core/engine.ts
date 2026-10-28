@@ -8,7 +8,7 @@ export interface Engine {
   cardState(cardId: string): Promise<CardState>;
   modeFor(cardId: string): Promise<Mode>;
   answer(cardId: string, mode: Mode, outcome: Outcome, now: number): Promise<{ entry: ReviewEntry; state: CardState }>;
-  /** "En fait je ne savais pas" / "J'avais bon": regrades a past answer and replays the card. */
+  /** "En fait je ne savais pas" / "J'avais bon": regrades the card's latest answer and replays the card. */
   correctLast(entryId: string, correct: boolean, now: number): Promise<CardState>;
 }
 
@@ -51,6 +51,9 @@ export function createEngine(repo: Repo, deviceId: string): Engine {
     },
 
     async answer(cardId, mode, outcome, now) {
+      if ((mode === 'self') !== (outcome.kind === 'self')) {
+        throw new Error(`a ${outcome.kind} outcome does not match mode ${mode}`);
+      }
       const { note } = await load(cardId);
       const rating = toRating(mode, outcome, await thresholdFor(note.fields.type));
       const entry: ReviewEntry = {
@@ -71,6 +74,10 @@ export function createEngine(repo: Repo, deviceId: string): Engine {
     async correctLast(entryId, correct, _now) {
       const entry = (await repo.listReviews()).find((e) => e.id === entryId);
       if (!entry) throw new Error(`review ${entryId} not found`);
+      const cardLog = await repo.listReviews(entry.cardId);
+      if (cardLog[cardLog.length - 1].id !== entryId) {
+        throw new Error('only the latest answer of a card can be corrected');
+      }
       const { note } = await load(entry.cardId);
       const outcome: Outcome =
         entry.mode === 'self'

@@ -62,12 +62,13 @@ describe('engine', () => {
 
   test('correcting a past answer rewrites its grade and recomputes the state from the log', async () => {
     const [card] = await addCloze('{{Reality}}');
-    const first = await engine.answer(card.id, 'production', ok(), T0);
-    await engine.answer(card.id, 'production', ok(), T0 + DAY);
-    const state = await engine.correctLast(first.entry.id, false, T0 + DAY);
+    await engine.answer(card.id, 'production', ok(), T0);
+    const last = await engine.answer(card.id, 'production', ok(), T0 + DAY);
+    const state = await engine.correctLast(last.entry.id, false, T0 + DAY);
     const log = await repo.listReviews(card.id);
-    expect(log[0]).toMatchObject({ id: first.entry.id, rating: 1, correct: false });
+    expect(log[1]).toMatchObject({ id: last.entry.id, rating: 1, correct: false });
     expect(state).toEqual(makeScheduler(DEFAULT_SETTINGS).replay(T0, log));
+    expect(state).not.toEqual(last.state);
   });
 
   test('marking a wrong answer as right gives it the rating of a correct answer in its mode', async () => {
@@ -75,6 +76,23 @@ describe('engine', () => {
     const { entry } = await engine.answer(card.id, 'recognition', wrong, T0);
     await engine.correctLast(entry.id, true, T0);
     expect((await repo.listReviews(card.id))[0]).toMatchObject({ rating: 2, correct: true });
+  });
+
+  test('a self outcome is rejected outside self mode, and an auto outcome inside it', async () => {
+    const [card] = await addCloze('{{Reality}}');
+    await expect(engine.answer(card.id, 'recognition', { kind: 'self', grade: 3 }, T0)).rejects.toThrow('mode');
+    await expect(engine.answer(card.id, 'self', ok(), T0)).rejects.toThrow('mode');
+    expect(await repo.listReviews(card.id)).toEqual([]);
+  });
+
+  test('only the latest answer of a card can be corrected', async () => {
+    const [card] = await addCloze('{{Reality}}');
+    const first = await engine.answer(card.id, 'production', ok(), T0);
+    const second = await engine.answer(card.id, 'production', ok(), T0 + DAY);
+    const before = await engine.cardState(card.id);
+    await expect(engine.correctLast(first.entry.id, false, T0 + DAY)).rejects.toThrow('latest');
+    const after = await engine.correctLast(second.entry.id, false, T0 + DAY);
+    expect(after).not.toEqual(before);
   });
 
   test('answering an unknown card is rejected', async () => {

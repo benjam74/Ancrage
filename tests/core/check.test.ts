@@ -27,6 +27,29 @@ describe('checkTyped', () => {
   });
 });
 
+describe('checkTyped, French input', () => {
+  test('accepts oe and ae for the œ and æ ligatures', () => {
+    expect(checkTyped('coeur', 'cœur')).toBe(true);
+    expect(checkTyped('oeuvre', 'Œuvre')).toBe(true);
+    expect(checkTyped('ex aequo', 'ex æquo')).toBe(true);
+  });
+
+  test('ignores trailing punctuation', () => {
+    expect(checkTyped('Paris.', 'Paris')).toBe(true);
+    expect(checkTyped('Will', 'Will !')).toBe(true);
+  });
+
+  test('treats apostrophes and hyphens like spaces', () => {
+    expect(checkTyped('l eau', "l'eau")).toBe(true);
+    expect(checkTyped('meta modele', 'méta-modèle')).toBe(true);
+    expect(checkTyped('lʼeau', "l'eau")).toBe(true);
+  });
+
+  test('typo tolerance counts letters, not spaces', () => {
+    expect(checkTyped('a b c x', 'a b c d')).toBe(false);
+  });
+});
+
 describe('checkOrder', () => {
   test('accepts the exact order', () => {
     expect(checkOrder([0, 1, 2, 3], 4)).toBe(true);
@@ -50,5 +73,9 @@ describe('checkChoice', () => {
 describe('normalizeAnswer', () => {
   test('collapses inner whitespace', () => {
     expect(normalizeAnswer('Croyances   et\tvaleurs')).toBe('croyances et valeurs');
+  });
+
+  test('maps ligatures, apostrophes, hyphens and trailing punctuation', () => {
+    expect(normalizeAnswer("  L’Œuvre d'art-total ! ")).toBe('l oeuvre d art total');
   });
 });

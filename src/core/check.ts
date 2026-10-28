@@ -3,11 +3,18 @@ const TYPO_MIN_LENGTH = 6;
 export function normalizeAnswer(s: string): string {
   return s
     .normalize('NFD')
-    .replace(/[̀-ͯ]/g, '')
+    .replace(/[\u0300-\u036f]/g, '')
     .toLowerCase()
-    .replace(/[’‘`]/g, "'")
+    .replace(/\u0153/g, 'oe') // œ
+    .replace(/\u00e6/g, 'ae') // æ
+    .replace(/['\u2018\u2019\u02bc`\-\u2010\u2013]/g, ' ')
+    .replace(/[\s.!?;:,\u2026]+$/, '')
     .replace(/\s+/g, ' ')
     .trim();
+}
+
+function letterCount(s: string): number {
+  return s.replace(/[^a-z0-9]/g, '').length;
 }
 
 function levenshtein(a: string, b: string): number {
@@ -27,7 +34,7 @@ export function checkTyped(input: string, expected: string): boolean {
   const target = normalizeAnswer(expected);
   if (!given) return false;
   if (given === target) return true;
-  return target.length >= TYPO_MIN_LENGTH && levenshtein(given, target) <= 1;
+  return letterCount(target) >= TYPO_MIN_LENGTH && levenshtein(given, target) <= 1;
 }
 
 /** `given` lists the original step indexes in the order the learner placed them. */

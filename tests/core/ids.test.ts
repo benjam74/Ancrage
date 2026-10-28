@@ -10,6 +10,15 @@ describe('newId', () => {
     expect(newId(1000) < newId(2000)).toBe(true);
   });
 
+  test('floors fractional timestamps', () => {
+    expect(newId(1500.7).slice(0, 10)).toBe(newId(1500).slice(0, 10));
+  });
+
+  test('rejects negative or non-finite timestamps', () => {
+    expect(() => newId(-1)).toThrow();
+    expect(() => newId(Number.NaN)).toThrow();
+  });
+
   test('stays unique and sorted within the same millisecond', () => {
     const ids = Array.from({ length: 1000 }, () => newId(5));
     expect(new Set(ids).size).toBe(1000);

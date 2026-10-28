@@ -25,6 +25,8 @@ function increment(digits: number[]): number[] {
 
 /** ULID-style id: lexicographic order follows creation time, monotonic within a millisecond. */
 export function newId(now: number = Date.now()): string {
+  if (!Number.isFinite(now) || now < 0) throw new Error(`invalid timestamp: ${now}`);
+  now = Math.floor(now);
   if (now === lastTime) {
     lastRandom = increment(lastRandom);
   } else {
