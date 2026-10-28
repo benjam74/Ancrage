@@ -25,8 +25,16 @@ describe('cloze', () => {
     expect(only(build(twice, 'x#2', 'production'), 'typed')).toMatchObject({ before: 'X puis ', after: '', expected: 'X' });
   });
 
+  test('recognition never offers a distractor that is visible in the sentence', () => {
+    const pool = [note({ type: 'cloze', text: '{{Goal}} et {{Options}}' }), note({ type: 'cloze', text: '{{Généralisation}} et {{Omission}}' })];
+    const ex = build(grow, 'reality', 'recognition', pool);
+    if (ex.kind === 'choice') {
+      for (const visible of ['Goal', 'Options', 'Will']) expect(ex.options).not.toContain(visible);
+    }
+  });
+
   test('recognition offers 4 distinct options when enough distractors exist', () => {
-    const pool = [note({ type: 'cloze', text: '{{Goal}} et {{Options}}' }), note({ type: 'cloze', text: '{{Généralisation}}' })];
+    const pool = [note({ type: 'cloze', text: '{{Goal}} et {{Généralisation}}' }), note({ type: 'cloze', text: '{{Omission}} puis {{Distorsion}}' })];
     const ex = only(build(grow, 'reality', 'recognition', pool), 'choice');
     expect(ex.options).toHaveLength(4);
     expect(new Set(ex.options).size).toBe(4);
@@ -80,6 +88,16 @@ describe('classify and mcq', () => {
     expect(a.options[a.answerIndex]).toBe('Croyances');
     const positions = new Set(Array.from({ length: 20 }, (_, i) => only(build(nt, 'main', 'recognition', [], `s${i}`), 'choice').answerIndex));
     expect(positions.size).toBeGreaterThanOrEqual(2);
+  });
+
+  test('an mcq without a usable distractor falls back to reveal', () => {
+    expect(build(note({ type: 'mcq', question: 'Q', answer: 'A', distractors: [] }), 'main', 'recognition').kind).toBe('reveal');
+    expect(build(note({ type: 'mcq', question: 'Q', answer: 'Été', distractors: ['ete '] }), 'main', 'recognition').kind).toBe('reveal');
+  });
+
+  test('a classify with a single category falls back to reveal', () => {
+    const nt = note({ type: 'classify', statement: 'S', categories: ['Omission'], answer: 'Omission' });
+    expect(build(nt, 'main', 'recognition').kind).toBe('reveal');
   });
 
   test('isCorrect compares the chosen index', () => {

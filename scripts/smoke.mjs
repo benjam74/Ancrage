@@ -31,7 +31,9 @@ async function playRound(page) {
     const reveal = page.getByRole('button', { name: 'Afficher la réponse' });
     if (await reveal.isVisible()) {
       await reveal.click();
-      await page.getByRole('button', { name: firstReveal ? 'Raté' : 'Su' }).click();
+      // Keyboard path: Enter on a focused grade button must grade (regression guard).
+      await page.getByRole('button', { name: firstReveal ? 'Raté' : 'Su' }).focus();
+      await page.keyboard.press('Enter');
       await page.getByRole('button', { name: 'Continuer' }).waitFor();
       firstReveal = false;
       continue;

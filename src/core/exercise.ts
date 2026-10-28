@@ -65,11 +65,15 @@ function clozeExercise(text: string, variant: string, mode: Mode, pool: Note[], 
   const after = unwrap(text.slice(m.index! + m[0].length));
 
   if (mode === 'recognition') {
+    // A distractor already printed in the sentence could be ruled out by elimination.
+    const words = (text: string) => normalizeAnswer(text).replace(/[^a-z0-9]+/g, ' ').trim();
+    const visible = ` ${words(`${before} ${after}`)} `;
+    const hidden = (candidate: string) => !visible.includes(` ${words(candidate)} `);
     const others = [
       ...gaps.map((g) => g[1].trim()),
       ...pool.flatMap((n) => (n.fields.type === 'cloze' ? [...n.fields.text.matchAll(GAP)].map((g) => g[1].trim()) : [])),
     ];
-    const distractors = pickDistractors(expected, others, 3, rng);
+    const distractors = pickDistractors(expected, others.filter(hidden), 3, rng);
     if (distractors.length >= 2) return choice('Complète', expected, distractors, rng, `${before}____${after}`);
   }
   return { kind: 'typed', prompt: 'Complète', before, after, expected };
@@ -94,13 +98,16 @@ export function buildExercise(note: Note, card: Card, mode: Mode, pool: Note[], 
     }
     case 'classify': {
       const answerIndex = f.categories.findIndex((c) => checkChoice(c, f.answer));
-      if (answerIndex < 0) {
+      if (answerIndex < 0 || f.categories.length < 2) {
         return { kind: 'reveal', prompt: 'À quelle catégorie appartient cette phrase ?', quote: f.statement, front: f.statement, back: f.answer, keyPoints: [] };
       }
       return { kind: 'choice', prompt: 'À quelle catégorie appartient cette phrase ?', quote: f.statement, options: f.categories, answerIndex };
     }
-    case 'mcq':
-      return choice(f.question, f.answer, pickDistractors(f.answer, f.distractors, f.distractors.length, rng), rng);
+    case 'mcq': {
+      const distractors = pickDistractors(f.answer, f.distractors, f.distractors.length, rng);
+      if (distractors.length === 0) return { kind: 'reveal', prompt: 'Rappelle-toi la réponse', front: f.question, back: f.answer, keyPoints: [] };
+      return choice(f.question, f.answer, distractors, rng);
+    }
     case 'basic': {
       const reversed = card.variant === 'back';
       const front = reversed ? f.back : f.front;

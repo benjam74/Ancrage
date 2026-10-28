@@ -68,9 +68,9 @@
     const id = currentCard(round);
     if (id) await show(id);
     else {
-      ended = true;
-      shown = null;
       hasMore = (await services.today(Date.now())).queue.length > 0;
+      shown = null;
+      ended = true;
     }
   }
 
@@ -115,14 +115,23 @@
     await next();
   });
 
+  // Waits for nothing in flight, so the home screen never reads the log before the last answer is saved.
+  const exit = once(async () => onexit());
+
   function onkey(e: KeyboardEvent) {
-    if (e.key === 'Escape') return onexit();
-    if (e.key !== 'Enter' || e.target instanceof HTMLTextAreaElement) return;
+    if (e.key === 'Escape') return void exit();
+    // A focused control handles its own Enter and Space; global shortcuts must not override it.
+    if (e.target instanceof HTMLButtonElement || e.target instanceof HTMLTextAreaElement) return;
+    if (shown?.ex.kind === 'reveal' && revealed && !result && ['1', '2', '3'].includes(e.key)) {
+      const grade = Number(e.key) as 1 | 2 | 3;
+      return void record(grade > 1, grade);
+    }
+    if (e.key !== 'Enter') return;
     e.preventDefault();
-    if (ended) return hasMore ? nextRound() : onexit();
-    if (result) return proceed();
+    if (ended) return void (hasMore ? nextRound() : exit());
+    if (result) return void proceed();
     if (shown?.ex.kind === 'reveal') revealed = true;
-    else check();
+    else void check();
   }
 
   next().catch((e) => (error = String(e)));
@@ -132,7 +141,7 @@
 
 <div class="session" role="dialog" aria-modal="true" aria-label="Séance de révision">
   <div class="s-head">
-    <button class="icon-btn" aria-label="Quitter la séance" onclick={onexit}>✕</button>
+    <button class="icon-btn" aria-label="Quitter la séance" onclick={exit}>✕</button>
     <div class="s-progress" role="progressbar" aria-valuenow={Math.round(progress)} aria-valuemin="0" aria-valuemax="100"><i style="width:{progress}%"></i></div>
   </div>
 
@@ -173,7 +182,7 @@
     <div class="s-foot-inner">
       {#if ended}
         <span></span>
-        {#if hasMore}<button class="btn ok" onclick={nextRound}>Manche suivante</button>{:else}<button class="btn ok" onclick={onexit}>Terminer</button>{/if}
+        {#if hasMore}<button class="btn ok" onclick={nextRound}>Manche suivante</button>{:else}<button class="btn ok" onclick={exit}>Terminer</button>{/if}
       {:else if result && shown}
         <div class="verdict" aria-live="polite">
           <h3>{result.correct ? 'Bien joué' : 'Pas tout à fait'}</h3>
@@ -192,9 +201,9 @@
         {#if revealed}
           <p style="font-weight:700;flex:1 1 200px">Compare avec ta réponse. Tu savais ?</p>
           <div class="self">
-            <button class="btn bad" onclick={() => record(false, 1)}>Raté</button>
-            <button class="btn sun" onclick={() => record(true, 2)}>Difficile</button>
-            <button class="btn ok" onclick={() => record(true, 3)}>Su</button>
+            <button class="btn bad" aria-keyshortcuts="1" onclick={() => record(false, 1)}>Raté</button>
+            <button class="btn sun" aria-keyshortcuts="2" onclick={() => record(true, 2)}>Difficile</button>
+            <button class="btn ok" aria-keyshortcuts="3" onclick={() => record(true, 3)}>Su</button>
           </div>
         {:else}
           <span></span><button class="btn ok" onclick={() => (revealed = true)}>Afficher la réponse</button>
