@@ -6,6 +6,8 @@ export interface Repo {
   /** Upserts the note and syncs its cards; returns the cards the note currently produces. */
   putNote(note: Note): Promise<Card[]>;
   getNote(id: string): Promise<Note | undefined>;
+  listNotes(themeId?: string): Promise<Note[]>;
+  getCard(id: string): Promise<Card | undefined>;
   /** Includes orphan cards. */
   listCards(noteId?: string): Promise<Card[]>;
   /** Append-only: rejects an id that already exists. */

@@ -55,6 +55,8 @@ export function createDexieRepo(name: string): Repo {
         return active;
       }),
     getNote: (id) => db.notes.get(id),
+    listNotes: (themeId) => (themeId === undefined ? db.notes.toArray() : db.notes.where('themeId').equals(themeId).toArray()),
+    getCard: (id) => db.cards.get(id),
     listCards: (noteId) => (noteId === undefined ? db.cards.toArray() : db.cards.where('noteId').equals(noteId).toArray()),
 
     async appendReview(entry) {

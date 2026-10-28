@@ -62,6 +62,21 @@ describe('notes and cards', () => {
   });
 });
 
+describe('lookups', () => {
+  test('getCard returns a card by id', async () => {
+    const [card] = await repo.putNote(cloze('{{a}}'));
+    expect(await repo.getCard(card.id)).toEqual(card);
+    expect(await repo.getCard('missing')).toBeUndefined();
+  });
+
+  test('listNotes filters by theme', async () => {
+    await repo.putNote(cloze('{{a}}', 'n1'));
+    await repo.putNote({ ...cloze('{{b}}', 'n2'), themeId: 't2' });
+    expect((await repo.listNotes('t1')).map((n) => n.id)).toEqual(['n1']);
+    expect(await repo.listNotes()).toHaveLength(2);
+  });
+});
+
 describe('review log', () => {
   test('lists a card reviews sorted by time then id', async () => {
     await repo.appendReview(review('c1', T0 + 2000, 'B'));
