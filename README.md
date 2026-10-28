@@ -6,14 +6,16 @@ Le principe d'Anki (cartes personnelles, planification FSRS) avec l'expérience 
 
 ## État
 
-Itération 3 : tu crées tes propres cartes.
+Itération 4 : la motivation façon Duolingo, alignée sur la rétention.
 
-- **Créer** : les 6 types d'exercice, avec validation champ par champ et un aperçu en direct (carte nouvelle ou carte solide). Le nombre de cartes générées est affiché.
-- **Bibliothèque** : thèmes (créer, renommer, supprimer si vide), notes (modifier, supprimer avec confirmation), bouton « Retirer les exemples ».
-- **Séance** : file du jour (révisions dues puis 5 nouvelles cartes par jour), manches de 10, retour immédiat avec la note FSRS et la prochaine échéance.
-- Données locales (IndexedDB). Le deck de démarrage (tagué `exemple`) n'est chargé qu'une fois.
+- **XP** : 10 par carte due traitée (réussie ou non), 5 par nouvelle carte, 20 par manche ; 0 pour une révision en avance.
+- **Série** : +1 par jour où une manche est finie ; un gel gagné tous les 7 jours (2 au maximum) couvre un jour manqué.
+- **Accueil** : série, XP de la semaine, gels, anneau d'objectif du jour, parcours des thèmes avec leur palier de maîtrise.
+- **Maîtrise** : part des cartes d'un thème avec stabilité ≥ 21 jours et rappel ≥ 90 % (Nouveau, Découverte, En cours, Solide, Ancré).
+- **Progrès** : rétention réelle, cartes ancrées, régularité sur 20 semaines, révisions prévues sur 7 jours, état des cartes.
+- Déjà là : éditeur des 6 types d'exercice, bibliothèque, séance en manches de 10, données locales (IndexedDB).
 
-Pas encore : XP, série, maîtrise par thème (itération 4), installation PWA et sauvegarde JSON (itération 5).
+Pas encore : installation PWA, fonctionnement hors ligne, sauvegarde JSON (itération 5), sync (v1.1), génération IA (v1.2).
 
 ## Développement
 

@@ -17,8 +17,8 @@
   const dayLabels = $derived(
     progress.forecast.map((_, i) => (i === 0 ? 'Auj.' : new Date(Date.now() + i * 86_400_000).toLocaleDateString('fr-FR', { weekday: 'short' }).replace('.', ''))),
   );
-  const max = $derived(Math.max(5, Math.ceil(Math.max(...progress.forecast) / 5) * 5));
-  const ticks = $derived([0, max / 2, max].map(Math.round));
+  const max = $derived(Math.max(4, Math.ceil(Math.max(...progress.forecast) / 4) * 4));
+  const ticks = $derived([0, max / 4, max / 2, (3 * max) / 4, max]);
   const bw = (W - PAD.l - PAD.r) / 7;
   const y = (v: number) => PAD.t + (H - PAD.t - PAD.b) * (1 - v / max);
 </script>

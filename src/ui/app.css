@@ -242,3 +242,4 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .state-row span:last-child { text-align: right; }
 .tiles.three { grid-template-columns: repeat(3, minmax(0,1fr)); }
 .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.hero-xp { font-weight: 700; color: rgba(255,255,255,.85); font-variant-numeric: tabular-nums; }

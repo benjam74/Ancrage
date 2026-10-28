@@ -52,7 +52,7 @@
   <main class="page"><h1>Ancrage</h1><p>Impossible d’ouvrir la base locale : {error}</p></main>
 {:else if services && today && progress}
   {#if inSession}
-    <Session {services} queue={today.queue} onexit={async () => { inSession = false; await refresh(); }} />
+    <Session {services} queue={today.queue} onexit={async () => { await refresh(); inSession = false; }} />
   {:else}
     <div class="app">
       <Nav current={view} onselect={(v) => { if (v === 'creer') editing = null; }} />

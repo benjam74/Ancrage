@@ -46,7 +46,7 @@
         {:else}
           <p>{today.nextDue ? `Prochaine révision ${inHowLong(today.nextDue, Date.now())}.` : 'Ajoute des cartes pour commencer.'}</p>
         {/if}
-        <p class="hero-meta">{progress.xpToday} XP aujourd’hui</p>
+        <p class="hero-xp">{progress.xpToday} XP aujourd’hui</p>
       </section>
       <p class="muted">L’XP récompense les révisions faites à temps : 10 par carte due, 5 par nouvelle carte, 20 par manche. Réviser en avance ne rapporte rien. Un jour manqué consomme un gel s’il en reste : tu en gagnes un tous les 7 jours de série, 2 gels au maximum.</p>
     </div>

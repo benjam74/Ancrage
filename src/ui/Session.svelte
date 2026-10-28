@@ -74,6 +74,7 @@
       roundResult = await services.completeRound(roundStartedAt, now);
       hasMore = (await services.today(now)).queue.length > 0;
       shown = null;
+      result = null;
       ended = true;
       countUp(roundResult.xp);
     }

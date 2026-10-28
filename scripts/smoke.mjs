@@ -68,15 +68,33 @@ const meta = await page.locator('.hero-meta').innerText();
 if (!/5\s+nouvelles cartes/.test(meta)) fail(`expected 5 new cards on first launch, got "${meta}"`);
 await page.screenshot({ path: `${OUT}/home.png` });
 
-await page.getByRole('button', { name: 'Commencer la séance' }).click();
+await page.locator('.hero .btn').click();
 await page.locator('.s-inner').first().waitFor();
 await page.screenshot({ path: `${OUT}/exercise.png` });
 const steps = await playRound(page);
+await page.getByText('Série : 1 jour.').waitFor({ timeout: 3000 }).catch(() => fail('round end should show « Série : 1 jour. »'));
+await page.getByLabel('45 XP').waitFor({ timeout: 3000 }).catch(() => fail('round end should show 45 XP'));
+await page.waitForTimeout(1200);
 await page.screenshot({ path: `${OUT}/round-end.png` });
 
 const finish = page.getByRole('button', { name: /Terminer|Manche suivante/ });
 if ((await finish.innerText()).includes('Terminer')) await finish.click(); else await page.keyboard.press('Escape');
+const checkMotivation = async (when) => {
+  await page.locator('.chip.streak').waitFor();
+  await page.waitForFunction(() => document.querySelector('.ring text')?.textContent === '1/1', null, { timeout: 3000 }).catch(() => {});
+  const streak = (await page.locator('.chip.streak').innerText()).replace(/\s+/g, ' ');
+  const xp = (await page.locator('.chip.xp').innerText()).replace(/\s+/g, ' ');
+  const ring = await page.locator('.ring text').textContent();
+  if (!streak.startsWith('1') || !xp.startsWith('45') || ring !== '1/1') fail(`${when}: expected streak 1, 45 XP, ring 1/1; got "${streak}", "${xp}", "${ring}"`);
+};
+await checkMotivation('home after round');
 await page.reload();
+await checkMotivation('home after reload');
+await page.screenshot({ path: `${OUT}/home-after.png`, fullPage: true });
+await page.goto(`${URL}#progres`);
+await page.getByRole('heading', { name: 'Progrès' }).waitFor();
+await page.screenshot({ path: `${OUT}/progress.png`, fullPage: true });
+await page.goto(`${URL}#accueil`);
 await page.locator('.hero').waitFor();
 const after = await page.locator('.hero').innerText();
 if (/[1-9]\s*\n?\s*nouvelles? cartes?/.test(after)) fail(`new cards still offered after reload: "${after}"`);
@@ -115,7 +133,7 @@ await page.getByText(/Ajouté à « Écoute active » : 2 cartes\. Tu les verras
 await page.goto(`${URL}#accueil`);
 const mine = await page.locator('.hero-meta').innerText();
 if (!/2\s+nouvelles cartes/.test(mine)) fail(`expected the 2 new cards of my note on home, got "${mine}"`);
-await page.getByRole('button', { name: 'Commencer la séance' }).click();
+await page.locator('.hero .btn').click();
 await page.locator('.s-inner').first().waitFor();
 await playRound(page);
 const end = page.getByRole('button', { name: /Terminer|Manche suivante/ });
@@ -138,9 +156,16 @@ const mobile = await browser.newPage({ viewport: { width: 390, height: 844 }, co
 mobile.on('pageerror', (e) => errors.push(e.message));
 await mobile.goto(URL);
 await mobile.locator('.hero').waitFor();
-await mobile.screenshot({ path: `${OUT}/mobile-dark.png` });
-const width = await mobile.evaluate(() => document.documentElement.scrollWidth);
-if (width > 390) fail(`horizontal scroll on mobile: ${width}px`);
+await mobile.screenshot({ path: `${OUT}/mobile-dark.png`, fullPage: true });
+for (const view of ['accueil', 'creer', 'progres', 'bibliotheque']) {
+  await mobile.goto(`${URL}#${view}`);
+  await mobile.waitForTimeout(300);
+  const width = await mobile.evaluate(() => document.documentElement.scrollWidth);
+  if (width > 390) fail(`horizontal scroll on mobile #${view}: ${width}px`);
+}
+await mobile.goto(`${URL}#progres`);
+await mobile.waitForTimeout(300);
+await mobile.screenshot({ path: `${OUT}/mobile-progress-dark.png`, fullPage: true });
 
 await browser.close();
 server.kill();
