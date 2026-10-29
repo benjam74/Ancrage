@@ -53,7 +53,8 @@ export function buildPrompt(r: GenerationRequest): { system: string; user: strin
     'Choisis pour chaque idée le type qui la teste le mieux. Si le texte ne justifie pas autant de cartes, crée-en moins.',
     '',
     '<source>',
-    r.source.trim(),
+    // A pasted closing tag must not end the source early.
+    r.source.trim().replace(/<\/?source>/gi, ''),
     '</source>',
   ].join('\n');
   return { system, user };

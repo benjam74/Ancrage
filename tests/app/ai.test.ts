@@ -80,6 +80,11 @@ describe('generateProposals', () => {
     expect(await generateProposals(fakeClient(() => rate).client, request)).toEqual({ ok: false, error: 'Trop de demandes ou crédit épuisé. Réessaie dans un moment ou vérifie ton crédit.' });
     expect(await generateProposals(fakeClient(() => net).client, request)).toEqual({ ok: false, error: 'Impossible de joindre Anthropic. Vérifie ta connexion.' });
   });
+
+  test('an exhausted credit balance (400) says so', async () => {
+    const credit = new Anthropic.BadRequestError(400, { type: 'error', error: { type: 'invalid_request_error', message: 'Your credit balance is too low to access the Anthropic API.' } }, undefined, new Headers());
+    expect(await generateProposals(fakeClient(() => credit).client, request)).toEqual({ ok: false, error: 'Crédit Anthropic épuisé. Recharge-le dans la console Anthropic.' });
+  });
 });
 
 describe('API key storage', () => {

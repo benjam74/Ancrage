@@ -30,6 +30,7 @@ function errorMessage(e: unknown): string {
     return 'Clé API refusée. Vérifie-la dans la console Anthropic.';
   }
   if (e instanceof Anthropic.RateLimitError) return 'Trop de demandes ou crédit épuisé. Réessaie dans un moment ou vérifie ton crédit.';
+  if (e instanceof Anthropic.BadRequestError && /credit/i.test(e.message)) return 'Crédit Anthropic épuisé. Recharge-le dans la console Anthropic.';
   if (e instanceof Anthropic.APIConnectionError) return 'Impossible de joindre Anthropic. Vérifie ta connexion.';
   if (e instanceof Anthropic.APIError) return `Anthropic a renvoyé une erreur (${e.status ?? 'inconnue'}). Réessaie dans un moment.`;
   return 'La génération a échoué. Réessaie dans un moment.';

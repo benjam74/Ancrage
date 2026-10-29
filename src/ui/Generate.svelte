@@ -28,6 +28,7 @@
   let items = $state.raw<Item[]>([]);
   let rejected = $state(0);
   let editingIndex = $state<number | null>(null);
+  let adding = $state(false);
 
   const pending = $derived(items.filter((i) => i.status === 'pending').length);
   const sourceLabel = $derived(sourceTitle.trim() || 'Texte collé');
@@ -57,8 +58,9 @@
     error = '';
     notice = '';
     if (!apiKey.trim()) return void (error = 'Ajoute ta clé API Anthropic pour générer des cartes.');
+    await loadThemes();
+    if (pending && !confirm(`Remplacer les ${pending} propositions pas encore ajoutées ?`)) return;
     if (!themeId) return void (error = 'Crée d’abord un thème dans la bibliothèque ou l’onglet « Écrire une carte ».');
-    saveKey();
     busy = true;
     try {
       // Loaded on demand: the SDK is only needed once someone generates.
@@ -66,6 +68,7 @@
       const theme = themes.find((t) => t.id === themeId)!;
       const res = await generateProposals(createAiClient(apiKey.trim()), { source, themeName: theme.name, types, count });
       if (!res.ok) return void (error = res.error);
+      saveKey();
       items = res.proposals.map((proposal) => ({ proposal, status: 'pending' }));
       rejected = res.rejected;
       if (!res.proposals.length) error = 'Aucune carte exploitable dans la réponse. Essaie avec un texte plus riche ou d’autres types.';
@@ -78,16 +81,41 @@
     items = items.map((item, i) => (i === index ? { ...item, status } : item));
   }
 
-  async function add(index: number) {
+  async function save(index: number): Promise<boolean> {
     const res = await services.saveNote({ themeId, fields: items[index].proposal.fields, tags: ['ia'], source: sourceLabel }, Date.now());
-    if (!res.ok) return void (error = res.errors.themeId ?? 'Impossible d’ajouter cette carte.');
+    if (!res.ok) {
+      error = res.errors.themeId ?? 'Impossible d’ajouter cette carte.';
+      return false;
+    }
     mark(index, 'added');
-    onchange();
+    return true;
+  }
+
+  // One save at a time: a double click must not store the same proposal twice.
+  async function add(index: number) {
+    if (adding) return;
+    adding = true;
+    error = '';
+    try {
+      await save(index);
+    } finally {
+      adding = false;
+      onchange();
+    }
   }
 
   async function addAll() {
-    for (let i = 0; i < items.length; i++) if (items[i].status === 'pending') await add(i);
-    notice = 'Cartes ajoutées à ta bibliothèque.';
+    if (adding) return;
+    adding = true;
+    error = '';
+    let saved = 0;
+    try {
+      for (let i = 0; i < items.length; i++) if (items[i].status === 'pending' && (await save(i))) saved++;
+    } finally {
+      adding = false;
+      onchange();
+    }
+    notice = saved ? `${saved} carte${saved > 1 ? 's' : ''} ajoutée${saved > 1 ? 's' : ''} à ta bibliothèque.` : '';
   }
 
   loadThemes();
@@ -160,9 +188,9 @@
       <section class="panel" aria-labelledby="g-results">
         <div class="row">
           <h2 id="g-results">{items.length} carte{items.length > 1 ? 's' : ''} proposée{items.length > 1 ? 's' : ''}</h2>
-          {#if pending > 1}<button class="btn small" onclick={addAll}>Tout ajouter ({pending})</button>{/if}
+          {#if pending > 1}<button class="btn small" disabled={adding} onclick={addAll}>Tout ajouter ({pending})</button>{/if}
         </div>
-        {#if rejected}<p class="muted">{rejected} proposition{rejected > 1 ? 's' : ''} écartée{rejected > 1 ? 's' : ''} car incomplète{rejected > 1 ? 's' : ''}.</p>{/if}
+        {#if rejected}<p class="muted">{rejected} proposition{rejected > 1 ? 's' : ''} écartée{rejected > 1 ? 's' : ''} (incomplète{rejected > 1 ? 's' : ''} ou d’un type non demandé).</p>{/if}
         <p role="status" class="muted">{notice}</p>
         {#each items as item, i (i)}
           {#if item.status !== 'dismissed'}
@@ -175,8 +203,8 @@
                     <p class="notice">Ajoutée.</p>
                   {:else}
                     <div class="actions">
-                      <button class="btn small" onclick={() => add(i)}>Ajouter</button>
-                      <button class="btn small ghost" onclick={() => (editingIndex = i)}>Modifier</button>
+                      <button class="btn small" disabled={adding} onclick={() => add(i)}>Ajouter</button>
+                      <button class="btn small ghost" disabled={adding} onclick={() => (editingIndex = i)}>Modifier</button>
                       <button class="btn small ghost" onclick={() => mark(i, 'dismissed')}>Écarter</button>
                     </div>
                   {/if}

@@ -26,6 +26,8 @@
   let view = $state<View>(fromHash());
   let editing = $state<Note | null>(null);
   let createMode = $state<'write' | 'generate'>('write');
+  // Generate is mounted on first use, then kept mounted so its work survives navigation.
+  let generateOpened = $state(false);
   let inSession = $state(false);
   let error = $state('');
   let updateReady = $state(false);
@@ -104,16 +106,19 @@
           {#if !editing}
             <div class="tabs" role="group" aria-label="Façon de créer">
               <button aria-pressed={createMode === 'write'} onclick={() => (createMode = 'write')}>Écrire une carte</button>
-              <button aria-pressed={createMode === 'generate'} onclick={() => (createMode = 'generate')}>Générer depuis un texte</button>
+              <button aria-pressed={createMode === 'generate'} onclick={() => { createMode = 'generate'; generateOpened = true; }}>Générer depuis un texte</button>
             </div>
           {/if}
-          {#if createMode === 'generate' && !editing}
-            <Generate {services} onchange={refresh} />
-          {:else}
+          {#if createMode !== 'generate' || editing}
             {#key editing?.id ?? 'new'}
               <Editor {services} {editing} onsaved={async () => { await refresh(); if (editing) { editing = null; go('bibliotheque'); } }} />
             {/key}
           {/if}
+        {/if}
+        {#if generateOpened}
+          <div hidden={view !== 'creer' || createMode !== 'generate' || !!editing}>
+            <Generate {services} onchange={refresh} />
+          </div>
         {/if}
       </div>
     </div>
