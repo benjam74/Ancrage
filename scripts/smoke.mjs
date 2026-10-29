@@ -533,6 +533,149 @@ await fam.getByLabel(/Tape «.Léa.»/).fill('Léa');
 await fam.getByRole('button', { name: 'Supprimer définitivement' }).click();
 await fam.getByText(/Profil «.Léa.» (supprimé|retiré)/).waitFor();
 
+// --- v1.7: import documents, hard cards, AI feedback on scenarios, memory and effectiveness ---
+function tinyPdf(text) {
+  const stream = `BT /F1 18 Tf 72 720 Td (${text}) Tj ET`;
+  const objs = [
+    '<< /Type /Catalog /Pages 2 0 R >>',
+    '<< /Type /Pages /Kids [3 0 R] /Count 1 >>',
+    '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>',
+    `<< /Length ${stream.length} >>\nstream\n${stream}\nendstream`,
+    '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>',
+  ];
+  let out = '%PDF-1.4\n';
+  const offsets = [];
+  objs.forEach((o, i) => { offsets.push(out.length); out += `${i + 1} 0 obj\n${o}\nendobj\n`; });
+  const xref = out.length;
+  out += `xref\n0 ${objs.length + 1}\n0000000000 65535 f \n${offsets.map((n) => `${String(n).padStart(10, '0')} 00000 n \n`).join('')}`;
+  out += `trailer\n<< /Size ${objs.length + 1} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF\n`;
+  return Buffer.from(out, 'latin1');
+}
+const calls17 = { gen: [], evals: 0 };
+const ctx17 = await browser.newContext({ serviceWorkers: 'block', viewport: { width: 1280, height: 900 } });
+await ctx17.route('https://api.anthropic.com/**', async (route) => {
+  const headers = { 'access-control-allow-origin': '*', 'access-control-allow-headers': '*', 'access-control-allow-methods': '*' };
+  if (route.request().method() === 'OPTIONS') return route.fulfill({ status: 204, headers });
+  const req = JSON.parse(route.request().postData() ?? '{}');
+  let payload;
+  if (String(req.system).includes('superviseur')) {
+    calls17.evals++;
+    payload = { verdict: 'partiel', points: [{ covered: true, comment: 'Question ouverte.' }, { covered: false, comment: 'Le mot du client n’est pas repris.' }], feedback: 'Bonne piste, reprends ses mots.', improved: 'Jamais ? Qu’est-ce qui te fait dire jamais ?' };
+  } else {
+    const user = req.messages[0].content;
+    calls17.gen.push(user);
+    payload = user.includes('Calibrer')
+      ? { notes: [{ ...blank('scenario'), situation: 'Je n’y arriverai jamais.', model: 'Qu’est-ce qui te fait dire « jamais » ?', keyPoints: ['Question ouverte', 'Reprend le mot du client'], rationale: 'Pratique.' }] }
+      : { notes: [{ ...blank('basic'), front: `Carte ${calls17.gen.length}`, back: 'Réponse', rationale: 'Texte.' }] };
+  }
+  const body = { id: 'msg_17', type: 'message', role: 'assistant', model: 'claude-opus-5-5', stop_reason: 'end_turn', content: [{ type: 'text', text: JSON.stringify(payload) }], usage: { input_tokens: 10, output_tokens: 10 } };
+  return route.fulfill({ status: 200, contentType: 'application/json', headers, body: JSON.stringify(body) });
+});
+const v17 = await ctx17.newPage();
+v17.on('pageerror', (e) => errors.push(`v1.7: ${e.message}`));
+await v17.goto(`${URL}#creer`);
+await v17.getByRole('button', { name: 'Générer depuis un texte' }).click();
+await v17.locator('.file-btn input').setInputFiles([
+  { name: 'Ancrage PNL.md', mimeType: 'text/markdown', buffer: Buffer.from('---\ntags: pnl\n---\n# Ancrage\nUn [[stimulus|déclencheur]] associé à un état.\n## Étapes\n1. Calibrer\n2. Installer\n# Vide\n') },
+  { name: 'metamodele.pdf', mimeType: 'application/pdf', buffer: tinyPdf('Le metamodele questionne les generalisations.') },
+]);
+await v17.locator('.section-row').nth(2).waitFor({ timeout: 15000 }).catch(async () => fail(`imported sections not listed: ${(await v17.locator('main').innerText()).slice(0, 400)}`));
+const titles = await v17.locator('.section-row b').allTextContents();
+if (JSON.stringify(titles) !== JSON.stringify(['Ancrage', 'Étapes', 'metamodele'])) fail(`unexpected sections: ${titles.join(' | ')}`);
+if (!(await v17.locator('.section-row', { hasText: 'metamodele' }).innerText()).match(/\d+ caractères/)) fail('a section shows its size');
+await v17.getByLabel('Clé API Anthropic').fill('sk-ant-test');
+await v17.getByRole('button', { name: 'Générer pour 3 sections' }).click();
+await v17.getByRole('heading', { name: '3 cartes proposées' }).waitFor({ timeout: 15000 }).catch(async () => fail(`import generation failed: ${(await v17.locator('main').innerText()).replace(/\s+/g, ' ').slice(-300)}`));
+if (calls17.gen.length !== 3) fail(`expected one call per section, got ${calls17.gen.length}`);
+if (!calls17.gen.some((u) => u.includes('Le metamodele questionne'))) fail('the PDF text should be sent');
+if (!calls17.gen.some((u) => u.includes('Un déclencheur associé'))) fail('wiki links should be reduced to their text');
+if ((await v17.locator('.group-title').count()) !== 3) fail('proposals grouped by section');
+await v17.screenshot({ path: `${OUT}/import.png`, fullPage: true });
+const themesBefore = await v17.evaluate(() => new Promise((res) => { const r = indexedDB.open('ancrage'); r.onsuccess = () => { const q = r.result.transaction('themes').objectStore('themes').getAll(); q.onsuccess = () => res(q.result.length); }; }));
+await v17.getByRole('button', { name: 'Tout ajouter (3)' }).click();
+await v17.getByText('3 cartes ajoutées à ta bibliothèque.').waitFor();
+const imported = await v17.evaluate(() => new Promise((res) => { const r = indexedDB.open('ancrage'); r.onsuccess = () => { const tx = r.result.transaction(['themes', 'notes']); const t = tx.objectStore('themes').getAll(); const n = tx.objectStore('notes').getAll(); tx.oncomplete = () => res({ themes: t.result, notes: n.result.filter((x) => x.tags.includes('ia')) }); }; }));
+if (imported.themes.length !== themesBefore + 3) fail(`one new theme per section expected, got ${imported.themes.length - themesBefore}`);
+for (const name of ['Ancrage', 'Étapes', 'metamodele']) if (!imported.themes.some((t) => t.name === name && t.parentId)) fail(`theme ${name} should be created in a domain`);
+if (!imported.notes.some((n) => n.source === 'Ancrage PNL — Étapes')) fail(`source should name the file and section: ${imported.notes.map((n) => n.source).join(', ')}`);
+
+// The scenario card, answered in writing, gets Claude's feedback and a suggested grade.
+await v17.goto(`${URL}#reviser`);
+await v17.getByRole('button', { name: 'Aucun', exact: true }).click();
+await v17.locator('label.pick', { hasText: 'Étapes' }).locator('input').check();
+await v17.getByRole('button', { name: /Commencer \(1 carte\)/ }).click();
+await v17.getByText('Je n’y arriverai jamais.').waitFor();
+await v17.getByPlaceholder('Écris ta réponse, comme en séance…').fill('Qu’est-ce qui te bloque ?');
+await v17.getByRole('button', { name: 'Afficher la réponse' }).click();
+await v17.getByRole('button', { name: 'Retour de Claude sur ma réponse' }).click();
+await v17.locator('.ai-eval').getByText('Partiel').waitFor({ timeout: 5000 }).catch(() => fail('the AI verdict should show'));
+if ((await v17.locator('.eval-points li').count()) !== 2) fail('one line per key point');
+if (!(await v17.locator('.self .btn.suggested').textContent()).includes('Difficile')) fail('a partial answer should suggest « Difficile »');
+if (calls17.evals !== 1) fail(`expected one evaluation call, got ${calls17.evals}`);
+await v17.screenshot({ path: `${OUT}/scenario-feedback.png`, fullPage: true });
+await v17.getByRole('button', { name: 'Difficile' }).click();
+await v17.getByRole('button', { name: 'Continuer' }).click();
+await v17.getByText('Manche terminée').waitFor();
+// Summary, then the streak screen.
+await v17.getByRole('button', { name: 'Continuer' }).click();
+await v17.getByRole('button', { name: 'Terminer' }).click();
+await v17.locator('.session').waitFor({ state: 'detached' });
+
+// A card forgotten 4 times shows in the library: reword it, put it aside, resume it.
+await v17.evaluate(() => new Promise((res) => {
+  const r = indexedDB.open('ancrage');
+  r.onsuccess = () => {
+    const db = r.result;
+    const tx = db.transaction(['notes', 'cards', 'reviews'], 'readwrite');
+    const notes = tx.objectStore('notes').getAll();
+    const cards = tx.objectStore('cards').getAll();
+    tx.oncomplete = () => {
+      const note = notes.result.find((n) => n.fields.front === 'Carte 1');
+      const card = cards.result.find((c) => c.noteId === note.id);
+      const w = db.transaction('reviews', 'readwrite');
+      let t = Date.now() - 180 * 86_400_000;
+      let i = 0;
+      const add = (rating, ts) => w.objectStore('reviews').put({ id: `hard-${i++}`, cardId: card.id, ts, rating, mode: 'self', correct: rating > 1, durationMs: 3000, hintUsed: false, deviceId: 'smoke' });
+      for (let k = 0; k < 4; k++) { add(3, t); add(3, (t += 3 * 86_400_000)); add(3, (t += 10 * 86_400_000)); add(1, (t += 30 * 86_400_000)); t += 86_400_000; }
+      w.oncomplete = () => res();
+    };
+  };
+}));
+await v17.goto(`${URL}#bibliotheque`);
+await v17.reload();
+await v17.getByRole('heading', { name: 'Cartes difficiles' }).waitFor({ timeout: 5000 }).catch(() => fail('a card forgotten 4 times should be listed as hard'));
+const hardItem = v17.locator('section', { has: v17.getByRole('heading', { name: 'Cartes difficiles' }) }).locator('.note-item', { hasText: 'Carte 1' });
+if (!(await hardItem.innerText()).match(/Oubliée \d+ fois/)) fail('hard card shows how often it was forgotten');
+await hardItem.getByRole('button', { name: 'Reformuler avec l’IA' }).click();
+await v17.getByText(/Reformulation de «.Carte 1/).waitFor({ timeout: 3000 }).catch(() => fail('reword opens Generate prefilled'));
+if (!(await v17.getByLabel('Texte', { exact: true }).inputValue()).includes('Question : Carte 1')) fail('reword prefills the card text');
+await v17.getByRole('button', { name: 'Générer les cartes' }).click();
+await v17.getByRole('heading', { name: '1 carte proposée' }).waitFor();
+if (!calls17.gen[calls17.gen.length - 1].includes('Consigne : Cette carte est souvent oubliée')) fail('reword sends the instruction');
+await v17.locator('.proposal').getByRole('button', { name: 'Ajouter' }).click();
+await v17.getByRole('button', { name: 'Mettre l’ancienne carte de côté' }).click();
+await v17.getByText('Ancienne carte mise de côté.').waitFor();
+await v17.goto(`${URL}#bibliotheque`);
+await v17.getByRole('heading', { name: 'Mises de côté' }).waitFor();
+if (await v17.getByRole('heading', { name: 'Cartes difficiles' }).isVisible()) fail('a suspended note is no longer listed as hard');
+await v17.screenshot({ path: `${OUT}/library-hard.png`, fullPage: true });
+await v17.locator('section', { has: v17.getByRole('heading', { name: 'Mises de côté' }) }).getByRole('button', { name: 'Reprendre' }).click();
+await v17.getByText('Note reprise : elle revient dans tes révisions.').waitFor();
+await v17.getByRole('heading', { name: 'Cartes difficiles' }).waitFor();
+
+// Memory on the path, and the dashboard on Progrès.
+await v17.goto(`${URL}#accueil`);
+await v17.locator('.node[aria-label^="Étapes"]').click();
+await v17.locator('.memory-line').waitFor({ timeout: 3000 }).catch(() => fail('a studied theme shows its memory'));
+if (!/Mémoire actuelle : \d+\u202f%/.test(await v17.locator('.memory-line').innerText())) fail('memory shown as a percentage');
+await v17.goto(`${URL}#progres`);
+await v17.getByRole('heading', { name: 'Est-ce que ça marche ?' }).waitFor();
+const works = await v17.locator('.works').innerText();
+if (!/Cartes difficiles\s*1/i.test(works)) fail(`dashboard counts the hard card: ${works.replace(/\s+/g, ' ').slice(0, 300)}`);
+if (!works.includes('Par type d’exercice')) fail('dashboard breaks success down by type');
+await v17.screenshot({ path: `${OUT}/progress-works.png`, fullPage: true });
+await ctx17.close();
+
 const mobile = await browser.newPage({ viewport: { width: 390, height: 844 }, colorScheme: 'dark' });
 mobile.on('pageerror', (e) => errors.push(e.message));
 await mobile.goto(URL);

@@ -72,7 +72,7 @@
         <div class="works-tile">
           <span class="eyebrow">{w.days} derniers jours</span>
           <span class="v">{pct(w.rate)}</span>
-          <span class="muted">{w.count ? `réussite sur ${w.count} révision${w.count > 1 ? 's' : ''} dues` : 'Pas encore de révision due.'}</span>
+          <span class="muted">{w.count ? `réussite sur ${w.count} révision${w.count > 1 ? 's dues' : ' due'}` : 'Pas encore de révision due.'}</span>
           <span class="muted">{w.activeDays} jour{w.activeDays > 1 ? 's' : ''} actif{w.activeDays > 1 ? 's' : ''} sur {w.days}</span>
         </div>
       {/each}
