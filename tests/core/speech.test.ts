@@ -1,9 +1,10 @@
 import { describe, expect, test } from 'vitest';
 import { spokenText } from '../../src/core/speech';
+import type { Exercise } from '../../src/core/exercise';
 
 describe('spokenText', () => {
   test('reads the question, then the answer', () => {
-    const ex = { kind: 'reveal', prompt: 'Rappelle-toi la réponse', front: 'to go', back: 'aller', keyPoints: [] } as const;
+    const ex: Exercise = { kind: 'reveal', prompt: 'Rappelle-toi la réponse', front: 'to go', back: 'aller', keyPoints: [] };
     expect(spokenText(ex, false)).toBe('to go');
     expect(spokenText(ex, true)).toBe('aller');
   });

@@ -18,6 +18,7 @@
   import { validateFields } from '../core/validate';
   import { TYPE_LABEL } from './format';
   import Preview from './Preview.svelte';
+  import ImageMasker from './ImageMasker.svelte';
   import { groupByDomain, isDomain } from '../core/domains';
   import { EXAMPLES } from '../app/current';
   import { prefs } from './prefs.svelte';
@@ -30,7 +31,7 @@
     oncancel,
   }: { services: Services; editing: Note | null; prefill?: Prefill | null; onsaved: () => void; oncancel?: () => void } = $props();
 
-  const TYPES: NoteType[] = ['basic', 'cloze', 'ordering', 'classify', 'mcq', 'scenario'];
+  const TYPES: NoteType[] = ['basic', 'cloze', 'ordering', 'classify', 'mcq', 'scenario', 'image'];
   const ICONS: Record<NoteType, string> = {
     basic: '<rect x="3" y="5" width="13" height="10" rx="2.5"/><path d="M8 19h10.5a2.5 2.5 0 0 0 2.5-2.5V9"/>',
     cloze: '<path d="M3 8h5M16 8h5M3 16h18"/><rect x="9.5" y="5" width="5" height="6" rx="1.5" stroke-dasharray="2 2"/>',
@@ -38,6 +39,7 @@
     classify: '<rect x="3" y="14" width="5" height="6" rx="1.5"/><rect x="9.5" y="14" width="5" height="6" rx="1.5"/><rect x="16" y="14" width="5" height="6" rx="1.5"/><path d="M12 3v7m0 0-3-3m3 3 3-3"/>',
     mcq: '<circle cx="6" cy="6.5" r="2.5"/><circle cx="6" cy="17.5" r="2.5" fill="currentColor"/><path d="M11 6.5h10M11 17.5h10"/>',
     scenario: '<path d="M4 5h12a2 2 0 0 1 2 2v6a2 2 0 0 1-2 2H9l-4 3.5V15H4a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2z"/>',
+    image: '<rect x="3" y="4" width="18" height="16" rx="2.5"/><path d="m3 17 5-5 4 4 3-3 6 6"/><rect x="13" y="7" width="6" height="4" rx="1" fill="currentColor"/>',
   };
 
   const initial: Prefill | null = untrack(() => editing ?? prefill);
@@ -180,6 +182,10 @@
         {@const id = `f-${type}-${spec.key}`}
         {#if spec.kind === 'check'}
           <label class="check"><input type="checkbox" {id} bind:checked={drafts[type][spec.key] as boolean} />{spec.label}</label>
+        {:else if spec.kind === 'image'}
+          <ImageMasker bind:image={drafts[type].image as string} bind:masks={drafts[type].masks as string} imageError={errors.image ?? ''} masksError={errors.masks ?? ''} />
+        {:else if spec.kind === 'masks'}
+          <!-- Edited together with the image. -->
         {:else}
           <div class="field" class:invalid={!!errors[spec.key]}>
             <label for={id}>{spec.label}</label>
