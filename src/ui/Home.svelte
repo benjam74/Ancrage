@@ -1,12 +1,27 @@
 <script lang="ts">
   import type { Progress, Today } from '../app/services';
+  import { REPAIR_ROUNDS, dailyRing } from '../core/progress';
+  import { studyDayStart } from '../core/queue';
+  import { activeTheme, nextText } from './levels';
   import { inHowLong } from './format';
   import Icon from './Icon.svelte';
+  import Plan from './Plan.svelte';
+  import { prefs } from './prefs.svelte';
   import ThemePath from './ThemePath.svelte';
+  import WeekStrip from './WeekStrip.svelte';
 
   let { today, progress, onstart }: { today: Today; progress: Progress; onstart: () => void } = $props();
   const total = $derived(today.due + today.fresh);
   const RING = 2 * Math.PI * 42;
+  const ring = $derived(dailyRing(progress.answersToday, today.queue.length, prefs.dailyRounds));
+  const goalDone = $derived(progress.roundsToday >= prefs.dailyRounds || (progress.roundsToday > 0 && ring.done >= ring.target));
+  const ringShare = $derived(goalDone ? 1 : ring.done / ring.target);
+  const vsMax = $derived(Math.max(progress.xpWeek, progress.xpPrevAvg ?? 0, 1));
+  const focus = $derived(activeTheme(progress.themes));
+  const todayIndex = $derived(progress.week.findIndex((d) => d.dayStart === studyDayStart(Date.now())));
+  const repairDay = $derived(progress.repair && today.queue.length > 0 && todayIndex > 0 ? progress.week[todayIndex - 1].dayStart : null);
+  const days = (n: number) => `${n} jour${n > 1 ? 's' : ''}`;
+  const record = $derived(progress.xpPrevBest !== null && progress.xpWeek > progress.xpPrevBest);
 </script>
 
 <main class="page home">
@@ -16,9 +31,13 @@
       <h1>Ancrage</h1>
     </div>
     <div class="chips">
-      <span class="chip streak" class:off={progress.streak === 0} title="Série de jours"><Icon name="flame" />{progress.streak}<span class="sr">&nbsp;{progress.streak > 1 ? 'jours de série' : 'jour de série'}</span></span>
+      {#if prefs.showStreak}
+        <span class="chip streak" class:off={progress.streak === 0} title="Série de jours"><Icon name="flame" />{progress.streak}<span class="sr">&nbsp;{progress.streak > 1 ? 'jours de série' : 'jour de série'}</span></span>
+      {/if}
       <span class="chip xp" title="XP cette semaine"><Icon name="bolt" />{progress.xpWeek.toLocaleString('fr-FR')}<span class="sr">&nbsp;XP cette semaine</span></span>
-      <span class="chip freeze" title="Gels de série en réserve"><Icon name="snow" />{progress.freezes}<span class="sr">&nbsp;{progress.freezes > 1 ? 'gels' : 'gel'} en réserve</span></span>
+      {#if prefs.showStreak}
+        <span class="chip freeze" title="Gels de série en réserve"><Icon name="snow" />{progress.freezes}<span class="sr">&nbsp;{progress.freezes > 1 ? 'gels' : 'gel'} en réserve</span></span>
+      {/if}
     </div>
   </header>
 
@@ -26,30 +45,76 @@
     <div style="display:grid;gap:20px">
       <section class="hero" aria-labelledby="today-title">
         <div class="hero-head">
-          <svg class="ring" viewBox="0 0 100 100" role="img" aria-label={progress.todayDone ? 'Objectif du jour atteint' : 'Objectif du jour pas encore atteint'}>
+          <svg class="ring" viewBox="0 0 100 100" role="img" aria-label={goalDone ? 'Objectif du jour atteint' : `Objectif du jour : ${ring.done} cartes sur ${ring.target}`}>
             <circle class="track" cx="50" cy="50" r="42" />
-            <circle class="fill" cx="50" cy="50" r="42" stroke-dasharray={RING} stroke-dashoffset={progress.todayDone ? 0 : RING} />
-            <text x="50" y="58" text-anchor="middle">{progress.todayDone ? '1/1' : '0/1'}</text>
+            <circle class="fill" cx="50" cy="50" r="42" stroke-dasharray={RING} stroke-dashoffset={RING * (1 - ringShare)} />
+            {#if total === 0 && progress.answersToday === 0}
+              <text x="50" y="60" text-anchor="middle">–</text>
+            {:else if goalDone}
+              <text x="50" y="60" text-anchor="middle" style="font-size:30px">✓</text>
+            {:else}
+              <text x="50" y="54" text-anchor="middle">{ring.done}/{ring.target}</text>
+              <text class="ring-sub" x="50" y="70" text-anchor="middle">cartes</text>
+            {/if}
           </svg>
           <div>
-            <p class="eyebrow">Objectif du jour</p>
-            <h2 id="today-title">{progress.todayDone ? 'Objectif atteint' : total > 0 ? 'Séance du jour' : 'Rien à réviser'}</h2>
+            <p class="eyebrow">Objectif du jour{prefs.dailyRounds > 1 ? ` · ${prefs.dailyRounds} manches` : ''}</p>
+            <h2 id="today-title">{goalDone ? 'Objectif atteint' : total > 0 ? 'Séance du jour' : 'Rien à réviser'}</h2>
           </div>
         </div>
         {#if total > 0}
           <div class="hero-meta">
             <span><b>{today.due}</b> {today.due > 1 ? 'révisions dues' : 'révision due'}</span>
             <span><b>{today.fresh}</b> {today.fresh > 1 ? 'nouvelles cartes' : 'nouvelle carte'}</span>
-            <span>≈ <b>{Math.max(1, Math.ceil(total * 0.4))}</b> min</span>
+            <span>≈ <b>{Math.max(1, Math.ceil(Math.min(total, 10) * 0.4))}</b> min</span>
           </div>
-          <button class="btn sun wide" class:done={progress.todayDone} onclick={onstart}>{progress.todayDone ? 'Refaire une manche' : 'Commencer la séance'}</button>
+          <button class="btn sun wide" class:done={goalDone} onclick={onstart}>{progress.roundsToday > 0 ? 'Refaire une manche' : 'Commencer la séance'}</button>
         {:else}
           <p>{today.nextDue ? `Prochaine révision ${inHowLong(today.nextDue, Date.now())}.` : 'Ajoute des cartes pour commencer.'}</p>
-          {#if !progress.todayDone && progress.streak > 0}<p>Rien à réviser aujourd’hui : ta série est préservée.</p>{/if}
+          {#if prefs.showStreak && !progress.todayDone && progress.streak > 0}<p>Rien à réviser aujourd’hui : ta série est préservée.</p>{/if}
         {/if}
+        {#if focus && focus.level !== 'Nouveau' && focus.next}<p class="hero-xp">{focus.theme.name} : {nextText(focus).charAt(0).toLowerCase() + nextText(focus).slice(1)}</p>{/if}
         <p class="hero-xp">{progress.xpToday} XP aujourd’hui</p>
       </section>
-      <p class="muted">L’XP récompense les révisions faites à temps : 10 par carte due, 5 par nouvelle carte, 20 par manche. Réviser en avance ne rapporte rien. Un jour manqué consomme un gel s’il en reste : tu en gagnes un tous les 7 jours de série, 2 gels au maximum.</p>
+
+      {#if prefs.showStreak && progress.repair && today.queue.length > 0}
+        <section class="nudge" aria-labelledby="nudge-title">
+          <h3 id="nudge-title">Récupère ta série de {days(progress.repair.lost)}</h3>
+          <p>Elle s’est interrompue hier. Fais {REPAIR_ROUNDS} manches aujourd’hui et le jour manqué ne comptera plus.</p>
+          <div class="dots" role="img" aria-label="{progress.repair.rounds} manche sur {REPAIR_ROUNDS}">
+            {#each Array(REPAIR_ROUNDS) as _, i (i)}<i class:on={i < progress.repair.rounds}></i>{/each}
+          </div>
+        </section>
+      {:else if progress.freshStart || progress.comebackReady}
+        <section class="nudge" aria-labelledby="nudge-title">
+          <h3 id="nudge-title">{progress.freshStart === 'month' ? 'Nouveau mois, nouveau départ' : progress.freshStart === 'week' ? 'Nouvelle semaine, nouveau départ' : 'Bon retour !'}</h3>
+          {#if progress.comebackReady}<p>Ta première manche aujourd’hui rapporte 20 XP de plus.</p>{:else}<p>{prefs.showStreak ? 'Une manche suffit pour lancer une nouvelle série.' : 'Une manche suffit pour bien démarrer.'}</p>{/if}
+        </section>
+      {/if}
+
+      <section class="panel week-card" aria-labelledby="week-title">
+        <div class="row">
+          <h3 id="week-title">Cette semaine</h3>
+          {#if record}<span class="badge">Record</span>{/if}
+        </div>
+        {#if prefs.showStreak}<WeekStrip days={progress.week} best={progress.best} {repairDay} />{/if}
+        <div class="vs">
+          <div class="vs-row">
+            <span>{progress.xpWeek.toLocaleString('fr-FR')} XP</span>
+            {#if progress.xpPrevAvg !== null}<span class="muted">ta moyenne : {progress.xpPrevAvg.toLocaleString('fr-FR')} XP</span>{/if}
+          </div>
+          {#if progress.xpPrevAvg !== null}
+            <div class="vs-bar" role="img" aria-label="{progress.xpWeek} XP cette semaine, moyenne {progress.xpPrevAvg} XP">
+              <i style="width:{(progress.xpWeek / vsMax) * 100}%"></i>
+              <b style="left:calc({(progress.xpPrevAvg / vsMax) * 100}% - 1.5px)"></b>
+            </div>
+          {:else}
+            <p class="muted" style="font-size:14px">Dès la semaine prochaine, tu verras ta semaine comparée à ta moyenne.</p>
+          {/if}
+        </div>
+      </section>
+
+      <Plan />
     </div>
 
     <section aria-labelledby="path-title">

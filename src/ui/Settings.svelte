@@ -2,6 +2,7 @@
   import type { CloudSync } from '../app/cloud';
   import type { Services } from '../app/services';
   import SyncSettings from './SyncSettings.svelte';
+  import { prefs, updatePrefs } from './prefs.svelte';
   import { parseBackup, summarize, type Dump } from '../core/backup';
   import { RETENTION_MAX, RETENTION_MIN } from '../core/settings';
 
@@ -110,6 +111,24 @@
       <button class="btn">Enregistrer</button>
     </div>
   </form>
+
+  <section class="panel prefs" aria-labelledby="s-motivation">
+    <h2 id="s-motivation">Motivation</h2>
+    <p class="muted">Réglages de cet appareil.</p>
+    <div class="field">
+      <label for="s-goal">Objectif du jour</label>
+      <select id="s-goal" value={String(prefs.dailyRounds)} onchange={(e) => updatePrefs({ dailyRounds: Number(e.currentTarget.value) as 1 | 2 | 3 })} style="max-width:14em">
+        <option value="1">1 manche (10 cartes)</option>
+        <option value="2">2 manches (20 cartes)</option>
+        <option value="3">3 manches (30 cartes)</option>
+      </select>
+      <span class="hint">Ta série tient avec une seule manche, quel que soit l’objectif.</span>
+    </div>
+    <label class="check"><input type="checkbox" checked={prefs.sound} onchange={(e) => updatePrefs({ sound: e.currentTarget.checked })} />Sons</label>
+    <label class="check"><input type="checkbox" checked={prefs.haptics} onchange={(e) => updatePrefs({ haptics: e.currentTarget.checked })} />Vibrations (sur les téléphones qui le permettent)</label>
+    <label class="check"><input type="checkbox" checked={prefs.motion} onchange={(e) => updatePrefs({ motion: e.currentTarget.checked })} />Animations</label>
+    <label class="check"><input type="checkbox" checked={prefs.showStreak} onchange={(e) => updatePrefs({ showStreak: e.currentTarget.checked })} />Afficher la série</label>
+  </section>
 
   <SyncSettings {cloud} onsynced={async () => { onchange(); await load(); }} />
 

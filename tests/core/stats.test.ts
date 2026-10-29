@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import { State } from 'ts-fsrs';
-import { dailyCounts, forecast, mastery, retention, stateBreakdown } from '../../src/core/stats';
+import { dailyCounts, forecast, mastery, nextLevel, retention, stateBreakdown } from '../../src/core/stats';
 import { makeScheduler, type CardState } from '../../src/core/scheduler';
 import { studyDayStart } from '../../src/core/queue';
 import { DEFAULT_SETTINGS, type ReviewEntry } from '../../src/core/model';
@@ -78,5 +78,20 @@ describe('stateBreakdown', () => {
   test('counts new, learning, young and anchored cards', () => {
     const states = [fresh(), card(State.Learning, 0.5, NOW), card(State.Relearning, 2, NOW), young(), solid(), solid()];
     expect(stateBreakdown(states)).toEqual({ nouvelles: 1, apprentissage: 2, jeunes: 1, ancrees: 2 });
+  });
+});
+
+describe('nextLevel', () => {
+  test('cards left before the next level, on the exact share', () => {
+    expect(nextLevel(10, 2, true)).toEqual({ level: 'En cours', remaining: 1 });
+    expect(nextLevel(10, 3, true)).toEqual({ level: 'Solide', remaining: 3 });
+    expect(nextLevel(10, 6, true)).toEqual({ level: 'Ancré', remaining: 3 });
+    expect(nextLevel(10, 9, true)).toBeNull();
+    expect(nextLevel(7, 1, true)).toEqual({ level: 'En cours', remaining: 1 });
+  });
+
+  test('a theme never reviewed starts with Découverte; an empty theme has none', () => {
+    expect(nextLevel(6, 0, false)).toEqual({ level: 'Découverte', remaining: 0 });
+    expect(nextLevel(0, 0, false)).toBeNull();
   });
 });

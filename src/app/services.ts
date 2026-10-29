@@ -6,8 +6,8 @@ import { validateFields } from '../core/validate';
 import { validateSettings } from '../core/settings';
 import { backupFileName, serializeBackup, type Dump } from '../core/backup';
 import { mergeIntoLocal } from '../sync/sync';
-import { classifyEntries, goalDays, makeRestDayCheck, nextStudyDay, streakState, weekStart, xpBetween } from '../core/progress';
-import { dailyCounts, forecast, mastery, retention, stateBreakdown, type Level } from '../core/stats';
+import { classifyEntries, comebackRounds, goalDays, makeRestDayCheck, nextStudyDay, roundsPerDay, streakState, weekStart, weekStrip, xpBetween, type StripDay } from '../core/progress';
+import { dailyCounts, forecast, mastery, nextLevel, retention, stateBreakdown, type Level } from '../core/stats';
 import type { CardState } from '../core/scheduler';
 import { buildDailyQueue, countNewIntroduced, nextDue, studyDayStart, type QueueCandidate } from '../core/queue';
 import { makeScheduler } from '../core/scheduler';
@@ -44,7 +44,23 @@ export interface ThemeProgress {
   due: number;
   mastery: number;
   level: Level;
+  /** Next level and the mastered cards still needed; null once anchored or empty. */
+  next: { level: Level; remaining: number } | null;
 }
+
+export interface RoundOutcome {
+  xp: number;
+  streak: number;
+  firstGoalToday: boolean;
+  /** This round earned the comeback bonus. */
+  comeback: boolean;
+  /** This round repaired yesterday's missed day. */
+  repaired: boolean;
+  /** Streak milestone reached by this round (7, 30, 100, 365). */
+  milestone: number | null;
+}
+
+export const MILESTONES = [7, 30, 100, 365];
 
 export interface Progress {
   streak: number;
@@ -62,6 +78,21 @@ export interface Progress {
   /** Share of correct answers on due cards over the last 30 days. */
   retention: number | null;
   breakdown: ReturnType<typeof stateBreakdown>;
+  /** Longest streak ever reached. */
+  best: number;
+  /** Monday to Sunday of the current week. */
+  week: StripDay[];
+  /** Yesterday broke a streak that today can still repair with REPAIR_ROUNDS rounds. */
+  repair: { lost: number; rounds: number } | null;
+  /** The next round would earn the comeback bonus. */
+  comebackReady: boolean;
+  roundsToday: number;
+  answersToday: number;
+  /** XP per week over up to 4 previous weeks since the first round; null without any. */
+  xpPrevAvg: number | null;
+  xpPrevBest: number | null;
+  /** A lapsed learner back on a Monday or on the 1st of the month. */
+  freshStart: 'week' | 'month' | null;
 }
 
 export interface Services {
@@ -86,7 +117,7 @@ export interface Services {
   /** Merges a backup from another device into local data; nothing local is lost. */
   mergeBackup(dump: Dump): Promise<void>;
   /** Records a finished round; returns the XP it earned (answers since `startedAt` + round bonus). */
-  completeRound(startedAt: number, now: number): Promise<{ xp: number; streak: number; firstGoalToday: boolean }>;
+  completeRound(startedAt: number, now: number): Promise<RoundOutcome>;
 }
 
 const HEATMAP_DAYS = 20 * 7;
@@ -150,6 +181,11 @@ export function createServices(repo: Repo, deviceId: string): Services {
       settings.newPerDay,
     );
     return { themes, notes, active, reviews, roundEnds, scheduler, states, kinds, noteById, isRestDay };
+  }
+
+  function streakOf(snap: Awaited<ReturnType<typeof snapshot>>, roundEnds: number[], todayStart: number) {
+    const perDay = roundsPerDay(roundEnds);
+    return streakState(goalDays(roundEnds), todayStart, snap.isRestDay, (d) => perDay.get(d) ?? 0);
   }
 
   const services: Services = {
@@ -282,8 +318,18 @@ export function createServices(repo: Repo, deviceId: string): Services {
     async progress(now) {
       const snap = await snapshot();
       const todayStart = studyDayStart(now);
-      const streak = streakState(goalDays(snap.roundEnds), todayStart, snap.isRestDay);
+      const streak = streakOf(snap, snap.roundEnds, todayStart);
+      const bonus = comebackRounds(snap.roundEnds);
       const week = weekStart(now);
+      const prevWeeks: number[] = [];
+      if (snap.roundEnds.length) {
+        const first = weekStart(Math.min(...snap.roundEnds));
+        for (let w = weekStart(week - 12 * 3_600_000); w >= first && prevWeeks.length < 4; w = weekStart(w - 12 * 3_600_000)) {
+          prevWeeks.push(xpBetween(snap.reviews, snap.kinds, snap.roundEnds, w, weekStart(w + 8 * 86_400_000), bonus));
+        }
+      }
+      const date = new Date(todayStart);
+      const lapsed = streak.current === 0 && !streak.todayDone && snap.roundEnds.length > 0;
       const forecastDays = [todayStart];
       while (forecastDays.length < FORECAST_DAYS) forecastDays.push(nextStudyDay(forecastDays[forecastDays.length - 1]));
       const byTheme = new Map<string, CardState[]>();
@@ -298,21 +344,31 @@ export function createServices(repo: Repo, deviceId: string): Services {
         streak: streak.current,
         freezes: streak.freezes,
         todayDone: streak.todayDone,
-        xpToday: xpBetween(snap.reviews, snap.kinds, snap.roundEnds, todayStart, nextStudyDay(todayStart)),
-        xpWeek: xpBetween(snap.reviews, snap.kinds, snap.roundEnds, week, weekStart(week + 8 * 86_400_000)),
+        xpToday: xpBetween(snap.reviews, snap.kinds, snap.roundEnds, todayStart, nextStudyDay(todayStart), bonus),
+        xpWeek: xpBetween(snap.reviews, snap.kinds, snap.roundEnds, week, weekStart(week + 8 * 86_400_000), bonus),
         themes: [...snap.themes]
           .sort((a, b) => a.order - b.order)
           .map((theme) => {
             const states = byTheme.get(theme.id) ?? [];
             const m = mastery(states, now, snap.scheduler);
             const due = states.filter((c) => c.state !== State.New && c.due.getTime() <= now).length;
-            return { theme, cards: m.cards, due, mastery: m.pct, level: m.level };
+            const next = nextLevel(m.cards, m.mastered, m.level !== 'Nouveau');
+            return { theme, cards: m.cards, due, mastery: m.pct, level: m.level, next };
           }),
         heatmap: dailyCounts(snap.reviews, todayStart, HEATMAP_DAYS),
         forecast: forecast(allStates, now, FORECAST_DAYS),
         forecastDays,
         retention: retention(snap.reviews, snap.kinds, now - RETENTION_WINDOW),
         breakdown: stateBreakdown(allStates),
+        best: streak.best,
+        week: weekStrip(streak.history, todayStart, streak.todayDone),
+        repair: streak.repair,
+        comebackReady: comebackRounds([...snap.roundEnds, now]).includes(now),
+        roundsToday: snap.roundEnds.filter((ts) => studyDayStart(ts) === todayStart).length,
+        answersToday: snap.reviews.filter((e) => studyDayStart(e.ts) === todayStart).length,
+        xpPrevAvg: prevWeeks.length ? Math.round(prevWeeks.reduce((a, b) => a + b, 0) / prevWeeks.length) : null,
+        xpPrevBest: prevWeeks.length ? Math.max(...prevWeeks) : null,
+        freshStart: !lapsed ? null : date.getDate() === 1 ? 'month' : date.getDay() === 1 ? 'week' : null,
       };
     },
 
@@ -338,10 +394,17 @@ export function createServices(repo: Repo, deviceId: string): Services {
       const firstGoalToday = !goalDays(before.roundEnds).includes(todayStart);
       await repo.appendEvent({ id: newId(now), type: 'round_completed', ts: now });
       const roundEnds = [...before.roundEnds, now];
+      const prev = streakOf(before, before.roundEnds, todayStart);
+      const after = streakOf(before, roundEnds, todayStart);
+      const comeback = comebackRounds(roundEnds).includes(now);
+      const yesterday = studyDayStart(todayStart - 12 * 3_600_000);
       return {
-        xp: xpBetween(before.reviews, before.kinds, [now], startedAt, now + 1),
-        streak: streakState(goalDays(roundEnds), todayStart, before.isRestDay).current,
+        xp: xpBetween(before.reviews, before.kinds, [now], startedAt, now + 1, comeback ? [now] : []),
+        streak: after.current,
         firstGoalToday,
+        comeback,
+        repaired: after.history.get(yesterday) === 'repaired' && prev.history.get(yesterday) !== 'repaired',
+        milestone: after.current !== prev.current && MILESTONES.includes(after.current) ? after.current : null,
       };
     },
 

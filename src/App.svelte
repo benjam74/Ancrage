@@ -11,6 +11,7 @@
   import Settings from './ui/Settings.svelte';
   import { registerSW } from 'virtual:pwa-register';
   import Session from './ui/Session.svelte';
+  import { prefs } from './ui/prefs.svelte';
 
   const VIEWS = ['accueil', 'creer', 'progres', 'bibliotheque', 'reglages'] as const;
   type View = (typeof VIEWS)[number];
@@ -39,6 +40,10 @@
       if (inSession) reloadAfterSession = true;
       else location.reload();
     },
+  });
+
+  $effect(() => {
+    document.documentElement.dataset.motion = prefs.motion ? 'on' : 'off';
   });
 
   async function refresh() {

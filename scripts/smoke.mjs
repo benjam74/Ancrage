@@ -27,7 +27,12 @@ async function playRound(page) {
   for (let step = 0; step < 40; step++) {
     if (await page.getByText('Manche terminée').isVisible()) return step;
     const cont = page.getByRole('button', { name: 'Continuer' });
-    if (await cont.isVisible()) { await cont.click(); await cont.waitFor({ state: 'hidden' }); continue; }
+    if (await cont.isVisible()) {
+      await cont.click();
+      // The round end has its own « Continuer »: stop there.
+      await Promise.race([cont.waitFor({ state: 'hidden' }), page.getByText('Manche terminée').waitFor()]);
+      continue;
+    }
     const reveal = page.getByRole('button', { name: 'Afficher la réponse' });
     if (await reveal.isVisible()) {
       await reveal.click();
@@ -55,6 +60,14 @@ async function playRound(page) {
   fail('round did not finish within 40 steps');
 }
 
+/** Leaves the round end: summary, then the streak screen when shown, then exit. */
+async function leaveRound(p) {
+  const cont = p.getByRole('button', { name: 'Continuer' });
+  if (await cont.isVisible()) { await cont.click(); await p.locator('.streak-hero').waitFor(); }
+  const end = p.getByRole('button', { name: /Terminer|Manche suivante/ });
+  if ((await end.innerText()).includes('Terminer')) await end.click(); else await p.keyboard.press('Escape');
+}
+
 await waitForServer();
 const browser = await chromium.launch();
 const errors = [];
@@ -72,20 +85,26 @@ await page.locator('.hero .btn').click();
 await page.locator('.s-inner').first().waitFor();
 await page.screenshot({ path: `${OUT}/exercise.png` });
 const steps = await playRound(page);
-await page.getByText('Série : 1 jour.').waitFor({ timeout: 3000 }).catch(() => fail('round end should show « Série : 1 jour. »'));
 await page.getByLabel('45 XP').waitFor({ timeout: 3000 }).catch(() => fail('round end should show 45 XP'));
+if (!/\d+\/\d+/.test(await page.locator('.stat-tile').nth(1).innerText())) fail('round end should show « Justes x/y »');
 await page.waitForTimeout(1200);
 await page.screenshot({ path: `${OUT}/round-end.png` });
-
+await page.getByRole('button', { name: 'Continuer' }).click();
+await page.locator('.streak-hero').waitFor({ timeout: 3000 }).catch(() => fail('the streak screen should follow the summary'));
+if ((await page.locator('.streak-hero .n').innerText()) !== '1') fail('streak screen should show 1 day');
+await page.getByText('Journée validée.').waitFor();
+if ((await page.locator('.end .wd.done').count()) !== 1) fail('streak screen week strip should show today done');
+await page.waitForTimeout(600);
+await page.screenshot({ path: `${OUT}/round-streak.png` });
 const finish = page.getByRole('button', { name: /Terminer|Manche suivante/ });
 if ((await finish.innerText()).includes('Terminer')) await finish.click(); else await page.keyboard.press('Escape');
 const checkMotivation = async (when) => {
   await page.locator('.chip.streak').waitFor();
-  await page.waitForFunction(() => document.querySelector('.ring text')?.textContent === '1/1', null, { timeout: 3000 }).catch(() => {});
   const streak = (await page.locator('.chip.streak').innerText()).replace(/\s+/g, ' ');
   const xp = (await page.locator('.chip.xp').innerText()).replace(/\s+/g, ' ');
-  const ring = await page.locator('.ring text').textContent();
-  if (!streak.startsWith('1') || !xp.startsWith('45') || ring !== '1/1') fail(`${when}: expected streak 1, 45 XP, ring 1/1; got "${streak}", "${xp}", "${ring}"`);
+  const ring = await page.locator('.ring').getAttribute('aria-label');
+  if (!streak.startsWith('1') || !xp.startsWith('45') || ring !== 'Objectif du jour atteint') fail(`${when}: expected streak 1, 45 XP, goal reached; got "${streak}", "${xp}", "${ring}"`);
+  if ((await page.locator('.week-card .wd.done').count()) !== 1) fail(`${when}: the week strip should show today done`);
 };
 await checkMotivation('home after round');
 await page.reload();
@@ -136,8 +155,7 @@ if (!/2\s+nouvelles cartes/.test(mine)) fail(`expected the 2 new cards of my not
 await page.locator('.hero .btn').click();
 await page.locator('.s-inner').first().waitFor();
 await playRound(page);
-const end = page.getByRole('button', { name: /Terminer|Manche suivante/ });
-if ((await end.innerText()).includes('Terminer')) await end.click(); else await page.keyboard.press('Escape');
+await leaveRound(page);
 
 await page.reload();
 await page.goto(`${URL}#bibliotheque`);
@@ -254,7 +272,7 @@ await devA.goto(URL);
 await devA.locator('.hero .btn').click();
 await devA.locator('.s-inner').first().waitFor();
 await playRound(devA);
-await devA.getByRole('button', { name: /Terminer|Manche suivante/ }).click().catch(() => devA.keyboard.press('Escape'));
+await leaveRound(devA);
 await fillSync(devA);
 await devA.getByRole('button', { name: 'Créer le compte' }).click();
 await devA.getByText('Connecté : benjamin@exemple.fr').waitFor({ timeout: 5000 }).catch(async () => fail(`sync sign-up failed: ${(await devA.locator('main').innerText()).slice(-300)}`));
@@ -279,7 +297,7 @@ await devC.goto(URL);
 await devC.locator('.hero .btn').click();
 await devC.locator('.s-inner').first().waitFor();
 await playRound(devC);
-await devC.getByRole('button', { name: /Terminer|Manche suivante/ }).click().catch(() => devC.keyboard.press('Escape'));
+await leaveRound(devC);
 const reviewsC = await countReviews(devC);
 await devA.goto(`${URL}#reglages`);
 const [fileA] = await Promise.all([devA.waitForEvent('download'), devA.getByRole('button', { name: 'Télécharger une sauvegarde' }).click()]);
@@ -344,6 +362,42 @@ if (aiSaved.some((n) => n.q === 'Quel est le but du recadrage ?')) fail('the une
 if (!aiSaved.every((n) => n.source === 'Module 3')) fail('generated notes should keep the source title');
 if (aiCalls !== 1) fail(`expected exactly 1 API call, got ${aiCalls}`);
 
+// --- v1.3: motivation settings, plan, a fresh home before any round ---
+const fresh13 = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+fresh13.on('pageerror', (e) => errors.push(`v1.3: ${e.message}`));
+await fresh13.goto(URL);
+await fresh13.locator('.hero').waitFor();
+if ((await fresh13.locator('.ring').getAttribute('aria-label')) !== 'Objectif du jour : 0 cartes sur 5') fail(`fresh ring should read 0/5, got ${await fresh13.locator('.ring').getAttribute('aria-label')}`);
+if ((await fresh13.locator('.week-card .wd.today').count()) !== 1) fail('fresh week strip should mark today');
+await fresh13.screenshot({ path: `${OUT}/home-fresh.png`, fullPage: true });
+await app.goto(`${URL}#accueil`);
+await app.getByRole('button', { name: 'Fixer un rendez-vous' }).click();
+await app.getByLabel('Heure').fill('07:30');
+await app.getByLabel('Moment').fill('après le café');
+await app.getByRole('button', { name: 'Fixer le rendez-vous' }).click();
+await app.getByText('Chaque jour à 7 h 30').waitFor({ timeout: 3000 }).catch(() => fail('the plan should be shown once set'));
+const [ics] = await Promise.all([app.waitForEvent('download'), app.getByRole('button', { name: 'Ajouter à mon agenda' }).click()]);
+const icsPath = `${OUT}/${ics.suggestedFilename()}`;
+await ics.saveAs(icsPath);
+const icsText = (await import('node:fs')).readFileSync(icsPath, 'utf8');
+if (!icsText.includes('RRULE:FREQ=DAILY') || !icsText.includes('T073000') || !icsText.includes('après le café')) fail('calendar file is wrong');
+await app.reload();
+await app.getByText('Chaque jour à 7 h 30').waitFor({ timeout: 3000 }).catch(() => fail('the plan should persist'));
+await app.goto(`${URL}#reglages`);
+await app.getByLabel('Sons').uncheck();
+await app.getByLabel('Afficher la série').uncheck();
+await app.getByLabel('Objectif du jour').selectOption('2');
+await app.reload();
+await app.getByRole('heading', { name: 'Motivation' }).waitFor();
+if (await app.getByLabel('Sons').isChecked()) fail('sound off should persist');
+if ((await app.getByLabel('Objectif du jour').inputValue()) !== '2') fail('daily goal should persist');
+await app.goto(`${URL}#accueil`);
+await app.locator('.hero').waitFor();
+if ((await app.locator('.chip.streak').count()) || (await app.locator('.week-days').count())) fail('hidden streak should hide chips and strip');
+if (!(await app.locator('.hero .eyebrow').textContent()).includes('2 manches')) fail('home should show the 2-round goal');
+await app.goto(`${URL}#reglages`);
+await app.getByLabel('Afficher la série').check();
+
 const mobile = await browser.newPage({ viewport: { width: 390, height: 844 }, colorScheme: 'dark' });
 mobile.on('pageerror', (e) => errors.push(e.message));
 await mobile.goto(URL);
@@ -354,6 +408,8 @@ for (const view of ['accueil', 'creer', 'progres', 'bibliotheque', 'reglages']) 
   await mobile.waitForTimeout(300);
   const width = await mobile.evaluate(() => document.documentElement.scrollWidth);
   if (width > 390) fail(`horizontal scroll on mobile #${view}: ${width}px`);
+  const clipped = await mobile.evaluate(() => [...document.querySelectorAll('.nav a')].filter((a) => a.scrollWidth > a.clientWidth + 1 || a.getBoundingClientRect().right > innerWidth).map((a) => a.textContent));
+  if (clipped.length) fail(`mobile nav labels clipped on #${view}: ${clipped.join(', ')}`);
 }
 await mobile.goto(`${URL}#progres`);
 await mobile.waitForTimeout(300);

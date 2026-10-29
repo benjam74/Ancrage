@@ -1,11 +1,11 @@
 <script lang="ts">
   import type { ThemeProgress } from '../app/services';
-  import { LEVEL_COLORS } from './levels';
+  import { LEVEL_COLORS, activeTheme, nextText } from './levels';
 
   let { themes, onstart }: { themes: ThemeProgress[]; onstart: () => void } = $props();
   const R = 35;
   const C = 2 * Math.PI * R;
-  const activeId = $derived(themes.find((t) => t.cards > 0 && t.level !== 'Ancré')?.theme.id);
+  const activeId = $derived(activeTheme(themes)?.theme.id);
   let open = $state<string | null>(null);
   const selected = $derived(themes.find((t) => t.theme.id === (open ?? activeId)));
 </script>
@@ -31,6 +31,7 @@
         </span>
         <span class="name">{t.theme.name}</span>
         <span class="lvl-label">{t.level} · {t.mastery} %</span>
+        {#if t.level !== 'Nouveau' || t.theme.id === activeId}{#if nextText(t)}<span class="lvl-label next">{nextText(t)}</span>{/if}{/if}
       </button>
     </div>
   {/each}
@@ -42,6 +43,9 @@
     <div class="row"><h3>{selected.theme.name}</h3><span class="pill">{selected.level}</span></div>
     <div class="bar" style="--c:var({c})"><i style="width:{selected.mastery}%"></i></div>
     <p class="muted">{selected.mastery} % maîtrisé · {selected.cards} carte{selected.cards > 1 ? 's' : ''} · {selected.due} à réviser aujourd’hui</p>
+    {#if selected.next && selected.level !== 'Nouveau'}
+      <p><b>{nextText(selected)}.</b> Une carte compte comme maîtrisée quand elle tient au moins 3 semaines.</p>
+    {/if}
     {#if selected.cards === 0}
       <a class="btn ghost" href="#creer">Créer les premières cartes</a>
     {:else if selected.due > 0}

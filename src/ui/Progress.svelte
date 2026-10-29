@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { Progress } from '../app/services';
+  import { prefs } from './prefs.svelte';
 
   let { progress }: { progress: Progress } = $props();
 
@@ -40,12 +41,30 @@
       <span class="v">{progress.breakdown.ancrees} / {total}</span>
       <span class="muted">Stabilité d’au moins 21 jours.</span>
     </div>
-    <div class="panel kpi">
-      <span class="eyebrow">Série</span>
-      <span class="v">{progress.streak} jour{progress.streak > 1 ? 's' : ''}</span>
-      <span class="muted">{progress.freezes} gel{progress.freezes > 1 ? 's' : ''} en réserve · {progress.xpWeek.toLocaleString('fr-FR')} XP cette semaine.</span>
-    </div>
+    {#if prefs.showStreak}
+      <div class="panel kpi">
+        <span class="eyebrow">Série</span>
+        <span class="v">{progress.streak} jour{progress.streak > 1 ? 's' : ''}</span>
+        <span class="muted">{progress.freezes} gel{progress.freezes > 1 ? 's' : ''} en réserve · {progress.xpWeek.toLocaleString('fr-FR')} XP cette semaine.</span>
+      </div>
+    {:else}
+      <div class="panel kpi">
+        <span class="eyebrow">Cette semaine</span>
+        <span class="v">{progress.xpWeek.toLocaleString('fr-FR')} XP</span>
+        <span class="muted">{progress.xpPrevAvg !== null ? `Ta moyenne : ${progress.xpPrevAvg.toLocaleString('fr-FR')} XP.` : 'Première semaine.'}</span>
+      </div>
+    {/if}
   </div>
+
+  <section class="panel">
+    <h3>Comment ça marche</h3>
+    <ul class="keys">
+      <li><b>XP</b> : 10 par carte due, 5 par nouvelle carte, 20 par manche finie. Réviser en avance ne rapporte rien : l’XP récompense ce qui fait mémoriser.</li>
+      {#if prefs.showStreak}<li><b>Série</b> : une manche par jour suffit. Un jour manqué consomme un gel s’il en reste (un gagné tous les 7 jours, 2 au plus). Sinon, 2 manches le lendemain récupèrent la série.</li>{/if}
+      <li><b>Retour</b> : après au moins 3 jours d’absence, ta première manche rapporte 20 XP de plus.</li>
+      <li><b>Habitude</b> : il faut en moyenne deux mois de pratique régulière pour qu’elle tienne seule. Un jour manqué de temps en temps ne l’empêche pas.</li>
+    </ul>
+  </section>
 
   <section class="panel">
     <h3>Régularité, 20 dernières semaines</h3>
