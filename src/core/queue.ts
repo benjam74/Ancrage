@@ -51,3 +51,35 @@ export function nextDue(candidates: QueueCandidate[], now: number): number | nul
   const future = candidates.filter((c) => !isNew(c) && dueAt(c) > now).map(dueAt);
   return future.length ? Math.min(...future) : null;
 }
+
+export type CustomMode = 'due' | 'new' | 'practice';
+export interface CustomChoice {
+  themeIds: string[];
+  mode: CustomMode;
+  /** Cards at most; Infinity for all. */
+  limit: number;
+}
+
+/**
+ * A session the learner picks: due cards of some themes, new cards beyond the daily limit,
+ * or free practice on cards already seen, the most forgotten first.
+ */
+export function buildCustomQueue(
+  candidates: QueueCandidate[],
+  now: number,
+  choice: CustomChoice,
+  retrievability: (c: QueueCandidate) => number,
+): string[] {
+  const themes = new Set(choice.themeIds);
+  const chosen = candidates.filter((c) => themes.has(c.themeId));
+  // Due cards: same order as the daily queue, without new cards.
+  if (choice.mode === 'due') return buildDailyQueue(chosen, now, 0).slice(0, choice.limit);
+  let picked: QueueCandidate[];
+  if (choice.mode === 'new') {
+    picked = chosen.filter(isNew).sort((a, b) => a.themeOrder - b.themeOrder || a.noteCreatedAt - b.noteCreatedAt || a.cardId.localeCompare(b.cardId));
+  } else {
+    const r = new Map(chosen.map((c) => [c.cardId, retrievability(c)]));
+    picked = chosen.filter((c) => !isNew(c)).sort((a, b) => r.get(a.cardId)! - r.get(b.cardId)! || dueAt(a) - dueAt(b) || a.cardId.localeCompare(b.cardId));
+  }
+  return picked.slice(0, choice.limit).map((c) => c.cardId);
+}

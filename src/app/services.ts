@@ -9,7 +9,7 @@ import { mergeIntoLocal } from '../sync/sync';
 import { classifyEntries, comebackRounds, goalDays, makeRestDayCheck, nextStudyDay, roundsPerDay, streakState, weekStart, weekStrip, xpBetween, type StripDay } from '../core/progress';
 import { dailyCounts, forecast, mastery, nextLevel, retention, stateBreakdown, type Level } from '../core/stats';
 import type { CardState } from '../core/scheduler';
-import { buildDailyQueue, countNewIntroduced, nextDue, studyDayStart, type QueueCandidate } from '../core/queue';
+import { buildCustomQueue, buildDailyQueue, countNewIntroduced, nextDue, studyDayStart, type CustomChoice, type QueueCandidate } from '../core/queue';
 import { makeScheduler } from '../core/scheduler';
 import { STARTER_THEMES, starterNotes } from '../data/starter';
 import { createDexieRepo } from '../storage/dexie-repo';
@@ -44,6 +44,8 @@ export interface ThemeProgress {
   due: number;
   mastery: number;
   level: Level;
+  /** Cards never studied yet. */
+  fresh: number;
   /** Next level and the mastered cards still needed; null once anchored or empty. */
   next: { level: Level; remaining: number } | null;
 }
@@ -99,6 +101,8 @@ export interface Services {
   repo: Repo;
   engine: Engine;
   today(now: number): Promise<Today>;
+  /** A session the learner picks (themes, mode, count); ignores the daily new-card limit. */
+  custom(now: number, choice: CustomChoice): Promise<string[]>;
   context(cardId: string): Promise<{ note: Note; card: Card; pool: Note[]; theme: Theme }>;
   saveNote(input: NoteInput, now: number): Promise<SaveResult>;
   deleteNote(id: string): Promise<void>;
@@ -188,40 +192,55 @@ export function createServices(repo: Repo, deviceId: string): Services {
     return streakState(goalDays(roundEnds), todayStart, snap.isRestDay, (d) => perDay.get(d) ?? 0);
   }
 
+  /** Every active card with its replayed state, for building queues. */
+  async function candidatesNow() {
+    const [themes, notes, cards, reviews, settings] = await Promise.all([
+      repo.listThemes(),
+      repo.listNotes(),
+      repo.listCards(),
+      repo.listReviews(),
+      repo.getSettings(),
+    ]);
+    const scheduler = makeScheduler(settings);
+    const themeOrder = new Map(themes.map((t) => [t.id, t.order]));
+    const noteById = new Map(notes.map((n) => [n.id, n]));
+    const logByCard = new Map<string, ReviewEntry[]>();
+    for (const e of reviews) {
+      const list = logByCard.get(e.cardId);
+      if (list) list.push(e);
+      else logByCard.set(e.cardId, [e]);
+    }
+
+    const candidates: QueueCandidate[] = cards.flatMap((card) => {
+      const note = noteById.get(card.noteId);
+      if (!note || card.orphan) return [];
+      return [{
+        cardId: card.id,
+        themeId: note.themeId,
+        themeOrder: themeOrder.get(note.themeId) ?? Number.MAX_SAFE_INTEGER,
+        noteCreatedAt: note.createdAt,
+        state: scheduler.replay(note.createdAt, logByCard.get(card.id) ?? []),
+      }];
+    });
+    return { candidates, reviews, settings, scheduler };
+  }
+
   const services: Services = {
     repo,
     engine,
 
     async today(now) {
-      const [themes, notes, cards, reviews, settings] = await Promise.all([
-        repo.listThemes(),
-        repo.listNotes(),
-        repo.listCards(),
-        repo.listReviews(),
-        repo.getSettings(),
-      ]);
-      const scheduler = makeScheduler(settings);
-      const themeOrder = new Map(themes.map((t) => [t.id, t.order]));
-      const noteById = new Map(notes.map((n) => [n.id, n]));
-      const logByCard = new Map<string, ReviewEntry[]>();
-      for (const e of reviews) logByCard.set(e.cardId, [...(logByCard.get(e.cardId) ?? []), e]);
-
-      const candidates: QueueCandidate[] = cards.flatMap((card) => {
-        const note = noteById.get(card.noteId);
-        if (!note || card.orphan) return [];
-        return [{
-          cardId: card.id,
-          themeId: note.themeId,
-          themeOrder: themeOrder.get(note.themeId) ?? Number.MAX_SAFE_INTEGER,
-          noteCreatedAt: note.createdAt,
-          state: scheduler.replay(note.createdAt, logByCard.get(card.id) ?? []),
-        }];
-      });
+      const { candidates, reviews, settings } = await candidatesNow();
       const newLimit = settings.newPerDay - countNewIntroduced(reviews, studyDayStart(now));
       const queue = buildDailyQueue(candidates, now, newLimit);
       const isNew = new Set(candidates.filter((c) => c.state.state === State.New).map((c) => c.cardId));
       const fresh = queue.filter((id) => isNew.has(id)).length;
       return { queue, due: queue.length - fresh, fresh, nextDue: nextDue(candidates, now) };
+    },
+
+    async custom(now, choice) {
+      const { candidates, scheduler } = await candidatesNow();
+      return buildCustomQueue(candidates, now, choice, (c) => scheduler.retrievability(c.state, now));
     },
 
     async context(cardId) {
@@ -353,7 +372,8 @@ export function createServices(repo: Repo, deviceId: string): Services {
             const m = mastery(states, now, snap.scheduler);
             const due = states.filter((c) => c.state !== State.New && c.due.getTime() <= now).length;
             const next = nextLevel(m.cards, m.mastered, m.level !== 'Nouveau');
-            return { theme, cards: m.cards, due, mastery: m.pct, level: m.level, next };
+            const fresh = states.filter((c) => c.state === State.New).length;
+            return { theme, cards: m.cards, due, fresh, mastery: m.pct, level: m.level, next };
           }),
         heatmap: dailyCounts(snap.reviews, todayStart, HEATMAP_DAYS),
         forecast: forecast(allStates, now, FORECAST_DAYS),

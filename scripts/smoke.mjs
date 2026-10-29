@@ -202,7 +202,7 @@ await app.getByRole('button', { name: 'Enregistrer' }).click();
 await app.getByText('Réglages enregistrés.').waitFor({ timeout: 3000 }).catch(() => fail('saving the slider value should confirm'));
 await app.getByLabel('Nouvelles cartes par jour').fill('12,5');
 await app.getByRole('button', { name: 'Enregistrer' }).click();
-await app.getByText('Le nombre de nouvelles cartes doit être un entier entre 0 et 50.').waitFor({ timeout: 3000 }).catch(() => fail('invalid setting should be refused'));
+await app.getByText('Le nombre de nouvelles cartes doit être un entier entre 0 et 200.').waitFor({ timeout: 3000 }).catch(() => fail('invalid setting should be refused'));
 await app.getByLabel('Nouvelles cartes par jour').fill('8');
 await app.getByRole('button', { name: 'Enregistrer' }).click();
 await app.getByText('Réglages enregistrés.').waitFor();

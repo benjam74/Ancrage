@@ -20,10 +20,10 @@ describe('validateSettings', () => {
     if (!res.ok) expect(res.errors.desiredRetention).toMatch(/entre 0,70 et 0,97/);
   });
 
-  test.each(['12.5', '-1', '51', 'x'])('rejects new cards per day %s', (value) => {
+  test.each(['12.5', '-1', '201', 'x'])('rejects new cards per day %s', (value) => {
     const res = validateSettings({ desiredRetention: '0.9', newPerDay: value });
     expect(res.ok).toBe(false);
-    if (!res.ok) expect(res.errors.newPerDay).toMatch(/entier entre 0 et 50/);
+    if (!res.ok) expect(res.errors.newPerDay).toMatch(/entier entre 0 et 200/);
   });
 });
 
