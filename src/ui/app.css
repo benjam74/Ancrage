@@ -253,3 +253,7 @@ input[type="range"] { accent-color: var(--petrol); padding-inline: 0; }
 .row2 { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr); gap: 12px; }
 @media (max-width: 520px) { .row2 { grid-template-columns: minmax(0,1fr); } }
 p.error { font-weight: 700; color: var(--bad); }
+.proposal { border-top: 2px solid var(--line); padding-top: 14px; }
+.tabs { display: flex; gap: 8px; max-width: 1080px; margin: 24px auto 0; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+.tabs button { border: 2px solid var(--line); background: var(--surface); border-radius: 12px; padding: 8px 14px; font-family: var(--display); font-weight: 800; color: var(--ink-soft); }
+.tabs button[aria-pressed="true"] { border-color: var(--petrol); color: var(--petrol); }
