@@ -6,6 +6,15 @@
   let { progress, preselect = null, onstart }: { progress: Progress; preselect?: string | null; onstart: (choice: CustomChoice) => void } = $props();
 
   const withCards = $derived(progress.themes.filter((t) => t.cards > 0));
+  // Grouped by domain, in the domains' order; themes outside any domain last.
+  const sections = $derived([
+    ...progress.domains.map((d) => ({ id: d.id, name: d.name, themes: withCards.filter((t) => t.theme.parentId === d.id) })),
+    { id: '__loose', name: 'Sans domaine', themes: withCards.filter((t) => !progress.domains.some((d) => d.id === t.theme.parentId)) },
+  ].filter((s) => s.themes.length));
+  const allIn = (ids: string[]) => ids.every((id) => picked.includes(id));
+  function toggleSection(ids: string[]) {
+    picked = allIn(ids) ? picked.filter((x) => !ids.includes(x)) : [...new Set([...picked, ...ids])];
+  }
   // Start from the theme asked for, or from every theme.
   let picked = $state<string[]>(
     untrack(() => (preselect && withCards.some((t) => t.theme.id === preselect) ? [preselect] : withCards.map((t) => t.theme.id))),
@@ -58,15 +67,21 @@
           <button class="btn small ghost" onclick={() => (picked = [])}>Aucun</button>
         </div>
       </div>
-      <div class="pick-list">
-        {#each withCards as t (t.theme.id)}
-          <label class="check pick">
-            <input type="checkbox" checked={picked.includes(t.theme.id)} onchange={() => toggle(t.theme.id)} />
-            <span class="pick-name">{t.theme.name}</span>
-            <span class="muted pick-meta">{t.due} à réviser · {t.fresh} nouvelle{t.fresh > 1 ? 's' : ''} · {t.cards - t.fresh} vue{t.cards - t.fresh > 1 ? 's' : ''}</span>
-          </label>
-        {/each}
-      </div>
+      {#each sections as sec (sec.id)}
+        {@const ids = sec.themes.map((t) => t.theme.id)}
+        <div class="pick-list">
+          {#if sections.length > 1}
+            <label class="check pick-domain"><input type="checkbox" checked={allIn(ids)} onchange={() => toggleSection(ids)} /><b>{sec.name}</b><span class="muted">tout le domaine</span></label>
+          {/if}
+          {#each sec.themes as t (t.theme.id)}
+            <label class="check pick">
+              <input type="checkbox" checked={picked.includes(t.theme.id)} onchange={() => toggle(t.theme.id)} />
+              <span class="pick-name">{t.theme.name}</span>
+              <span class="muted pick-meta">{t.due} à réviser · {t.fresh} nouvelle{t.fresh > 1 ? 's' : ''} · {t.cards - t.fresh} vue{t.cards - t.fresh > 1 ? 's' : ''}</span>
+            </label>
+          {/each}
+        </div>
+      {/each}
     </section>
 
     <section class="panel" aria-labelledby="c-mode">

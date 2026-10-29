@@ -12,9 +12,11 @@ export interface Prefs {
   goal: string | null;
   /** Chapter the character stood on at the last visit, to animate its walk to the next one. */
   lastChapter: string | null;
+  /** Domain shown on the home path. */
+  domain: string | null;
 }
 
-export const DEFAULT_PREFS: Prefs = { sound: true, haptics: true, motion: true, showStreak: true, dailyRounds: 1, plan: null, goal: null, lastChapter: null };
+export const DEFAULT_PREFS: Prefs = { sound: true, haptics: true, motion: true, showStreak: true, dailyRounds: 1, plan: null, goal: null, lastChapter: null, domain: null };
 
 const KEY = 'ancrage.prefs';
 const TIME = /^([01]\d|2[0-3]):[0-5]\d$/;
@@ -44,6 +46,7 @@ export function loadPrefs(store: KeyValue): Prefs {
     plan: parsePlan(r.plan),
     goal: typeof r.goal === 'string' ? r.goal : null,
     lastChapter: typeof r.lastChapter === 'string' ? r.lastChapter : null,
+    domain: typeof r.domain === 'string' ? r.domain : null,
   };
 }
 

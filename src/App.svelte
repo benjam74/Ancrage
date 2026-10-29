@@ -2,7 +2,9 @@
   import { boot, type Progress as ProgressData, type Services, type ShopState, type Today } from './app/services';
   import Shop from './ui/Shop.svelte';
   import { createCloudSync, type CloudSync } from './app/cloud';
-  import { currentProfile, profileStore } from './app/current';
+  import { currentProfile, profileCount, profileStore } from './app/current';
+  import { chosenThisTab } from './ui/faces';
+  import WhoReviews from './ui/WhoReviews.svelte';
   import type { Note } from './core/model';
   import Editor from './ui/Editor.svelte';
   import Generate from './ui/Generate.svelte';
@@ -102,6 +104,10 @@
     if (res.state === 'ok' && !inSession) await refresh();
   }
 
+  // With several profiles, the tab opens on « Qui révise ? » before loading anyone's data.
+  const mustPick = profileCount > 1 && !chosenThisTab();
+  let picking = $state(mustPick);
+  const start = () =>
   boot(currentProfile)
     .then(async (s) => {
       services = s;
@@ -110,12 +116,15 @@
       void syncInBackground();
     })
     .catch((e) => (error = String(e)));
+  if (!mustPick) start();
 </script>
 
 <svelte:document onvisibilitychange={() => { if (document.visibilityState === 'visible' && Date.now() - lastSync > 60_000) void syncInBackground(); }} />
 <svelte:window onhashchange={() => { view = fromHash(); if (view !== 'creer') editing = null; if (view !== 'reviser') { preselect = null; customEmpty = ''; } window.scrollTo(0, 0); }} />
 
-{#if error}
+{#if picking}
+  <WhoReviews current={currentProfile.id} onkeep={() => { picking = false; start(); }} />
+{:else if error}
   <main class="page"><h1>Ancrage</h1><p>Impossible d’ouvrir la base locale : {error}</p></main>
 {:else if services && today && progress && shop}
   {#if inSession}

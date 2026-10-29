@@ -6,6 +6,7 @@
   import Editor from './Editor.svelte';
   import { TYPE_LABEL } from './format';
   import Preview from './Preview.svelte';
+  import { groupByDomain, isDomain } from '../core/domains';
 
   let { services, onchange }: { services: Services; onchange: () => void } = $props();
 
@@ -14,6 +15,7 @@
   const KEY_NAME = 'ancrage.ai.key';
 
   let themes = $state<Theme[]>([]);
+  let allThemes = $state<Theme[]>([]);
   let themeId = $state('');
   let sourceTitle = $state('');
   let source = $state('');
@@ -34,8 +36,9 @@
   const sourceLabel = $derived(sourceTitle.trim() || 'Texte collé');
 
   async function loadThemes() {
-    themes = [...(await services.repo.listThemes())].sort((a, b) => a.order - b.order);
-    if (!themes.some((t) => t.id === themeId)) themeId = themes[0]?.id ?? '';
+    allThemes = await services.repo.listThemes();
+    themes = allThemes.filter((t) => !isDomain(t)).sort((a, b) => a.order - b.order);
+    if (!themes.some((t) => t.id === themeId)) themeId = groupByDomain(allThemes).flatMap((g) => g.themes)[0]?.id ?? '';
   }
 
   function toggle(t: NoteType) {
@@ -66,7 +69,7 @@
       // Loaded on demand: the SDK is only needed once someone generates.
       const { createAiClient, generateProposals } = await import('../app/ai');
       const theme = themes.find((t) => t.id === themeId)!;
-      const res = await generateProposals(createAiClient(apiKey.trim()), { source, themeName: theme.name, domainName: themes.find((t) => t.id === theme.parentId)?.name, audience: currentProfile.audience, types, count });
+      const res = await generateProposals(createAiClient(apiKey.trim()), { source, themeName: theme.name, domainName: allThemes.find((t) => t.id === theme.parentId)?.name, audience: currentProfile.audience, types, count });
       if (!res.ok) return void (error = res.error);
       saveKey();
       items = res.proposals.map((proposal) => ({ proposal, status: 'pending' }));
@@ -142,7 +145,13 @@
         <div class="field">
           <label for="g-theme">Thème des cartes</label>
           <select id="g-theme" bind:value={themeId}>
-            {#each themes as t (t.id)}<option value={t.id}>{t.name}</option>{/each}
+            {#each groupByDomain(allThemes) as g (g.domain?.id ?? 'loose')}
+              {#if g.themes.length}
+                <optgroup label={g.domain?.name ?? 'Sans domaine'}>
+                  {#each g.themes as t (t.id)}<option value={t.id}>{t.name}</option>{/each}
+                </optgroup>
+              {/if}
+            {/each}
           </select>
         </div>
         <div class="field">

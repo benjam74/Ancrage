@@ -96,6 +96,8 @@ export interface Progress {
   /** Share of correct answers on due cards over the last 30 days. */
   retention: number | null;
   breakdown: ReturnType<typeof stateBreakdown>;
+  /** Domains in order; themes (in `themes`) point to them through `theme.parentId`. */
+  domains: Theme[];
   /** Longest streak ever reached. */
   best: number;
   /** Monday to Sunday of the current week. */
@@ -469,6 +471,7 @@ export function createServices(repo: Repo, deviceId: string): Services {
         forecastDays,
         retention: retention(snap.reviews, snap.kinds, now - RETENTION_WINDOW),
         breakdown: stateBreakdown(allStates),
+        domains: snap.themes.filter(isDomain).sort((a, b) => a.order - b.order),
         best: streak.best,
         week: weekStrip(streak.history, todayStart, streak.todayDone),
         repair: streak.repair,

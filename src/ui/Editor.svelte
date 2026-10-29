@@ -18,6 +18,7 @@
   import { validateFields } from '../core/validate';
   import { TYPE_LABEL } from './format';
   import Preview from './Preview.svelte';
+  import { groupByDomain, isDomain } from '../core/domains';
 
   let {
     services,
@@ -45,6 +46,10 @@
   let themes = $state<Theme[]>([]);
   let themeId = $state(initial?.themeId ?? '');
   let newThemeName = $state('');
+  let newThemeDomain = $state('');
+  let allThemes = $state<Theme[]>([]);
+  const groups = $derived(groupByDomain(allThemes));
+  const domains = $derived(allThemes.filter(isDomain));
   let tags = $state(initial?.tags.join(', ') ?? '');
   let source = $state(initial?.source ?? '');
   let level = $state<'debutant' | 'avance'>('debutant');
@@ -57,8 +62,10 @@
   const errors = $derived(submitted ? validateFields(fields) : {});
 
   async function loadThemes() {
-    themes = [...(await services.repo.listThemes())].sort((a, b) => a.order - b.order);
-    if (!themeId && themes.length) themeId = themes[0].id;
+    allThemes = await services.repo.listThemes();
+    themes = allThemes.filter((t) => !isDomain(t)).sort((a, b) => a.order - b.order);
+    if (!themeId && themes.length) themeId = groups.flatMap((g) => g.themes)[0]?.id ?? themes[0].id;
+    if (!domains.some((d) => d.id === newThemeDomain)) newThemeDomain = domains[0]?.id ?? '';
   }
 
   $effect(() => {
@@ -70,7 +77,7 @@
 
   async function createTheme() {
     if (!newThemeName.trim()) return;
-    const t = await services.createTheme(newThemeName);
+    const t = await services.createTheme(newThemeName, newThemeDomain || undefined);
     newThemeName = '';
     await loadThemes();
     themeId = t.id;
@@ -131,7 +138,13 @@
       <div class="field" class:invalid={submitted && (!themeId || themeId === '__new')}>
         <label for="f-theme">Thème</label>
         <select id="f-theme" bind:value={themeId}>
-          {#each themes as t (t.id)}<option value={t.id}>{t.name}</option>{/each}
+          {#each groups as g (g.domain?.id ?? 'loose')}
+            {#if g.themes.length}
+              <optgroup label={g.domain?.name ?? 'Sans domaine'}>
+                {#each g.themes as t (t.id)}<option value={t.id}>{t.name}</option>{/each}
+              </optgroup>
+            {/if}
+          {/each}
           <option value="__new">Nouveau thème…</option>
         </select>
         {#if themeId === '__new' || themes.length === 0}
@@ -144,6 +157,11 @@
               placeholder="Ex. Écoute active"
               onkeydown={(e) => { if (e.key === 'Enter') { e.preventDefault(); createTheme(); } }}
             />
+            {#if domains.length}
+              <select class="inline-input" style="width:auto" aria-label="Domaine du nouveau thème" bind:value={newThemeDomain}>
+                {#each domains as d (d.id)}<option value={d.id}>{d.name}</option>{/each}
+              </select>
+            {/if}
             <button type="button" class="btn small" onclick={createTheme} disabled={!newThemeName.trim()}>Créer le thème</button>
           </div>
           {#if submitted}<span class="error">Choisis ou crée un thème.</span>{/if}

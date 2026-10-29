@@ -381,3 +381,22 @@ p.error { font-weight: 700; color: var(--bad); }
 .goal-card { display: grid; grid-template-columns: 84px minmax(0, 1fr); gap: 14px; align-items: center; }
 .goal-card .mini { border-radius: 14px; overflow: hidden; background: var(--surface-2); }
 .streak-hero .buddy { width: 110px; }
+
+/* v1.6 domains and profiles */
+.domain-block { display: grid; gap: 12px; }
+.domain-head h2 { font-size: 24px; }
+.lib-forms { gap: 10px; }
+.domain-tabs { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+.domain-tabs button { border: 2px solid var(--line); background: var(--surface); border-radius: 99px; padding: 6px 14px; font-family: var(--display); font-weight: 800; font-size: 14px; color: var(--ink-soft); }
+.domain-tabs button[aria-pressed="true"] { border-color: var(--petrol); color: var(--petrol); background: color-mix(in srgb, var(--petrol) 8%, var(--surface)); }
+.who { min-height: 100vh; display: grid; place-content: center; gap: 24px; padding: 24px 16px; text-align: center; }
+.who-list { display: flex; flex-wrap: wrap; justify-content: center; gap: 16px; }
+.who-btn { display: grid; justify-items: center; gap: 8px; width: 130px; padding: 14px 8px; border: 2px solid var(--line); border-bottom-width: 4px; border-radius: var(--r-lg); background: var(--surface); font-family: var(--display); font-weight: 900; font-size: 17px; }
+.who-btn:hover { border-color: var(--petrol); }
+.face { width: 72px; height: 72px; border-radius: 50%; display: grid; place-items: center; font-family: var(--display); font-weight: 900; font-size: 30px; color: #fff; background: var(--pc, var(--petrol)); box-shadow: 0 4px 0 color-mix(in srgb, var(--pc, var(--petrol)) 70%, #000); }
+.face.small { width: 30px; height: 30px; font-size: 14px; box-shadow: none; }
+.pin-input { width: 9em; text-align: center; font-size: 24px; letter-spacing: .4em; }
+.profile-chip { display: inline-flex; align-items: center; gap: 8px; border: 2px solid var(--line); background: var(--surface); border-radius: 99px; padding: 3px 12px 3px 3px; font-family: var(--display); font-weight: 800; color: var(--ink); text-decoration: none; }
+.profile-row { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 10px 14px; align-items: center; padding: 10px 12px; border-radius: 12px; background: var(--bg); }
+.pick-domain { gap: 10px; padding: 6px 2px; }
+.pick-domain .muted { font-size: 13px; }
