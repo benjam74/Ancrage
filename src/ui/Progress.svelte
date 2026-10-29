@@ -48,6 +48,16 @@
   </div>
 
   <section class="panel">
+    <h3>Comment ça marche</h3>
+    <ul class="keys">
+      <li><b>XP</b> : 10 par carte due, 5 par nouvelle carte, 20 par manche finie. Réviser en avance ne rapporte rien : l’XP récompense ce qui fait mémoriser.</li>
+      <li><b>Série</b> : une manche par jour suffit. Un jour manqué consomme un gel s’il en reste (un gagné tous les 7 jours, 2 au plus). Sinon, 2 manches le lendemain récupèrent la série.</li>
+      <li><b>Retour</b> : après au moins 3 jours d’absence, ta première manche rapporte 20 XP de plus.</li>
+      <li><b>Habitude</b> : il faut en moyenne deux mois de pratique régulière pour qu’elle tienne seule. Un jour manqué de temps en temps ne l’empêche pas.</li>
+    </ul>
+  </section>
+
+  <section class="panel">
     <h3>Régularité, 20 dernières semaines</h3>
     <p class="muted">Chaque case est un jour. Plus elle est foncée, plus tu as révisé.</p>
     <div class="heat-wrap">
