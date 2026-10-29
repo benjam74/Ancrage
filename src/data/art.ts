@@ -27,11 +27,11 @@ export const SPECIES: Record<CharacterId, Species> = {
     face: `<path d="M38 52 Q60 82 82 52 Q72 62 60 60 Q48 62 38 52 Z" fill="#fff4e6"/><ellipse cx="60" cy="58" rx="4" ry="3" fill="${INK}"/>`,
   },
   loutre: {
-    fur: '#8a5a3c',
-    light: '#e8c9a4',
+    fur: '#a3826a',
+    light: '#f1dfc8',
     inner: '#5c3a26',
-    ears: `<circle cx="37" cy="34" r="7" fill="#8a5a3c" ${S}/><circle cx="83" cy="34" r="7" fill="#8a5a3c" ${S}/>`,
-    face: `<ellipse cx="60" cy="59" rx="16" ry="11" fill="#e8c9a4"/><ellipse cx="60" cy="55" rx="5" ry="3.5" fill="${INK}"/><path d="M44 58 L32 55 M44 61 L32 62 M76 58 L88 55 M76 61 L88 62" stroke="${INK}" stroke-width="1.4" stroke-linecap="round"/>`,
+    ears: `<circle cx="34" cy="42" r="5.5" fill="#a3826a" ${S}/><circle cx="86" cy="42" r="5.5" fill="#a3826a" ${S}/>`,
+    face: `<path d="M36 50 Q60 40 84 50 Q84 70 60 72 Q36 70 36 50 Z" fill="#f1dfc8"/><ellipse cx="60" cy="54" rx="6" ry="4" fill="${INK}"/>${[50, 70].map((x) => `<circle cx="${x - 3}" cy="60" r="1" fill="${INK}"/><circle cx="${x + 3}" cy="61" r="1" fill="${INK}"/>`).join('')}<path d="M42 58 L28 54 M42 62 L28 63 M78 58 L92 54 M78 62 L92 63" stroke="${INK}" stroke-width="1.4" stroke-linecap="round"/>`,
   },
   ourson: {
     fur: '#7a5236',
@@ -155,7 +155,7 @@ export const ART: Record<string, { slot: Slot; svg: string }> = {
 
   // --- décor (full frame, drawn behind) ---
   parc: { slot: 'decor', svg: `<rect y="-14" width="120" height="174" fill="#cfe8f5"/><rect y="118" width="120" height="42" fill="#9ccc65"/><circle cx="100" cy="24" r="10" fill="#ffe082"/>${[12, 26, 96, 110].map((x, i) => `<circle cx="${x}" cy="${130 + (i % 2) * 8}" r="3" fill="${['#f48fb1', '#fff176', '#ce93d8', '#ef9a9a'][i]}"/>`).join('')}<circle cx="16" cy="96" r="14" fill="#66bb6a"/><rect x="14" y="104" width="4" height="16" fill="#8d6e63"/>` },
-  plage: { slot: 'decor', svg: `<rect y="-14" width="120" height="174" fill="#ffe0b2"/><rect y="0" width="120" height="70" fill="#81d4fa"/><rect y="70" width="120" height="40" fill="#4fc3f7"/><path d="M0 108 Q30 100 60 108 T120 108 L120 160 L0 160 Z" fill="#ffe082"/><circle cx="22" cy="22" r="11" fill="#fff176"/><path d="M98 108 L104 60" stroke="#8d6e63" stroke-width="3"/><path d="M104 60 Q92 58 86 66 M104 60 Q116 58 118 66 M104 60 Q100 50 92 50" fill="none" stroke="#43a047" stroke-width="4" stroke-linecap="round"/>` },
+  plage: { slot: 'decor', svg: `<rect y="-14" width="120" height="174" fill="#ffe0b2"/><rect y="-14" width="120" height="84" fill="#81d4fa"/><rect y="70" width="120" height="40" fill="#4fc3f7"/><path d="M0 108 Q30 100 60 108 T120 108 L120 160 L0 160 Z" fill="#ffe082"/><circle cx="22" cy="22" r="11" fill="#fff176"/><path d="M98 108 L104 60" stroke="#8d6e63" stroke-width="3"/><path d="M104 60 Q92 58 86 66 M104 60 Q116 58 118 66 M104 60 Q100 50 92 50" fill="none" stroke="#43a047" stroke-width="4" stroke-linecap="round"/>` },
   bibliotheque: { slot: 'decor', svg: `<rect y="-14" width="120" height="174" fill="#6d4c41"/>${[20, 58, 96].map((y) => `<rect x="4" y="${y + 30}" width="112" height="4" fill="#4e342e"/>${[...Array(14)].map((_, i) => `<rect x="${6 + i * 8}" y="${y + 6 + (i % 3) * 2}" width="6" height="${24 - (i % 3) * 2}" fill="${['#c0392b', '#2980b9', '#27ae60', '#f39c12', '#8e44ad'][i % 5]}"/>`).join('')}`).join('')}` },
   nuit: { slot: 'decor', svg: `<rect y="-14" width="120" height="174" fill="#1a2340"/><circle cx="92" cy="26" r="12" fill="#f5f0c8"/><circle cx="97" cy="22" r="11" fill="#1a2340"/>${[[14, 18], [30, 40], [52, 14], [70, 50], [20, 70], [108, 70], [44, 86], [86, 98]].map(([x, y]) => `<circle cx="${x}" cy="${y}" r="1.4" fill="#fff"/>`).join('')}<rect y="130" width="120" height="30" fill="#24304f"/>` },
   sommet: { slot: 'decor', svg: `<rect y="-14" width="120" height="174" fill="#b3e5fc"/><path d="M-10 160 L40 60 L70 110 L95 70 L130 160 Z" fill="#78909c"/><path d="M40 60 L30 80 L40 76 L48 84 L52 72 Z M95 70 L88 84 L96 80 L102 86 Z" fill="#ffffff"/><path d="M38 60 L38 40 L52 46 L38 52" fill="#d9534f" stroke="${INK}" stroke-width="1.4"/><rect y="146" width="120" height="14" fill="#eceff1"/>` },

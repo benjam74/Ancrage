@@ -1,8 +1,43 @@
 <script lang="ts">
   import type { ThemeProgress } from '../app/services';
+  import { untrack } from 'svelte';
+  import type { CharacterId, Slot } from '../core/model';
+  import Avatar from './Avatar.svelte';
   import { LEVEL_COLORS, activeTheme, nextText } from './levels';
+  import { motionOn, prefs, updatePrefs } from './prefs.svelte';
 
-  let { themes, onstart, onpick }: { themes: ThemeProgress[]; onstart: () => void; onpick: (themeId: string) => void } = $props();
+  let {
+    themes,
+    onstart,
+    onpick,
+    look = null,
+  }: {
+    themes: ThemeProgress[];
+    onstart: () => void;
+    onpick: (themeId: string) => void;
+    /** The learner's character, standing on the current chapter. */
+    look?: { character: CharacterId; outfit: Partial<Record<Slot, string>>; name: string } | null;
+  } = $props();
+  let walker = $state<HTMLElement | null>(null);
+  let pose = $state<'idle' | 'walk' | 'jump'>('idle');
+
+  // When the current chapter changed since the last visit, the character walks there from the previous one.
+  $effect(() => {
+    const id = activeId;
+    const el = walker;
+    if (!id || !el) return;
+    const from = untrack(() => prefs.lastChapter);
+    if (from === id) return;
+    untrack(() => updatePrefs({ lastChapter: id }));
+    const start = from ? document.querySelector<HTMLElement>(`[data-theme="${CSS.escape(from)}"] .disc`) : null;
+    const end = el.closest('.node')?.querySelector<HTMLElement>('.disc');
+    if (!start || !end || !motionOn()) return;
+    const a = start.getBoundingClientRect();
+    const b = end.getBoundingClientRect();
+    pose = 'walk';
+    const run = el.animate([{ transform: `translate(${a.left - b.left}px, ${a.top - b.top}px)` }, { transform: 'none' }], { duration: 900, easing: 'ease-in-out' });
+    run.onfinish = () => (pose = 'jump');
+  });
   const R = 35;
   const C = 2 * Math.PI * R;
   const activeId = $derived(activeTheme(themes)?.theme.id);
@@ -15,6 +50,7 @@
     {@const [c, cd, ci] = LEVEL_COLORS[t.level]}
     <div class="node-row">
       <button
+        data-theme={t.theme.id}
         class="node"
         class:active={t.theme.id === activeId}
         style="--c:var({c});--cd:var({cd});--ci:var({ci})"
@@ -22,6 +58,9 @@
         aria-expanded={selected?.theme.id === t.theme.id}
         onclick={() => (open = t.theme.id)}
       >
+        {#if look && t.theme.id === activeId}
+          <span class="walker" bind:this={walker}><Avatar character={look.character} outfit={look.outfit} {pose} /></span>
+        {/if}
         <span class="disc">
           <svg class="lvl" viewBox="0 0 78 78" aria-hidden="true">
             <circle cx="39" cy="39" r={R} style="stroke:var(--surface-2)" />

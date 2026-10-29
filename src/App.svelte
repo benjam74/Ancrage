@@ -1,5 +1,6 @@
 <script lang="ts">
-  import { boot, type Progress as ProgressData, type Services, type Today } from './app/services';
+  import { boot, type Progress as ProgressData, type Services, type ShopState, type Today } from './app/services';
+  import Shop from './ui/Shop.svelte';
   import { browserStorage, createCloudSync, type CloudSync } from './app/cloud';
   import type { Note } from './core/model';
   import Editor from './ui/Editor.svelte';
@@ -15,7 +16,7 @@
   import Custom from './ui/Custom.svelte';
   import type { CustomChoice } from './core/queue';
 
-  const VIEWS = ['accueil', 'creer', 'progres', 'bibliotheque', 'reglages', 'reviser'] as const;
+  const VIEWS = ['accueil', 'creer', 'progres', 'bibliotheque', 'boutique', 'reglages', 'reviser'] as const;
   type View = (typeof VIEWS)[number];
   const fromHash = (): View => {
     const h = location.hash.slice(1);
@@ -26,6 +27,7 @@
   let cloud = $state<CloudSync | null>(null);
   let today = $state<Today | null>(null);
   let progress = $state<ProgressData | null>(null);
+  let shop = $state.raw<ShopState | null>(null);
   let view = $state<View>(fromHash());
   let editing = $state<Note | null>(null);
   let createMode = $state<'write' | 'generate'>('write');
@@ -78,7 +80,7 @@
   async function refresh() {
     if (!services) return;
     const now = Date.now();
-    [today, progress] = await Promise.all([services.today(now), services.progress(now)]);
+    [today, progress, shop] = await Promise.all([services.today(now), services.progress(now), services.shop(now)]);
   }
 
   function go(next: View) {
@@ -114,9 +116,9 @@
 
 {#if error}
   <main class="page"><h1>Ancrage</h1><p>Impossible d’ouvrir la base locale : {error}</p></main>
-{:else if services && today && progress}
+{:else if services && today && progress && shop}
   {#if inSession}
-    <Session {services} queue={spec?.queue ?? today.queue} more={spec?.more ?? (async () => [])} kind={spec?.kind ?? 'daily'} onexit={async () => { if (reloadAfterSession) return location.reload(); await refresh(); inSession = false; spec = null; void syncInBackground(); }} />
+    <Session {services} queue={spec?.queue ?? today.queue} more={spec?.more ?? (async () => [])} kind={spec?.kind ?? 'daily'} look={{ character: shop.avatar.character, outfit: shop.outfit }} onexit={async () => { if (reloadAfterSession) return location.reload(); await refresh(); inSession = false; spec = null; void syncInBackground(); }} />
   {:else}
     {#if updateReady}
       <div class="update" role="status">
@@ -129,7 +131,9 @@
       <Nav current={view} onselect={(v) => { if (v === 'creer') editing = null; }} />
       <div class="main">
         {#if view === 'accueil'}
-          <Home {today} {progress} onstart={startDaily} onpick={pick} />
+          <Home {today} {progress} {shop} onstart={startDaily} onpick={pick} />
+        {:else if view === 'boutique'}
+          <Shop {services} {shop} onchange={refresh} />
         {:else if view === 'reviser'}
           {#key preselect}<Custom {progress} {preselect} onstart={startCustom} />{/key}
           {#if customEmpty}<p class="page muted" role="status">{customEmpty}</p>{/if}

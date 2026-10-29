@@ -1,5 +1,7 @@
 <script lang="ts">
-  import type { Progress, Today } from '../app/services';
+  import type { Progress, ShopState, Today } from '../app/services';
+  import { CATALOG } from '../data/items';
+  import Avatar from './Avatar.svelte';
   import { REPAIR_ROUNDS, dailyRing } from '../core/progress';
   import { studyDayStart } from '../core/queue';
   import { activeTheme, nextText } from './levels';
@@ -10,7 +12,21 @@
   import ThemePath from './ThemePath.svelte';
   import WeekStrip from './WeekStrip.svelte';
 
-  let { today, progress, onstart, onpick }: { today: Today; progress: Progress; onstart: () => void; onpick: (themeId: string | null) => void } = $props();
+  let {
+    today,
+    progress,
+    shop,
+    onstart,
+    onpick,
+  }: { today: Today; progress: Progress; shop: ShopState; onstart: () => void; onpick: (themeId: string | null) => void } = $props();
+  const TIERS = ['commun', 'rare', 'epique', 'legendaire'];
+  // The goal, or a suggestion: the cheapest item not owned yet in the lowest tier still incomplete.
+  const goalItem = $derived(CATALOG.find((i) => i.id === prefs.goal && !shop.owned.has(i.id)));
+  const reachedGoal = $derived(!!prefs.goal && shop.owned.has(prefs.goal));
+  const suggestion = $derived(
+    [...CATALOG].filter((i) => !shop.owned.has(i.id)).sort((a, b) => TIERS.indexOf(a.tier) - TIERS.indexOf(b.tier) || a.price - b.price)[0],
+  );
+  const target = $derived(goalItem ?? suggestion);
   const total = $derived(today.due + today.fresh);
   const RING = 2 * Math.PI * 42;
   const ring = $derived(dailyRing(progress.answersToday, today.queue.length, prefs.dailyRounds));
@@ -117,13 +133,32 @@
         </div>
       </section>
 
+      <section class="panel goal-card" aria-labelledby="goal-title">
+        {#if !shop.chosen}
+          <div class="mini"><Avatar character="renard" /></div>
+          <div style="display:grid;gap:8px">
+            <h3 id="goal-title">Ton personnage t’attend, en pyjama</h3>
+            <p class="muted">Choisis-le et habille-le avec l’XP que tu gagnes en révisant.</p>
+            <a class="btn small" href="#boutique" style="justify-self:start">Choisir mon personnage</a>
+          </div>
+        {:else if target}
+          <div class="mini"><Avatar character={shop.avatar.character} outfit={{ ...shop.outfit, [target.slot]: target.id }} decor={target.slot === 'decor'} /></div>
+          <div style="display:grid;gap:8px">
+            <h3 id="goal-title">{reachedGoal ? 'Objectif atteint ! ' : ''}{goalItem ? `Objectif : ${goalItem.name}` : `Prochain achat : ${target.name}`}</h3>
+            <div class="bar" style="--c:var(--sun)" role="img" aria-label="{Math.max(0, shop.balance)} XP sur {target.price}"><i style="width:{Math.min(100, (Math.max(0, shop.balance) / target.price) * 100)}%"></i></div>
+            <p class="muted">{shop.balance >= target.price ? 'Tu peux te l’offrir.' : `Plus que ${(target.price - Math.max(0, shop.balance)).toLocaleString('fr-FR')} XP.`}{reachedGoal && !goalItem ? ' Choisis ton prochain objectif dans la boutique.' : ''}</p>
+            <a class="btn small ghost" href="#boutique" style="justify-self:start">Boutique</a>
+          </div>
+        {/if}
+      </section>
+
       <Plan />
     </div>
 
     <section aria-labelledby="path-title">
       <h2 id="path-title" style="margin-bottom:8px">Ton parcours</h2>
       {#if progress.themes.length}
-        <ThemePath themes={progress.themes} {onstart} {onpick} />
+        <ThemePath themes={progress.themes} {onstart} {onpick} look={{ character: shop.avatar.character, outfit: shop.outfit, name: shop.avatar.name }} />
       {:else}
         <p class="muted">Crée un thème et tes premières cartes pour voir ton parcours.</p>
       {/if}

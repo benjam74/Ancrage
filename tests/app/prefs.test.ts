@@ -5,7 +5,7 @@ import { DEFAULT_PREFS, loadPrefs, savePrefs } from '../../src/app/prefs';
 describe('device preferences', () => {
   test('defaults when nothing is stored', () => {
     expect(loadPrefs(memoryStorage())).toEqual(DEFAULT_PREFS);
-    expect(DEFAULT_PREFS).toEqual({ sound: true, haptics: true, motion: true, showStreak: true, dailyRounds: 1, plan: null });
+    expect(DEFAULT_PREFS).toEqual({ sound: true, haptics: true, motion: true, showStreak: true, dailyRounds: 1, plan: null, goal: null, lastChapter: null });
   });
 
   test('round trip', () => {
