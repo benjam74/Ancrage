@@ -1,3 +1,15 @@
+<script lang="ts" module>
+  import type { NoteFields } from '../core/model';
+
+  /** A new note started from given content (e.g. a generated proposal), saved as a new note. */
+  export interface Prefill {
+    fields: NoteFields;
+    themeId: string;
+    tags: string[];
+    source?: string;
+  }
+</script>
+
 <script lang="ts">
   import { untrack } from 'svelte';
   import type { Services } from '../app/services';
@@ -7,7 +19,13 @@
   import { TYPE_LABEL } from './format';
   import Preview from './Preview.svelte';
 
-  let { services, editing, onsaved }: { services: Services; editing: Note | null; onsaved: () => void } = $props();
+  let {
+    services,
+    editing,
+    prefill = null,
+    onsaved,
+    oncancel,
+  }: { services: Services; editing: Note | null; prefill?: Prefill | null; onsaved: () => void; oncancel?: () => void } = $props();
 
   const TYPES: NoteType[] = ['basic', 'cloze', 'ordering', 'classify', 'mcq', 'scenario'];
   const ICONS: Record<NoteType, string> = {
@@ -19,7 +37,7 @@
     scenario: '<path d="M4 5h12a2 2 0 0 1 2 2v6a2 2 0 0 1-2 2H9l-4 3.5V15H4a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2z"/>',
   };
 
-  const initial = untrack(() => editing);
+  const initial: Prefill | null = untrack(() => editing ?? prefill);
   let type = $state<NoteType>(initial?.fields.type ?? 'cloze');
   let drafts = $state<Record<NoteType, Draft>>(
     Object.fromEntries(TYPES.map((t) => [t, initial && initial.fields.type === t ? fieldsToDraft(initial.fields) : emptyDraft(t)])) as Record<NoteType, Draft>,
@@ -80,7 +98,7 @@
       if (res.errors.themeId) await loadThemes();
       return;
     }
-    if (editing) return onsaved();
+    if (editing || prefill) return onsaved();
     const theme = themes.find((t) => t.id === themeId)?.name ?? '';
     message = `Ajouté à « ${theme} » : ${res.cards} carte${res.cards > 1 ? 's' : ''}. ${when(res.cards, res.today)}`;
     drafts[type] = emptyDraft(type);
@@ -93,8 +111,8 @@
 
 <main class="page wide">
   <header>
-    <p class="eyebrow">{editing ? 'Modifier la note' : 'Nouvelle note'}</p>
-    <h1>{editing ? 'Modifier une carte' : 'Créer une carte'}</h1>
+    <p class="eyebrow">{editing ? 'Modifier la note' : prefill ? 'Proposition de l’IA' : 'Nouvelle note'}</p>
+    <h1>{editing ? 'Modifier une carte' : prefill ? 'Relire la carte proposée' : 'Créer une carte'}</h1>
   </header>
 
   <div class="types" role="group" aria-label="Type d'exercice">
@@ -163,6 +181,7 @@
         <input id="f-source" bind:value={source} placeholder="Ex. Formation PNL, module 2" />
       </div>
       <button class="btn wide">{editing ? 'Enregistrer les modifications' : 'Ajouter au thème'}</button>
+      {#if oncancel}<button type="button" class="btn ghost wide" onclick={oncancel}>Annuler</button>{/if}
     </form>
 
     <aside class="preview" aria-label="Aperçu">

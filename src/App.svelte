@@ -3,6 +3,7 @@
   import { browserStorage, createCloudSync, type CloudSync } from './app/cloud';
   import type { Note } from './core/model';
   import Editor from './ui/Editor.svelte';
+  import Generate from './ui/Generate.svelte';
   import Home from './ui/Home.svelte';
   import Library from './ui/Library.svelte';
   import Nav from './ui/Nav.svelte';
@@ -24,6 +25,7 @@
   let progress = $state<ProgressData | null>(null);
   let view = $state<View>(fromHash());
   let editing = $state<Note | null>(null);
+  let createMode = $state<'write' | 'generate'>('write');
   let inSession = $state(false);
   let error = $state('');
   let updateReady = $state(false);
@@ -99,9 +101,19 @@
         {:else if view === 'bibliotheque'}
           <Library {services} onedit={edit} onchange={refresh} />
         {:else}
-          {#key editing?.id ?? 'new'}
-            <Editor {services} {editing} onsaved={async () => { await refresh(); if (editing) { editing = null; go('bibliotheque'); } }} />
-          {/key}
+          {#if !editing}
+            <div class="tabs" role="group" aria-label="Façon de créer">
+              <button aria-pressed={createMode === 'write'} onclick={() => (createMode = 'write')}>Écrire une carte</button>
+              <button aria-pressed={createMode === 'generate'} onclick={() => (createMode = 'generate')}>Générer depuis un texte</button>
+            </div>
+          {/if}
+          {#if createMode === 'generate' && !editing}
+            <Generate {services} onchange={refresh} />
+          {:else}
+            {#key editing?.id ?? 'new'}
+              <Editor {services} {editing} onsaved={async () => { await refresh(); if (editing) { editing = null; go('bibliotheque'); } }} />
+            {/key}
+          {/if}
         {/if}
       </div>
     </div>
