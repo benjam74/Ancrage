@@ -66,7 +66,7 @@ export const CATALOG: Item[] = [
 
   { id: 'parc', name: 'Parc fleuri', slot: 'decor', tier: 'rare', price: 300 },
   { id: 'plage', name: 'Plage', slot: 'decor', tier: 'epique', price: 1000 },
-  { id: 'bibliotheque', name: 'Bibliothèque', slot: 'decor', tier: 'epique', price: 1200 },
+  { id: 'bibliotheque', name: 'Salle de lecture', slot: 'decor', tier: 'epique', price: 1200 },
   { id: 'nuit', name: 'Nuit étoilée', slot: 'decor', tier: 'epique', price: 1650 },
   { id: 'sommet', name: 'Sommet enneigé', slot: 'decor', tier: 'legendaire', price: 4000 },
 ];

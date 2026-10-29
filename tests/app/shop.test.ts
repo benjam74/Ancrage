@@ -77,3 +77,16 @@ describe('shop services', () => {
     expect((await other.shop(NOW + 30)).outfit.chapeau).toBe('bonnet');
   });
 });
+
+describe('deleting history keeps the XP to spend', () => {
+  test('removing the examples after earning XP leaves the wallet intact', async () => {
+    await earn45();
+    await services.completeRound(NOW + 1500, NOW + 1600);
+    await services.buy('bonnet', NOW + 2000);
+    expect((await services.shop(NOW + 2100)).balance).toBe(5);
+    await services.removeExamples();
+    const s = await services.shop(NOW + 3000);
+    expect(s.balance).toBe(5);
+    expect(s.outfit.chapeau).toBe('bonnet');
+  });
+});

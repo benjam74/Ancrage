@@ -247,6 +247,19 @@ export function createServices(repo: Repo, deviceId: string): Services {
     return { candidates, reviews, settings, scheduler };
   }
 
+  /** Deleting a note deletes its reviews: the XP they earned stays in the wallet as a credit. */
+  async function keepXp(noteIds: string[]) {
+    const snap = await snapshot();
+    const cards = await repo.listCards();
+    const existing = new Set(snap.events.map((e) => e.id));
+    for (const noteId of noteIds) {
+      const cardIds = new Set(cards.filter((c) => c.noteId === noteId).map((c) => c.id));
+      const xp = xpBetween(snap.reviews.filter((e) => cardIds.has(e.cardId)), snap.kinds, [], -Infinity, Infinity);
+      const id = `credit:${noteId}`;
+      if (xp > 0 && !existing.has(id)) await repo.appendEvent({ id, type: 'xp_credit', ts: Date.now(), xp });
+    }
+  }
+
   const services: Services = {
     repo,
     engine,
@@ -296,6 +309,7 @@ export function createServices(repo: Repo, deviceId: string): Services {
 
     async deleteNote(id) {
       const note = await repo.getNote(id);
+      await keepXp([id]);
       await repo.deleteNote(id, Math.max(Date.now(), (note?.updatedAt ?? 0) + 1));
     },
 
@@ -325,6 +339,7 @@ export function createServices(repo: Repo, deviceId: string): Services {
 
     async removeExamples() {
       const examples = (await repo.listNotes()).filter((n) => STARTER_NOTE_IDS.has(n.id));
+      await keepXp(examples.map((n) => n.id));
       for (const n of examples) await repo.deleteNote(n.id);
       const starterIds = new Set(STARTER_THEMES.map((t) => t.id));
       let themes = 0;
@@ -484,6 +499,7 @@ export function createServices(repo: Repo, deviceId: string): Services {
     },
 
     async equip(slot, itemId, now) {
+      if (itemId !== null && (CATALOG.find((i) => i.id === itemId)?.slot !== slot || !owned(await repo.listEvents()).has(itemId))) return;
       await repo.appendEvent({ id: newId(now), type: 'equip', ts: now, slot, itemId });
     },
 

@@ -9,6 +9,7 @@
   --on-accent: #ffffff;
   --sun-ink: #8a5f00; --coral-ink: #b63c24;
   --on-ok: #ffffff; --on-petrol: #ffffff; --on-sun: #2a1d00; --on-coral: #ffffff; --on-ink-soft: #ffffff;
+  --rare-bg: #dcebee; --rare-ink: #0f4652; --epic-bg: #f1e4f7; --epic-ink: #6c3483;
   --display: "Nunito", "Trebuchet MS", system-ui, sans-serif;
   --body: "Nunito Sans", "Segoe UI", system-ui, sans-serif;
   --r-sm: 10px; --r-md: 16px; --r-lg: 22px;
@@ -24,6 +25,7 @@
     --bad: #f2806a; --bad-bg: #3e1d17; --on-accent: #0c1c20;
     --sun-ink: #f6c24a; --coral-ink: #f58a72;
     --on-ok: #0c1c20; --on-petrol: #0c1c20; --on-sun: #0c1c20; --on-coral: #0c1c20; --on-ink-soft: #0c1c20;
+    --rare-bg: #1d3d45; --rare-ink: #9fdbe6; --epic-bg: #3a2547; --epic-ink: #e0bff0;
     color-scheme: dark;
   }
 }
@@ -340,11 +342,16 @@ p.error { font-weight: 700; color: var(--bad); }
 .wallet-n { font-family: var(--display); font-weight: 900; font-size: 28px; color: var(--sun-ink); font-variant-numeric: tabular-nums; }
 .wallet .muted { font-size: 13px; }
 .shop-grid { display: grid; grid-template-columns: minmax(0, 300px) minmax(0, 1fr); gap: 24px; align-items: start; }
-@media (max-width: 860px) { .shop-grid { grid-template-columns: minmax(0, 1fr); } .stage { position: static !important; } .stage-frame { max-width: 220px; margin: 0 auto; } }
+@media (max-width: 860px) {
+  .shop-grid { grid-template-columns: minmax(0, 1fr); }
+  /* The try-on stays visible while scrolling the items. */
+  .stage { top: 0; z-index: 5; grid-template-columns: 96px minmax(0, 1fr); justify-items: start; text-align: left; background: var(--bg); padding-block: 8px; }
+  .stage-frame { grid-row: span 4; }
+}
 .stage { position: sticky; top: 24px; display: grid; gap: 10px; justify-items: center; text-align: center; }
 .stage-frame { width: 100%; border-radius: var(--r-lg); overflow: hidden; border: 2px solid var(--line); background: var(--surface-2); }
 .shop-tabs { margin: 0; padding: 0; flex-wrap: wrap; max-width: none; }
-.items { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 12px; }
+.items { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; }
 .item { display: grid; gap: 8px; align-content: start; padding: 10px; border: 2px solid var(--line); border-bottom-width: 4px; border-radius: var(--r-md); background: var(--surface); }
 .item.worn { border-color: var(--petrol); }
 .item-look { border: 0; padding: 0; background: var(--surface-2); border-radius: 12px; overflow: hidden; }
@@ -352,8 +359,8 @@ p.error { font-weight: 700; color: var(--bad); }
 .item-info { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; }
 .item-name { font-family: var(--display); font-weight: 900; flex: 1 1 100%; }
 .tier { font-size: 11px; font-weight: 900; letter-spacing: .05em; text-transform: uppercase; padding: 2px 8px; border-radius: 99px; background: var(--surface-2); color: var(--ink-soft); }
-.tier-rare .tier { background: color-mix(in srgb, var(--petrol) 18%, var(--surface)); color: var(--petrol); }
-.tier-epique .tier { background: color-mix(in srgb, #8e44ad 18%, var(--surface)); color: #7d3c98; }
+.tier-rare .tier { background: var(--rare-bg); color: var(--rare-ink); }
+.tier-epique .tier { background: var(--epic-bg); color: var(--epic-ink); }
 .tier-legendaire .tier { background: var(--sun); color: var(--on-sun); }
 .price { font-family: var(--display); font-weight: 900; color: var(--sun-ink); font-variant-numeric: tabular-nums; }
 .item-actions { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
@@ -368,7 +375,7 @@ p.error { font-weight: 700; color: var(--bad); }
 .char:focus-within { outline: 3px solid var(--sun); outline-offset: 2px; }
 .char .avatar-svg { max-width: 120px; }
 /* character on the path and on home */
-.path { position: relative; }
+.path { position: relative; padding-top: 18px; }
 .node { position: relative; }
 .walker { position: absolute; left: -34px; top: -16px; width: 66px; pointer-events: none; z-index: 2; }
 .goal-card { display: grid; grid-template-columns: 84px minmax(0, 1fr); gap: 14px; align-items: center; }

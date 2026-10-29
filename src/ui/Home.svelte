@@ -138,8 +138,14 @@
           <div class="mini"><Avatar character="renard" /></div>
           <div style="display:grid;gap:8px">
             <h3 id="goal-title">Ton personnage t’attend, en pyjama</h3>
-            <p class="muted">Choisis-le et habille-le avec l’XP que tu gagnes en révisant.</p>
+            <p class="muted">Choisis-le. Ton XP sert aussi à l’habiller.</p>
             <a class="btn small" href="#boutique" style="justify-self:start">Choisir mon personnage</a>
+          </div>
+        {:else if !target}
+          <div class="mini"><Avatar character={shop.avatar.character} outfit={shop.outfit} /></div>
+          <div style="display:grid;gap:8px">
+            <h3 id="goal-title">Garde-robe complète</h3>
+            <p class="muted">Tu possèdes les 50 objets de la boutique.</p>
           </div>
         {:else if target}
           <div class="mini"><Avatar character={shop.avatar.character} outfit={{ ...shop.outfit, [target.slot]: target.id }} decor={target.slot === 'decor'} /></div>

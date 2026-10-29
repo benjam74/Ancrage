@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { CharacterId, Slot } from '../core/model';
-  import { ART, PYJAMA_BOTTOM, PYJAMA_TOP, SPECIES, ankles, feet, hands, head } from '../data/art';
+  import { ART, PYJAMA_BOTTOM, PYJAMA_TOP, SPECIES, ankles, companion, feet, hands, head } from '../data/art';
 
   let {
     character,
@@ -22,7 +22,6 @@
     const sp = SPECIES[character];
     return [
       decor ? art('decor') : '',
-      art('compagnon'),
       feet(sp),
       ankles(sp),
       art('bas') || PYJAMA_BOTTOM,
@@ -33,6 +32,7 @@
       art('lunettes'),
       art('chapeau'),
       art('objet'),
+      companion(art('compagnon')),
     ].join('');
   });
 </script>

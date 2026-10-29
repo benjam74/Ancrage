@@ -51,7 +51,7 @@ describe('backup format', () => {
   });
 
   test('rejects a backup from a newer version', () => {
-    const res = parseBackup(mutate((o) => (o.version = 3)));
+    const res = parseBackup(mutate((o) => (o.version = BACKUP_VERSION + 1)));
     expect(res.ok).toBe(false);
     if (!res.ok) expect(res.error).toMatch(/plus récente/);
   });
@@ -115,10 +115,11 @@ describe('shop events in backups', () => {
     expect(parseBackup(serializeBackup(shop, NOW))).toEqual({ ok: true, dump: shop, exportedAt: NOW });
   });
 
-  test('an event type from a future version is ignored, a malformed known one is refused', () => {
-    const future = mutate((o) => (o.events = [...(o.events as unknown[]), { id: 'z', type: 'future_thing', ts: NOW }]));
+  test('an event type from a future version is kept untouched, a malformed known one is refused', () => {
+    const future = mutate((o) => (o.events = [...(o.events as unknown[]), { id: 'z', type: 'future_thing', ts: NOW, extra: 1 }, { id: 'y', type: 'hasOwnProperty', ts: NOW }]));
     const res = parseBackup(future);
-    expect(res.ok && res.dump.events.map((e) => e.id)).toEqual(['e']);
+    expect(res.ok && res.dump.events.map((e) => e.id)).toEqual(['e', 'z', 'y']);
+    expect(res.ok && res.dump.events[1]).toEqual({ id: 'z', type: 'future_thing', ts: NOW, extra: 1 });
     expect(parseBackup(mutate((o) => (o.events = [{ id: 'p', type: 'purchase', ts: NOW, itemId: 'bonnet' }]))).ok).toBe(false);
     expect(parseBackup(mutate((o) => (o.events = [{ id: 'a', type: 'avatar', ts: NOW, character: 'dragon', name: 'x' }]))).ok).toBe(false);
   });

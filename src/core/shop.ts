@@ -1,5 +1,5 @@
 import type { AppEvent, CharacterId, Slot } from './model';
-import type { Tier } from '../data/items';
+import { CATALOG, type Tier } from '../data/items';
 
 export const SLOTS: Slot[] = ['haut', 'bas', 'chapeau', 'lunettes', 'cou', 'objet', 'compagnon', 'decor'];
 export const CHARACTERS: CharacterId[] = ['renard', 'loutre', 'ourson', 'lapin'];
@@ -20,12 +20,22 @@ export function owned(events: AppEvent[]): Set<string> {
   return new Set([...state].filter(([, has]) => has).map(([id]) => id));
 }
 
-/** XP left to spend; may be negative when two devices spent offline at the same time. */
+/**
+ * XP left to spend: earned, plus XP kept from deleted notes, minus purchases, plus sales. A purchase of an
+ * item already owned (bought offline on two devices) is not charged twice. May still be negative.
+ */
 export function wallet(earned: number, events: AppEvent[]): number {
   let balance = earned;
-  for (const e of events) {
-    if (e.type === 'purchase') balance -= e.price;
-    else if (e.type === 'sale') balance += e.refund;
+  const has = new Set<string>();
+  for (const e of [...events].sort(byTime)) {
+    if (e.type === 'xp_credit') balance += e.xp;
+    else if (e.type === 'purchase' && !has.has(e.itemId)) {
+      balance -= e.price;
+      has.add(e.itemId);
+    } else if (e.type === 'sale' && has.has(e.itemId)) {
+      balance += e.refund;
+      has.delete(e.itemId);
+    }
   }
   return balance;
 }
@@ -41,7 +51,8 @@ export function outfit(events: AppEvent[]): Partial<Record<Slot, string>> {
     if (e.itemId === null) delete worn[e.slot];
     else worn[e.slot] = e.itemId;
   }
-  for (const slot of SLOTS) if (worn[slot] && !has.has(worn[slot]!)) delete worn[slot];
+  // Only items still owned, and only in their own slot (a synced event could say otherwise).
+  for (const slot of SLOTS) if (worn[slot] && (!has.has(worn[slot]!) || CATALOG.find((i) => i.id === worn[slot])?.slot !== slot)) delete worn[slot];
   return worn;
 }
 

@@ -4,6 +4,7 @@
   import { CHARACTERS, CHARACTER_NAMES, NAME_MAX, SLOTS, resale } from '../core/shop';
   import { CATALOG, type Item, type Tier } from '../data/items';
   import Avatar from './Avatar.svelte';
+  import { tick } from 'svelte';
   import { prefs, updatePrefs } from './prefs.svelte';
 
   let { services, shop, onchange }: { services: Services; shop: ShopState; onchange: () => Promise<void> } = $props();
@@ -16,7 +17,8 @@
   let picking = $state(false);
   let character = $state<CharacterId>('renard');
   let name = $state('');
-  let tab = $state<Slot>('haut');
+  // Open on the goal's category when there is one.
+  let tab = $state<Slot>(CATALOG.find((i) => i.id === prefs.goal)?.slot ?? 'haut');
   /** Item tried on without buying it. */
   let trying = $state<Item | null>(null);
   let confirming = $state<string | null>(null);
@@ -41,6 +43,8 @@
     try {
       message = (await action()) ?? '';
       await onchange();
+    } catch {
+      message = 'Une erreur est survenue. Réessaie.';
     } finally {
       busy = false;
     }
@@ -58,16 +62,21 @@
       confirming = null;
       if (!res.ok) return res.error;
       trying = null;
-      if (prefs.goal === item.id) updatePrefs({ goal: null });
-      return `${item.name} : acheté et porté.`;
+      return `Acheté et porté : ${item.name}.`;
     });
 
   const sell = (item: Item) =>
     act(async () => {
       const res = await services.sell(item.id, Date.now());
       confirming = null;
-      return res.ok ? `${item.name} revendu : +${res.refund} XP.` : res.error;
+      return res.ok ? `Revente : ${item.name}, +${res.refund} XP.` : res.error;
     });
+
+  async function ask(id: string) {
+    confirming = id;
+    await tick();
+    document.querySelector<HTMLButtonElement>(`[data-confirm="${id}"]`)?.focus();
+  }
 
   const wear = (item: Item, on: boolean) => act(() => services.equip(item.slot, on ? item.id : null, Date.now()));
 </script>
@@ -134,7 +143,7 @@
             {@const has = shop.owned.has(item.id)}
             {@const worn = shop.outfit[item.slot] === item.id}
             <li class="item tier-{item.tier}" class:worn>
-              <button class="item-look" aria-label="Essayer {item.name}" onclick={() => (trying = has ? null : item)}>
+              <button class="item-look" aria-label="Essayer {item.name}" aria-pressed={trying?.id === item.id} onclick={() => (trying = trying?.id === item.id ? null : item)}>
                 <Avatar character={shop.avatar.character} outfit={{ ...shop.outfit, [item.slot]: item.id }} decor={item.slot === 'decor'} pose="idle" />
               </button>
               <div class="item-info">
@@ -144,24 +153,24 @@
               </div>
               <div class="item-actions">
                 {#if confirming === item.id && !has}
-                  <span class="confirm-q">Acheter pour {fr(item.price)} XP ?</span>
-                  <button class="btn small" disabled={busy} onclick={() => buy(item)}>Oui</button>
+                  <span class="confirm-q">Acheter {item.name} pour {fr(item.price)} XP ?</span>
+                  <button class="btn small" data-confirm={item.id} disabled={busy} onclick={() => buy(item)}>Oui</button>
                   <button class="btn small ghost" onclick={() => (confirming = null)}>Non</button>
                 {:else if confirming === item.id && has}
-                  <span class="confirm-q">Revendre pour {fr(resale(item.price))} XP ?</span>
-                  <button class="btn small danger" disabled={busy} onclick={() => sell(item)}>Oui</button>
+                  <span class="confirm-q">Revendre {item.name} pour {fr(resale(item.price))} XP ?</span>
+                  <button class="btn small danger" data-confirm={item.id} disabled={busy} onclick={() => sell(item)}>Oui</button>
                   <button class="btn small ghost" onclick={() => (confirming = null)}>Non</button>
                 {:else if has}
-                  <button class="btn small" disabled={busy} onclick={() => wear(item, !worn)}>{worn ? 'Retirer' : 'Porter'}</button>
-                  <button class="btn small ghost" onclick={() => (confirming = item.id)}>Revendre</button>
+                  <button class="btn small" disabled={busy} aria-label="{worn ? 'Retirer' : 'Porter'} {item.name}" onclick={() => wear(item, !worn)}>{worn ? 'Retirer' : 'Porter'}</button>
+                  <button class="btn small ghost" aria-label="Revendre {item.name}" onclick={() => ask(item.id)}>Revendre</button>
                 {:else}
-                  <button class="btn small" disabled={busy || shop.balance < item.price} onclick={() => (confirming = item.id)}>Acheter</button>
+                  <button class="btn small" disabled={busy || shop.balance < item.price} aria-label="Acheter {item.name}" onclick={() => ask(item.id)}>Acheter</button>
                   {#if prefs.goal === item.id}
                     <span class="pill goal">Objectif</span>
                   {:else}
-                    <button class="btn small ghost" onclick={() => updatePrefs({ goal: item.id })}>En faire mon objectif</button>
+                    <button class="btn small ghost" aria-label="Faire de {item.name} mon objectif" onclick={() => updatePrefs({ goal: item.id })}>Mon objectif</button>
                   {/if}
-                  {#if shop.balance < item.price}<span class="muted short-by">Encore {fr(item.price - Math.max(0, shop.balance))} XP</span>{/if}
+                  {#if shop.balance < item.price}<span class="muted short-by">Plus que {fr(item.price - Math.max(0, shop.balance))} XP</span>{/if}
                 {/if}
               </div>
             </li>

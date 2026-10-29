@@ -29,9 +29,9 @@
     const from = untrack(() => prefs.lastChapter);
     if (from === id) return;
     untrack(() => updatePrefs({ lastChapter: id }));
-    const start = from ? document.querySelector<HTMLElement>(`[data-theme="${CSS.escape(from)}"] .disc`) : null;
+    const start = from ? [...document.querySelectorAll<HTMLElement>('[data-theme]')].find((n) => n.dataset.theme === from)?.querySelector<HTMLElement>('.disc') : null;
     const end = el.closest('.node')?.querySelector<HTMLElement>('.disc');
-    if (!start || !end || !motionOn()) return;
+    if (!start || !end || !motionOn() || typeof el.animate !== 'function') return;
     const a = start.getBoundingClientRect();
     const b = end.getBoundingClientRect();
     pose = 'walk';

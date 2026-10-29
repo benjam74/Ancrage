@@ -415,12 +415,12 @@ if (balance0 < 60) fail(`expected enough XP for a common item, got ${balance0}`)
 await fresh13.getByRole('button', { name: 'Chapeaux' }).click();
 await fresh13.getByRole('button', { name: 'Essayer Couronne dorée' }).click();
 await fresh13.getByText('Essayage : Couronne dorée. Rien n’est acheté.').waitFor();
-if (await fresh13.locator('.item', { hasText: 'Couronne dorée' }).getByRole('button', { name: 'Acheter' }).isEnabled()) fail('an item too expensive should not be buyable');
+if (await fresh13.getByRole('button', { name: 'Acheter Couronne dorée' }).isEnabled()) fail('an item too expensive should not be buyable');
 await fresh13.screenshot({ path: `${OUT}/shop.png`, fullPage: true });
 const bonnet = fresh13.locator('.item', { hasText: 'Bonnet de laine' });
-await bonnet.getByRole('button', { name: 'Acheter' }).click();
+await bonnet.getByRole('button', { name: 'Acheter Bonnet de laine' }).click();
 await bonnet.getByRole('button', { name: 'Oui' }).dblclick();
-await fresh13.getByText('Bonnet de laine : acheté et porté.').waitFor({ timeout: 3000 }).catch(() => fail('buying should confirm'));
+await fresh13.getByText(/Acheté et porté.*Bonnet de laine/).waitFor({ timeout: 3000 }).catch(() => fail('buying should confirm'));
 const purchases = await fresh13.evaluate(() => new Promise((resolve) => {
   const req = indexedDB.open('ancrage');
   req.onsuccess = () => { const r = req.result.transaction('events').objectStore('events').getAll(); r.onsuccess = () => resolve(r.result.filter((e) => e.type === 'purchase').length); };
@@ -430,9 +430,9 @@ if ((await balanceText()) !== balance0 - 60) fail('the balance should drop by th
 await fresh13.reload();
 await fresh13.getByRole('button', { name: 'Chapeaux' }).click();
 if (!(await bonnet.getByText('Porté').isVisible())) fail('the bought item should be worn after reload');
-await bonnet.getByRole('button', { name: 'Revendre' }).click();
+await bonnet.getByRole('button', { name: 'Revendre Bonnet de laine' }).click();
 await bonnet.getByRole('button', { name: 'Oui' }).click();
-await fresh13.getByText('Bonnet de laine revendu : +30 XP.').waitFor();
+await fresh13.getByText(/Revente.*Bonnet de laine, \+30 XP/).waitFor();
 if ((await balanceText()) !== balance0 - 30) fail('selling should give half back');
 await fresh13.goto(`${URL}#accueil`);
 await fresh13.locator('.goal-card').waitFor();

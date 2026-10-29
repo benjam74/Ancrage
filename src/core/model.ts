@@ -78,4 +78,6 @@ export type AppEvent =
   | { id: string; type: 'purchase'; ts: number; itemId: string; price: number }
   | { id: string; type: 'sale'; ts: number; itemId: string; refund: number }
   | { id: string; type: 'equip'; ts: number; slot: Slot; itemId: string | null }
-  | { id: string; type: 'avatar'; ts: number; character: CharacterId; name: string };
+  | { id: string; type: 'avatar'; ts: number; character: CharacterId; name: string }
+  /** XP earned by reviews of a deleted note, kept in the wallet (id `credit:<noteId>`, so devices agree). */
+  | { id: string; type: 'xp_credit'; ts: number; xp: number };

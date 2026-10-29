@@ -41,6 +41,15 @@ describe('inventory and wallet', () => {
     expect(resale(75)).toBe(37);
   });
 
+  test('the same item bought on two devices is charged once; credits from deleted notes count', () => {
+    expect(wallet(200, [buy('bonnet', 60, 1), buy('bonnet', 60, 1)])).toBe(140);
+    expect(wallet(0, [{ id: 'credit:n', type: 'xp_credit', ts: 1, xp: 120 }, buy('jean', 80, 2)])).toBe(40);
+  });
+
+  test('an item worn in the wrong slot is not drawn', () => {
+    expect(outfit([buy('bonnet', 60, 1), wear('haut', 'bonnet', 2)]).haut).toBeUndefined();
+  });
+
   test('round events do not touch the wallet', () => {
     expect(wallet(50, [{ id: 'r', type: 'round_completed', ts: 1 }])).toBe(50);
   });
