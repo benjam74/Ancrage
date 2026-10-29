@@ -1,0 +1,108 @@
+<script lang="ts">
+  import { untrack } from 'svelte';
+  import type { CloudSync, SyncStatus } from '../app/cloud';
+  import { howLongAgo } from './format';
+
+  let { cloud, onsynced }: { cloud: CloudSync; onsynced: () => void } = $props();
+
+  // The cloud service is created once at boot; read its stored values once.
+  const initial = untrack(() => ({ config: cloud.config(), email: cloud.email(), last: cloud.last() }));
+  let url = $state(initial.config?.url ?? '');
+  let anonKey = $state(initial.config?.anonKey ?? '');
+  let email = $state(initial.email ?? '');
+  let password = $state('');
+  let signedIn = $state(!!initial.email);
+  let status = $state<SyncStatus>(initial.last);
+  let message = $state('');
+  let error = $state('');
+  let busy = $state(false);
+
+  const ago = (at?: number) => (at ? howLongAgo(at, Date.now()) : '');
+
+  async function run(action: () => Promise<void>) {
+    if (busy) return;
+    busy = true;
+    error = '';
+    message = '';
+    try {
+      await action();
+    } finally {
+      busy = false;
+    }
+  }
+
+  const connect = (mode: 'in' | 'up') =>
+    run(async () => {
+      const conf = cloud.configure({ url, anonKey });
+      if (!conf.ok) return void (error = conf.error);
+      const res = mode === 'in' ? await cloud.signIn(email, password) : await cloud.signUp(email, password);
+      if (!res.ok) {
+        // Creating an account that needs e-mail confirmation is a success, not an error.
+        if (res.error?.startsWith('Compte créé')) return void (message = res.error);
+        return void (error = res.error ?? 'Connexion impossible.');
+      }
+      password = '';
+      signedIn = true;
+      await syncNow();
+    });
+
+  async function syncNow() {
+    status = await cloud.sync();
+    signedIn = !!cloud.email();
+    if (status.state === 'ok') {
+      message = 'Synchronisé.';
+      onsynced();
+    } else if (status.state === 'error') error = status.message ?? 'La synchronisation a échoué.';
+  }
+
+  function signOut() {
+    cloud.signOut();
+    signedIn = false;
+    status = { state: 'off' };
+    message = 'Déconnecté. Tes données restent sur cet appareil.';
+  }
+</script>
+
+<section class="panel" aria-labelledby="sync-title">
+  <h2 id="sync-title">Synchronisation</h2>
+  <p>Utilise Ancrage sur ton ordinateur et ton téléphone avec un projet Supabase gratuit, à toi. La mise en place prend dix minutes : <a href="https://github.com/benjam74/Ancrage/blob/main/docs/sync-supabase.md" target="_blank" rel="noopener">guide de synchronisation</a>.</p>
+
+  {#if signedIn}
+    <p><b>Connecté : {email}</b></p>
+    <p class="muted">
+      {status.state === 'ok' ? `Dernière synchronisation ${ago(status.at)}.` : status.state === 'error' ? `Échec ${ago(status.at)} : ${status.message}` : 'Pas encore synchronisé.'}
+      La synchronisation se fait à l’ouverture et après chaque manche.
+    </p>
+    <div class="actions">
+      <button class="btn" disabled={busy} onclick={() => run(syncNow)}>Synchroniser maintenant</button>
+      <button class="btn ghost" disabled={busy} onclick={signOut}>Se déconnecter</button>
+    </div>
+  {:else}
+    <form class="form" onsubmit={(e) => { e.preventDefault(); connect('in'); }} novalidate>
+      <div class="field">
+        <label for="sync-url">Adresse du projet</label>
+        <input id="sync-url" bind:value={url} placeholder="https://xxxx.supabase.co" autocomplete="off" inputmode="url" />
+      </div>
+      <div class="field">
+        <label for="sync-key">Clé publique (anon)</label>
+        <input id="sync-key" bind:value={anonKey} autocomplete="off" />
+      </div>
+      <div class="row2">
+        <div class="field">
+          <label for="sync-email">E-mail</label>
+          <input id="sync-email" type="email" bind:value={email} autocomplete="username" />
+        </div>
+        <div class="field">
+          <label for="sync-password">Mot de passe</label>
+          <input id="sync-password" type="password" bind:value={password} autocomplete="current-password" />
+        </div>
+      </div>
+      <div class="actions">
+        <button class="btn" disabled={busy}>Se connecter</button>
+        <button type="button" class="btn ghost" disabled={busy} onclick={() => connect('up')}>Créer le compte</button>
+      </div>
+    </form>
+  {/if}
+  <p role="status" class="muted">{message}</p>
+  {#if error}<p class="error" role="alert">{error}</p>{/if}
+</section>

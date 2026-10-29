@@ -139,6 +139,36 @@ describe('deletions and flags', () => {
   });
 });
 
+describe('tombstones and sync timestamps', () => {
+  test('deleting a note or a theme leaves a dated tombstone', async () => {
+    await repo.putNote(cloze('{{a}}', 'n1'));
+    await repo.putTheme({ id: 't9', name: 'X', order: 0 });
+    await repo.deleteNote('n1', T0 + 5);
+    await repo.deleteTheme('t9', T0 + 6);
+    const dump = await repo.dumpAll();
+    expect(dump.tombstones).toEqual([
+      { id: 'n1', kind: 'note', ts: T0 + 5 },
+      { id: 't9', kind: 'theme', ts: T0 + 6 },
+    ]);
+  });
+
+  test('settings remember when they were last changed', async () => {
+    expect((await repo.dumpAll()).settingsUpdatedAt).toBe(0);
+    await repo.putSettings({ desiredRetention: 0.85, newPerDay: 3 }, T0 + 9);
+    expect((await repo.dumpAll()).settingsUpdatedAt).toBe(T0 + 9);
+    expect(await repo.getSettings()).toEqual({ desiredRetention: 0.85, newPerDay: 3 });
+  });
+
+  test('restoreAll keeps tombstones and the settings timestamp', async () => {
+    await repo.deleteNote('gone', T0);
+    await repo.putSettings({ desiredRetention: 0.8, newPerDay: 2 }, T0 + 1);
+    const dump = await repo.dumpAll();
+    const other = createDexieRepo(`copy-${newId()}`);
+    await other.restoreAll(dump);
+    expect(await other.dumpAll()).toEqual(dump);
+  });
+});
+
 describe('events and migration', () => {
   test('events are appended and listed by time', async () => {
     await repo.appendEvent({ id: 'b', type: 'round_completed', ts: T0 + 2 });

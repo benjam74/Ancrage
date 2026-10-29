@@ -1,9 +1,11 @@
 <script lang="ts">
+  import type { CloudSync } from '../app/cloud';
   import type { Services } from '../app/services';
+  import SyncSettings from './SyncSettings.svelte';
   import { parseBackup, summarize, type Dump } from '../core/backup';
   import { RETENTION_MAX, RETENTION_MIN } from '../core/settings';
 
-  let { services, onchange }: { services: Services; onchange: () => void } = $props();
+  let { services, cloud, onchange }: { services: Services; cloud: CloudSync; onchange: () => void } = $props();
 
   // bind:value on a range input yields a number.
   let retention = $state<number>(0.9);
@@ -65,17 +67,18 @@
     else importError = res.error;
   }
 
-  async function restore() {
+  async function apply(mode: 'merge' | 'replace') {
     if (!pending) return;
     try {
-      await services.importBackup(pending.dump);
-      status = 'Données restaurées.';
+      if (mode === 'merge') await services.mergeBackup(pending.dump);
+      else await services.importBackup(pending.dump);
+      status = mode === 'merge' ? 'Sauvegarde fusionnée avec tes données.' : 'Données restaurées.';
       pending = null;
       onchange();
       await load();
     } catch (err) {
       console.error('Restore failed', err);
-      importError = 'La restauration a échoué, tes données n’ont pas été modifiées.';
+      importError = mode === 'merge' ? 'La fusion a échoué, tes données n’ont pas été modifiées.' : 'La restauration a échoué, tes données n’ont pas été modifiées.';
     }
   }
 
@@ -108,6 +111,8 @@
     </div>
   </form>
 
+  <SyncSettings {cloud} onsynced={async () => { onchange(); await load(); }} />
+
   <section class="panel">
     <h2>Sauvegarde</h2>
     <p>Tes données restent sur cet appareil. Télécharge une sauvegarde régulièrement : elle contient tes thèmes, tes notes et tout ton historique.</p>
@@ -119,7 +124,8 @@
     </div>
 
     <div class="field">
-      <label for="s-import">Restaurer une sauvegarde</label>
+      <label for="s-import">Ouvrir une sauvegarde</label>
+      <span class="hint">Pour passer d’un appareil à l’autre sans compte : exporte ici, ouvre le fichier sur l’autre appareil et choisis « Fusionner ».</span>
       <input id="s-import" type="file" accept="application/json,.json" onchange={pick} />
       {#if importError}<span class="error" role="alert">{importError}</span>{/if}
     </div>
@@ -128,9 +134,10 @@
       <div class="confirm" style="color:inherit">
         <span>
           « {pending.name} » : {sum.themes} thème{sum.themes > 1 ? 's' : ''}, {sum.notes} note{sum.notes > 1 ? 's' : ''}, {sum.reviews} révision{sum.reviews > 1 ? 's' : ''}{pending.exportedAt ? `, exportée le ${new Date(pending.exportedAt).toLocaleDateString('fr-FR')}` : ''}.
-          <b>Elle remplacera toutes les données de cet appareil.</b>
+          « Fusionner » ajoute ce qui manque et garde la version la plus récente de chaque note. « Remplacer » efface d’abord les données de cet appareil ; si la synchronisation est active, la prochaine synchronisation y rajoutera la copie du serveur.
         </span>
-        <button class="btn small danger" onclick={restore}>Remplacer mes données</button>
+        <button class="btn small" onclick={() => apply('merge')}>Fusionner avec mes données</button>
+        <button class="btn small danger" onclick={() => apply('replace')}>Remplacer mes données</button>
         <button class="btn small ghost" onclick={() => (pending = null)}>Annuler</button>
       </div>
     {/if}

@@ -56,6 +56,16 @@ describe('saveNote', () => {
   });
 });
 
+describe('clock skew', () => {
+  test('an edit made on a device whose clock is behind still wins over the stored version', async () => {
+    const t = await aTheme();
+    const first = await services.saveNote({ themeId: t.id, fields: { type: 'basic', front: 'Q', back: 'R', reverse: false }, tags: [] }, NOW + 60_000);
+    if (!first.ok) throw new Error('setup');
+    const edit = await services.saveNote({ id: first.note.id, themeId: t.id, fields: { type: 'basic', front: 'Q2', back: 'R', reverse: false }, tags: [] }, NOW);
+    expect(edit.ok && edit.note.updatedAt).toBeGreaterThan(NOW + 60_000);
+  });
+});
+
 describe('themes', () => {
   test('createTheme trims the name and appends it after existing themes', async () => {
     await repo.putTheme({ id: 'x', name: 'X', order: 4 });
@@ -66,7 +76,9 @@ describe('themes', () => {
   test('renameTheme changes only the name', async () => {
     const t = await aTheme();
     await services.renameTheme(t.id, ' Recadrage de sens ');
-    expect((await repo.listThemes()).find((x) => x.id === t.id)).toEqual({ ...t, name: 'Recadrage de sens' });
+    const renamed = (await repo.listThemes()).find((x) => x.id === t.id)!;
+    expect(renamed).toMatchObject({ id: t.id, order: t.order, name: 'Recadrage de sens' });
+    expect(renamed.updatedAt).toBeGreaterThanOrEqual(t.updatedAt ?? 0);
   });
 
   test('a theme with notes cannot be deleted; an empty one can', async () => {

@@ -12,6 +12,11 @@ export function inHowLong(target: number, now: number): string {
   return `dans ${years} an${years > 1 ? 's' : ''}`;
 }
 
+export function howLongAgo(at: number, now: number): string {
+  if (now - at < MIN) return 'à l’instant';
+  return inHowLong(now + (now - at), now).replace('dans', 'il y a');
+}
+
 export const RATING_LABEL = { 1: 'Again', 2: 'Hard', 3: 'Good', 4: 'Easy' } as const;
 export const MODE_LABEL = { recognition: 'Reconnaissance', production: 'Production', self: 'Auto-évaluation' } as const;
 

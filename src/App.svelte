@@ -1,5 +1,6 @@
 <script lang="ts">
   import { boot, type Progress as ProgressData, type Services, type Today } from './app/services';
+  import { browserStorage, createCloudSync, type CloudSync } from './app/cloud';
   import type { Note } from './core/model';
   import Editor from './ui/Editor.svelte';
   import Home from './ui/Home.svelte';
@@ -18,6 +19,7 @@
   };
 
   let services = $state<Services | null>(null);
+  let cloud = $state<CloudSync | null>(null);
   let today = $state<Today | null>(null);
   let progress = $state<ProgressData | null>(null);
   let view = $state<View>(fromHash());
@@ -50,21 +52,33 @@
     go('creer');
   }
 
+  let lastSync = 0;
+  /** Background sync: refreshes the screen when it brought something, stays silent otherwise. */
+  async function syncInBackground() {
+    if (!cloud || inSession) return;
+    lastSync = Date.now();
+    const res = await cloud.sync();
+    if (res.state === 'ok' && !inSession) await refresh();
+  }
+
   boot()
     .then(async (s) => {
       services = s;
+      cloud = createCloudSync(s.repo, browserStorage());
       await refresh();
+      void syncInBackground();
     })
     .catch((e) => (error = String(e)));
 </script>
 
+<svelte:document onvisibilitychange={() => { if (document.visibilityState === 'visible' && Date.now() - lastSync > 60_000) void syncInBackground(); }} />
 <svelte:window onhashchange={() => { view = fromHash(); if (view !== 'creer') editing = null; window.scrollTo(0, 0); }} />
 
 {#if error}
   <main class="page"><h1>Ancrage</h1><p>Impossible d’ouvrir la base locale : {error}</p></main>
 {:else if services && today && progress}
   {#if inSession}
-    <Session {services} queue={today.queue} onexit={async () => { if (reloadAfterSession) return location.reload(); await refresh(); inSession = false; }} />
+    <Session {services} queue={today.queue} onexit={async () => { if (reloadAfterSession) return location.reload(); await refresh(); inSession = false; void syncInBackground(); }} />
   {:else}
     {#if updateReady}
       <div class="update" role="status">
@@ -81,7 +95,7 @@
         {:else if view === 'progres'}
           <Progress {progress} />
         {:else if view === 'reglages'}
-          <Settings {services} onchange={refresh} />
+          {#if cloud}<Settings {services} {cloud} onchange={refresh} />{/if}
         {:else if view === 'bibliotheque'}
           <Library {services} onedit={edit} onchange={refresh} />
         {:else}

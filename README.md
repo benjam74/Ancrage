@@ -14,7 +14,9 @@ v1 complète, utilisable au quotidien.
 - **Réglages** : rétention visée (0,70 à 0,97), nouvelles cartes par jour, sauvegarde et restauration JSON.
 - **Application installable** (PWA), qui fonctionne hors ligne après la première visite.
 
-Prochaines versions : synchronisation entre appareils (v1.1), génération de cartes par IA (v1.2).
+- **Synchronisation** entre appareils (v1.1) : automatique avec ton propre projet Supabase gratuit, ou par fichier sans compte. Les historiques des appareils sont fusionnés, rien ne se perd. Guide : [`docs/sync-supabase.md`](docs/sync-supabase.md).
+
+Prochaine version : génération de cartes par IA (v1.2).
 
 ## Installer l'application
 
@@ -24,7 +26,7 @@ Une fois Ancrage hébergé (voir « Déploiement ») :
 - **Android (Chrome)** : menu ⋮ → « Installer l'application ».
 - **iPhone, iPad (Safari)** : bouton Partager → « Sur l'écran d'accueil ».
 
-Tes données restent dans le navigateur de chaque appareil. Télécharge une sauvegarde depuis Réglages, régulièrement, et avant de changer d'appareil.
+Tes données restent dans le navigateur de chaque appareil. Pour les partager entre appareils, active la synchronisation (Réglages → Synchronisation) ou fusionne une sauvegarde (Réglages → Ouvrir une sauvegarde → Fusionner).
 
 ## Déploiement
 

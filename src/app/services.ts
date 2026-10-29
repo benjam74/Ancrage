@@ -5,6 +5,7 @@ import type { Card, Note, NoteFields, ReviewEntry, Theme } from '../core/model';
 import { validateFields } from '../core/validate';
 import { validateSettings } from '../core/settings';
 import { backupFileName, serializeBackup, type Dump } from '../core/backup';
+import { mergeIntoLocal } from '../sync/sync';
 import { classifyEntries, goalDays, makeRestDayCheck, nextStudyDay, streakState, weekStart, xpBetween } from '../core/progress';
 import { dailyCounts, forecast, mastery, retention, stateBreakdown, type Level } from '../core/stats';
 import type { CardState } from '../core/scheduler';
@@ -82,6 +83,8 @@ export interface Services {
   exportBackup(now: number): Promise<{ fileName: string; text: string }>;
   /** Replaces all local data with the backup, all or nothing. */
   importBackup(dump: Dump): Promise<void>;
+  /** Merges a backup from another device into local data; nothing local is lost. */
+  mergeBackup(dump: Dump): Promise<void>;
   /** Records a finished round; returns the XP it earned (answers since `startedAt` + round bonus). */
   completeRound(startedAt: number, now: number): Promise<{ xp: number; streak: number; firstGoalToday: boolean }>;
 }
@@ -206,20 +209,24 @@ export function createServices(repo: Repo, deviceId: string): Services {
         tags: [...new Set(input.tags.map((t) => t.trim()).filter(Boolean))],
         ...(input.source?.trim() ? { source: input.source.trim() } : {}),
         createdAt: existing?.createdAt ?? now,
-        updatedAt: now,
+        // A device whose clock is behind must still produce the newest version.
+        updatedAt: Math.max(now, (existing?.updatedAt ?? 0) + 1),
       };
       const cards = await repo.putNote(note);
       const queue = new Set((await services.today(now)).queue);
       return { ok: true, note, cards: cards.length, today: cards.filter((c) => queue.has(c.id)).length };
     },
 
-    deleteNote: (id) => repo.deleteNote(id),
+    async deleteNote(id) {
+      const note = await repo.getNote(id);
+      await repo.deleteNote(id, Math.max(Date.now(), (note?.updatedAt ?? 0) + 1));
+    },
 
     async createTheme(name) {
       const clean = name.trim();
       if (!clean) throw new Error('Le nom du thème est obligatoire.');
       const themes = await repo.listThemes();
-      const theme: Theme = { id: newId(), name: clean, order: Math.max(-1, ...themes.map((t) => t.order)) + 1 };
+      const theme: Theme = { id: newId(), name: clean, order: Math.max(-1, ...themes.map((t) => t.order)) + 1, updatedAt: Date.now() };
       await repo.putTheme(theme);
       return theme;
     },
@@ -228,13 +235,14 @@ export function createServices(repo: Repo, deviceId: string): Services {
       const clean = name.trim();
       const theme = (await repo.listThemes()).find((t) => t.id === id);
       if (!theme || !clean) return;
-      await repo.putTheme({ ...theme, name: clean });
+      await repo.putTheme({ ...theme, name: clean, updatedAt: Math.max(Date.now(), (theme.updatedAt ?? 0) + 1) });
     },
 
     async deleteTheme(id) {
       const count = (await repo.listNotes(id)).length;
       if (count > 0) return { ok: false, reason: `Ce thème contient ${count} note${count > 1 ? 's' : ''}. Déplace-les ou supprime-les d’abord.` };
-      await repo.deleteTheme(id);
+      const theme = (await repo.listThemes()).find((t) => t.id === id);
+      await repo.deleteTheme(id, Math.max(Date.now(), (theme?.updatedAt ?? 0) + 1));
       return { ok: true };
     },
 
@@ -319,6 +327,10 @@ export function createServices(repo: Repo, deviceId: string): Services {
     },
 
     importBackup: (dump) => repo.restoreAll(dump),
+
+    async mergeBackup(dump) {
+      await mergeIntoLocal(repo, dump);
+    },
 
     async completeRound(startedAt, now) {
       const before = await snapshot();
