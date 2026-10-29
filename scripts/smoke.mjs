@@ -291,6 +291,55 @@ await devC.getByRole('button', { name: 'Fusionner avec mes données' }).click();
 await devC.getByText('Sauvegarde fusionnée avec tes données.').waitFor();
 if ((await countReviews(devC)) !== reviewsA + reviewsC) fail(`merge should keep ${reviewsA} + ${reviewsC} reviews, has ${await countReviews(devC)}`);
 
+// --- v1.2: card generation against an intercepted Anthropic API ---
+const blank = (type) => ({ type, front: '', back: '', reverse: false, text: '', title: '', steps: [], statement: '', categories: [], answer: '', question: '', distractors: [], situation: '', model: '', keyPoints: [], rationale: '' });
+const aiNotes = [
+  { ...blank('basic'), front: 'Que signifie VAKOG ?', back: 'Visuel, Auditif, Kinesthésique, Olfactif, Gustatif', rationale: 'Définition centrale du texte.' },
+  { ...blank('mcq'), question: 'Quel est le but du recadrage ?', answer: 'Changer le sens donné à une situation', distractors: ['Changer la situation', 'Ignorer le problème'], rationale: 'Distinction clé.' },
+  { ...blank('mcq'), question: 'QCM sans distracteur', answer: 'Seule réponse', distractors: [], rationale: 'Invalide.' },
+];
+let aiCalls = 0;
+const aiCtx = await browser.newContext({ serviceWorkers: 'block' });
+await aiCtx.route('https://api.anthropic.com/**', async (route) => {
+  const headers = { 'access-control-allow-origin': '*', 'access-control-allow-headers': '*', 'access-control-allow-methods': '*' };
+  if (route.request().method() === 'OPTIONS') return route.fulfill({ status: 204, headers });
+  aiCalls++;
+  const body = { id: 'msg_1', type: 'message', role: 'assistant', model: 'claude-opus-5-5', stop_reason: 'end_turn', content: [{ type: 'text', text: JSON.stringify({ notes: aiNotes }) }], usage: { input_tokens: 10, output_tokens: 10 } };
+  return route.fulfill({ status: 200, contentType: 'application/json', headers, body: JSON.stringify(body) });
+});
+const ai = await aiCtx.newPage();
+ai.on('pageerror', (e) => errors.push(`ai: ${e.message}`));
+await ai.goto(`${URL}#creer`);
+await ai.getByRole('button', { name: 'Générer depuis un texte' }).click();
+await ai.getByLabel('Texte', { exact: true }).fill('Le VAKOG décrit les canaux sensoriels. Le recadrage change le sens donné à une situation.');
+await ai.getByLabel('Source').fill('Module 3');
+await ai.getByRole('button', { name: 'Générer les cartes' }).click();
+await ai.getByText('Ajoute ta clé API Anthropic pour générer des cartes.').waitFor({ timeout: 3000 }).catch(() => fail('generating without a key should explain a key is needed'));
+if (aiCalls !== 0) fail('no API call should happen without a key');
+await ai.getByLabel('Clé API Anthropic').fill('sk-ant-test');
+await ai.getByRole('button', { name: 'Générer les cartes' }).click();
+await ai.getByRole('heading', { name: '2 cartes proposées' }).waitFor({ timeout: 10000 }).catch(async () => fail(`generation failed: ${(await ai.locator('main').innerText()).replace(/\s+/g, ' ').slice(-300)}`));
+await ai.getByText('1 proposition écartée').waitFor();
+await ai.screenshot({ path: `${OUT}/generate.png`, fullPage: true });
+await ai.locator('.proposal').nth(0).getByRole('button', { name: 'Ajouter' }).click();
+await ai.locator('.proposal').nth(0).getByText('Ajoutée.').waitFor();
+await ai.locator('.proposal').nth(1).getByRole('button', { name: 'Modifier' }).click();
+const q = ai.getByLabel('Question');
+await q.waitFor();
+await q.fill('Quel est le but du recadrage en PNL ?');
+await ai.getByRole('button', { name: 'Ajouter au thème' }).click();
+await ai.getByRole('heading', { name: '2 cartes proposées' }).waitFor();
+if ((await ai.locator('.proposal .notice').count()) !== 2) fail('both proposals should be marked added');
+const aiSaved = await ai.evaluate(() => new Promise((resolve) => {
+  const req = indexedDB.open('ancrage');
+  req.onsuccess = () => { const r = req.result.transaction('notes').objectStore('notes').getAll(); r.onsuccess = () => resolve(r.result.filter((n) => n.tags.includes('ia')).map((n) => ({ q: n.fields.question ?? n.fields.front, source: n.source }))); };
+}));
+if (aiSaved.length !== 2) fail(`library should hold 2 notes tagged ia, has ${aiSaved.length}`);
+if (!aiSaved.some((n) => n.q === 'Quel est le but du recadrage en PNL ?')) fail('the edited version should be saved');
+if (aiSaved.some((n) => n.q === 'Quel est le but du recadrage ?')) fail('the unedited version should not be saved');
+if (!aiSaved.every((n) => n.source === 'Module 3')) fail('generated notes should keep the source title');
+if (aiCalls !== 1) fail(`expected exactly 1 API call, got ${aiCalls}`);
+
 const mobile = await browser.newPage({ viewport: { width: 390, height: 844 }, colorScheme: 'dark' });
 mobile.on('pageerror', (e) => errors.push(e.message));
 await mobile.goto(URL);

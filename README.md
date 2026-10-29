@@ -16,7 +16,7 @@ v1 complète, utilisable au quotidien.
 
 - **Synchronisation** entre appareils (v1.1) : automatique avec ton propre projet Supabase gratuit, ou par fichier sans compte. Les historiques des appareils sont fusionnés, rien ne se perd. Guide : [`docs/sync-supabase.md`](docs/sync-supabase.md).
 
-Prochaine version : génération de cartes par IA (v1.2).
+- **Cartes générées par IA** (v1.2) : Créer → « Générer depuis un texte ». Colle des notes de formation ou un extrait, Claude propose des cartes des 6 types, fidèles au texte ; tu les relis, modifies ou écartes avant tout ajout. Il faut ta propre clé API Anthropic ([console.anthropic.com](https://console.anthropic.com)), enregistrée seulement sur l'appareil. Le texte collé est envoyé à Anthropic : n'y mets pas de données de clients identifiables. Coût indicatif : quelques centimes par texte de quelques pages.
 
 ## Installer l'application
 
@@ -48,12 +48,12 @@ npm run build && npm run smoke   # parcours de bout en bout dans Chromium (Playw
 node scripts/make-icons.mjs      # régénère les icônes de l'application
 ```
 
-Code : `src/core/` (domaine pur, sans navigateur), `src/storage/` (persistance IndexedDB via Dexie).
-Plan de l'itération : [`docs/superpowers/plans/2026-10-28-iteration-1-engine.md`](docs/superpowers/plans/2026-10-28-iteration-1-engine.md).
+Code : `src/core/` (domaine pur, sans navigateur), `src/storage/` (persistance IndexedDB via Dexie), `src/sync/` (fusion et Supabase), `src/app/` (services, appel à Claude), `src/ui/` (interface).
+Plans des itérations : [`docs/superpowers/plans/`](docs/superpowers/plans/).
 
 ## Stack
 
-PWA Svelte 5 + Vite + TypeScript, IndexedDB (Dexie), `ts-fsrs` 5.4.2, `vite-plugin-pwa`, Vitest. Licence MIT.
+PWA Svelte 5 + Vite + TypeScript, IndexedDB (Dexie), `ts-fsrs` 5.4.2, `vite-plugin-pwa`, `@anthropic-ai/sdk` (chargé à la demande), Vitest. Licence MIT.
 Aucun code d'Anki n'est réutilisé : seuls les principes le sont.
 
 ## Feuille de route
@@ -64,4 +64,5 @@ Aucun code d'Anki n'est réutilisé : seuls les principes le sont.
 4. Accueil, XP, streak, maîtrise, statistiques.
 5. PWA installable, persistance, sauvegarde JSON.
 
-Ensuite : sync (v1.1), génération de cartes par IA (v1.2).
+6. Synchronisation (v1.1).
+7. Génération de cartes par IA (v1.2).

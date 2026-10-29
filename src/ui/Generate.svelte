@@ -169,7 +169,7 @@
             <article class="proposal">
               <div class="editor">
                 <div style="display:grid;gap:8px">
-                  <span class="pill">{TYPE_LABEL[item.proposal.fields.type]}</span>
+                  <span class="pill" style="justify-self:start">{TYPE_LABEL[item.proposal.fields.type]}</span>
                   {#if item.proposal.rationale}<p class="muted">{item.proposal.rationale}</p>{/if}
                   {#if item.status === 'added'}
                     <p class="notice">Ajoutée.</p>
