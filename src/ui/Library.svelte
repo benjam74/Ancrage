@@ -2,6 +2,8 @@
   import type { LibraryTheme, Services } from '../app/services';
   import type { Note, NoteFields } from '../core/model';
   import { TYPE_LABEL } from './format';
+  import { groupByDomain, isDomain } from '../core/domains';
+  import { EXAMPLES } from '../app/current';
 
   let { services, onedit, onchange }: { services: Services; onedit: (note: Note) => void; onchange: () => void } = $props();
 
@@ -11,11 +13,24 @@
   let renaming = $state<string | null>(null);
   let renameValue = $state('');
   let newTheme = $state('');
+  let newDomain = $state('');
+  /** Domain for the « Nouveau thème » form. */
+  let themeDomain = $state('');
   let message = $state('');
   let warning = $state('');
 
   let examples = $state(0);
   const totalNotes = $derived(lib.reduce((sum, t) => sum + t.notes.length, 0));
+  const byId = $derived(new Map(lib.map((t) => [t.theme.id, t])));
+  const groups = $derived(groupByDomain(lib.map((t) => t.theme)));
+  const domains = $derived(lib.map((t) => t.theme).filter(isDomain));
+  /** Open or closed per domain, kept across reloads of the list; by default the first open when there are many. */
+  let opened = $state<Record<string, boolean>>({});
+  const isOpen = (key: string, first: boolean) => opened[key] ?? (groups.length < 3 || first);
+  const hasSchool = $derived(lib.some((t) => t.theme.id.startsWith('c5-')));
+  $effect(() => {
+    if (!domains.some((d) => d.id === themeDomain)) themeDomain = domains[0]?.id ?? '';
+  });
 
   async function load() {
     [lib, examples] = await Promise.all([services.library(), services.examplesCount()]);
@@ -50,9 +65,23 @@
   async function addTheme(e: SubmitEvent) {
     e.preventDefault();
     if (!newTheme.trim()) return;
-    const t = await services.createTheme(newTheme);
+    const t = await services.createTheme(newTheme, themeDomain || undefined);
     newTheme = '';
     await done(`Thème « ${t.name} » créé.`);
+  }
+
+  async function addDomain(e: SubmitEvent) {
+    e.preventDefault();
+    if (!newDomain.trim()) return;
+    const d = await services.createDomain(newDomain);
+    newDomain = '';
+    themeDomain = d.id;
+    await done(`Domaine « ${d.name} » créé.`);
+  }
+
+  async function move(themeId: string, domainId: string) {
+    await services.moveTheme(themeId, domainId);
+    await done('Thème déplacé.');
   }
 
   async function rename(id: string) {
@@ -63,7 +92,7 @@
 
   async function removeTheme(id: string) {
     const res = await services.deleteTheme(id);
-    if (res.ok) await done('Thème supprimé.');
+    if (res.ok) await done(byId.get(id) && isDomain(byId.get(id)!.theme) ? 'Domaine supprimé.' : 'Thème supprimé.');
     else warning = res.reason ?? 'Impossible de supprimer ce thème.';
   }
 
@@ -82,12 +111,25 @@
       <p class="eyebrow">{totalNotes} note{totalNotes > 1 ? 's' : ''}</p>
       <h1>Bibliothèque</h1>
     </div>
+  </header>
+
+  <section class="panel lib-forms" aria-label="Ajouter">
+    <form class="actions" onsubmit={addDomain}>
+      <label class="eyebrow" for="new-domain" style="align-self:center">Nouveau domaine</label>
+      <input id="new-domain" class="inline-input" style="width:auto;flex:1 1 160px" bind:value={newDomain} placeholder="Ex. Mathématiques" />
+      <button class="btn small" disabled={!newDomain.trim()}>Créer</button>
+    </form>
     <form class="actions" onsubmit={addTheme}>
       <label class="eyebrow" for="new-theme" style="align-self:center">Nouveau thème</label>
-      <input id="new-theme" class="inline-input" style="width:auto" bind:value={newTheme} placeholder="Ex. Écoute active" />
+      <input id="new-theme" class="inline-input" style="width:auto;flex:1 1 160px" bind:value={newTheme} placeholder={EXAMPLES.theme} />
+      {#if domains.length}
+        <select class="inline-input" style="width:auto" aria-label="Domaine du nouveau thème" bind:value={themeDomain}>
+          {#each domains as d (d.id)}<option value={d.id}>{d.name}</option>{/each}
+        </select>
+      {/if}
       <button class="btn small" disabled={!newTheme.trim()}>Créer</button>
     </form>
-  </header>
+  </section>
 
   {#if message}<p class="notice" role="status">{message}</p>{/if}
   {#if warning}<p class="notice warn" role="alert">{warning}</p>{/if}
@@ -95,7 +137,7 @@
   {#if examples > 0}
     <section class="panel">
       <div class="row">
-        <p>Le deck de démarrage est chargé. Retire-le quand tu as tes propres cartes.</p>
+        <p>Les cartes d’exemple sont chargées. Retire-les quand tu as tes propres cartes{hasSchool ? ' : les domaines et chapitres restent, prêts pour tes cours' : ''}.</p>
         {#if confirmExamples}
           <span class="confirm">Supprimer les {examples} notes d’exemple et leur historique ? Tes propres notes sont conservées.
             <button class="btn small danger" onclick={removeExamples}>Oui, retirer</button>
@@ -112,7 +154,30 @@
     <section class="panel"><p>Aucun thème. Crée un thème, puis ajoute tes premières notes depuis « Créer ».</p></section>
   {/if}
 
-  {#each lib as { theme, notes } (theme.id)}
+  {#each groups as group (group.domain?.id ?? 'loose')}
+    {@const key = group.domain?.id ?? 'loose'}
+    <details class="domain-block" open={isOpen(key, group === groups[0])} ontoggle={(e) => (opened[key] = e.currentTarget.open)}>
+      <summary class="domain-head"><h2 id={`domain-${key}`}>{group.domain?.name ?? 'Sans domaine'}</h2></summary>
+      <div class="row">
+        {#if group.domain && renaming === group.domain.id}
+          <form class="actions" onsubmit={(e) => { e.preventDefault(); rename(group.domain!.id); }}>
+            <input class="inline-input" style="width:auto" aria-label="Nouveau nom du domaine" bind:value={renameValue} />
+            <button class="btn small">Enregistrer</button>
+            <button type="button" class="btn small ghost" onclick={() => (renaming = null)}>Annuler</button>
+          </form>
+        {:else}
+          {#if group.domain}
+            {@const domain = group.domain}
+            <div class="actions">
+              <button class="btn small ghost" onclick={() => { renaming = domain.id; renameValue = domain.name; }}>Renommer le domaine</button>
+              {#if group.themes.length === 0}<button class="btn small ghost" onclick={() => removeTheme(domain.id)}>Supprimer le domaine</button>{/if}
+            </div>
+          {/if}
+        {/if}
+      </div>
+      {#if group.themes.length === 0}<p class="muted">Aucun thème dans ce domaine.</p>{/if}
+      {#each group.themes as t (t.id)}
+      {@const { theme, notes } = byId.get(t.id)!}
     <section class="panel" aria-labelledby={`theme-${theme.id}`}>
       <div class="row">
         {#if renaming === theme.id}
@@ -122,8 +187,14 @@
             <button type="button" class="btn small ghost" onclick={() => (renaming = null)}>Annuler</button>
           </form>
         {:else}
-          <h2 id={`theme-${theme.id}`}>{theme.name}</h2>
+          <h3 id={`theme-${theme.id}`}>{theme.name}</h3>
           <div class="actions">
+            {#if domains.length > 1 || (!group.domain && domains.length)}
+              <select class="inline-input" style="width:auto" aria-label="Déplacer « {theme.name} » vers" value="" onchange={(e) => { if (e.currentTarget.value) move(theme.id, e.currentTarget.value); }}>
+                <option value="">Déplacer vers…</option>
+                {#each domains.filter((d) => d.id !== group.domain?.id) as d (d.id)}<option value={d.id}>{d.name}</option>{/each}
+              </select>
+            {/if}
             <button class="btn small ghost" onclick={() => { renaming = theme.id; renameValue = theme.name; }}>Renommer</button>
             {#if notes.length === 0}<button class="btn small ghost" onclick={() => removeTheme(theme.id)}>Supprimer le thème</button>{/if}
           </div>
@@ -151,9 +222,11 @@
                 </div>
               {/if}
             </li>
-          {/each}
+              {/each}
         </ul>
       {/if}
     </section>
+      {/each}
+    </details>
   {/each}
 </main>

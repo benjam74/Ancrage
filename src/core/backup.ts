@@ -65,7 +65,7 @@ const knownEvent = (type: unknown) => isStr(type) && Object.hasOwn(EVENT_SHAPES,
 
 const CHECKS: Record<'themes' | 'notes' | 'cards' | 'reviews' | 'events', (r: Record<string, unknown>) => boolean> = {
   themes: (r) =>
-    isStr(r.id) && isStr(r.name) && isNum(r.order) && (r.parentId === undefined || isStr(r.parentId)) &&
+    isStr(r.id) && isStr(r.name) && isNum(r.order) && (r.parentId === undefined || isStr(r.parentId)) && (r.kind === undefined || r.kind === 'domain') &&
     (r.updatedAt === undefined || isNum(r.updatedAt)),
   notes: (r) =>
     isStr(r.id) && isStr(r.themeId) && fieldsOk(r.fields) && isStrList(r.tags) &&

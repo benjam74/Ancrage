@@ -2,6 +2,8 @@
   import type { CloudSync } from '../app/cloud';
   import type { Services } from '../app/services';
   import SyncSettings from './SyncSettings.svelte';
+  import ProfileSettings from './ProfileSettings.svelte';
+  import { currentProfile } from '../app/current';
   import { prefs, updatePrefs } from './prefs.svelte';
   import { parseBackup, summarize, type Dump } from '../core/backup';
   import { RETENTION_MAX, RETENTION_MIN } from '../core/settings';
@@ -111,6 +113,8 @@
       <button class="btn">Enregistrer</button>
     </div>
   </form>
+
+  <ProfileSettings current={currentProfile.id} />
 
   <section class="panel prefs" aria-labelledby="s-motivation">
     <h2 id="s-motivation">Motivation</h2>

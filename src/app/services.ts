@@ -14,6 +14,9 @@ import type { CardState } from '../core/scheduler';
 import { buildCustomQueue, buildDailyQueue, countNewIntroduced, nextDue, studyDayStart, type CustomChoice, type QueueCandidate } from '../core/queue';
 import { makeScheduler } from '../core/scheduler';
 import { STARTER_THEMES, starterNotes } from '../data/starter';
+import { COLLEGE5_THEMES, college5Notes } from '../data/college5';
+import { DEFAULT_DOMAIN_ID, domainOf, isDomain, migrateToDomains } from '../core/domains';
+import { dbName, type Profile, type Starter } from './profiles';
 import { createDexieRepo } from '../storage/dexie-repo';
 import type { Repo } from '../storage/repo';
 
@@ -93,6 +96,8 @@ export interface Progress {
   /** Share of correct answers on due cards over the last 30 days. */
   retention: number | null;
   breakdown: ReturnType<typeof stateBreakdown>;
+  /** Domains in order; themes (in `themes`) point to them through `theme.parentId`. */
+  domains: Theme[];
   /** Longest streak ever reached. */
   best: number;
   /** Monday to Sunday of the current week. */
@@ -125,7 +130,11 @@ export interface Services {
   context(cardId: string): Promise<{ note: Note; card: Card; pool: Note[]; theme: Theme }>;
   saveNote(input: NoteInput, now: number): Promise<SaveResult>;
   deleteNote(id: string): Promise<void>;
-  createTheme(name: string): Promise<Theme>;
+  /** A theme (chapter), in a domain when one is given. */
+  createTheme(name: string, domainId?: string): Promise<Theme>;
+  createDomain(name: string): Promise<Theme>;
+  /** Moves a theme into another domain; last writer wins on sync, like a rename. */
+  moveTheme(themeId: string, domainId: string): Promise<void>;
   renameTheme(id: string, name: string): Promise<void>;
   deleteTheme(id: string): Promise<{ ok: boolean; reason?: string }>;
   removeExamples(): Promise<{ notes: number; themes: number }>;
@@ -149,21 +158,31 @@ const RETENTION_WINDOW = 30 * 86_400_000;
 
 const SEEDED = 'starterSeeded';
 /** Starter notes are recognized by id, never by tag: a user may tag their own notes "exemple". */
-const STARTER_NOTE_IDS = new Set(starterNotes(0).map((n) => n.id));
+const STARTER_NOTE_IDS = new Set([...starterNotes(0), ...college5Notes(0)].map((n) => n.id));
+// The coaching example themes go with their notes; the 5e subjects and chapters stay, ready for the pupil's own cards.
+const STARTER_THEME_IDS = new Set(STARTER_THEMES.map((t) => t.id));
 export const EXAMPLE_TAG = 'exemple';
 
 /** Seeds the starter deck once in the database's life, so removing the examples is permanent. */
-export async function seedIfEmpty(repo: Repo, now: number = Date.now()): Promise<boolean> {
+export async function seedIfEmpty(repo: Repo, now: number = Date.now(), starter: Starter = 'coaching'): Promise<boolean> {
   if (await repo.getFlag(SEEDED)) return false;
-  if ((await repo.listNotes()).length > 0) {
+  if ((await repo.listNotes()).length > 0 || starter === 'none') {
     await repo.setFlag(SEEDED);
     return false;
   }
   // Starter ids are fixed, so an interrupted seed is completed on the next launch without duplicates.
-  for (const theme of STARTER_THEMES) await repo.putTheme(theme);
-  for (const note of starterNotes(now)) await repo.putNote(note);
+  const [themes, notes] = starter === 'college5' ? [COLLEGE5_THEMES, college5Notes(now)] : [STARTER_THEMES, starterNotes(now)];
+  for (const theme of themes) await repo.putTheme(theme);
+  for (const note of notes) await repo.putNote(note);
   await repo.setFlag(SEEDED);
   return true;
+}
+
+/** Gives themes created before domains a default domain; runs at every start (cheap, idempotent). */
+export async function ensureDomains(repo: Repo): Promise<boolean> {
+  const domain = migrateToDomains(await repo.listThemes());
+  if (domain) await repo.putTheme(domain);
+  return !!domain;
 }
 
 export function createServices(repo: Repo, deviceId: string): Services {
@@ -224,7 +243,10 @@ export function createServices(repo: Repo, deviceId: string): Services {
       repo.getSettings(),
     ]);
     const scheduler = makeScheduler(settings);
-    const themeOrder = new Map(themes.map((t) => [t.id, t.order]));
+    // New cards follow the domains' order, then each theme's order inside its domain.
+    const domainIds = new Set(themes.filter(isDomain).map((t) => t.id));
+    const domainOrder = new Map(themes.filter(isDomain).map((t) => [t.id, t.order]));
+    const themeOrder = new Map(themes.map((t) => [t.id, (domainOrder.get(domainOf(t, domainIds) ?? '') ?? 999) * 10_000 + t.order]));
     const noteById = new Map(notes.map((n) => [n.id, n]));
     const logByCard = new Map<string, ReviewEntry[]>();
     for (const e of reviews) {
@@ -289,7 +311,7 @@ export function createServices(repo: Repo, deviceId: string): Services {
 
     async saveNote(input, now) {
       const errors = validateFields(input.fields);
-      if (!(await repo.listThemes()).some((t) => t.id === input.themeId)) errors.themeId = 'Ce thème n’existe plus. Choisis-en un autre.';
+      if (!(await repo.listThemes()).some((t) => t.id === input.themeId && !isDomain(t))) errors.themeId = 'Ce thème n’existe plus. Choisis-en un autre.';
       if (Object.keys(errors).length) return { ok: false, errors };
       const existing = input.id ? await repo.getNote(input.id) : undefined;
       const note: Note = {
@@ -313,13 +335,36 @@ export function createServices(repo: Repo, deviceId: string): Services {
       await repo.deleteNote(id, Math.max(Date.now(), (note?.updatedAt ?? 0) + 1));
     },
 
-    async createTheme(name) {
+    async createTheme(name, domainId) {
       const clean = name.trim();
       if (!clean) throw new Error('Le nom du thème est obligatoire.');
       const themes = await repo.listThemes();
-      const theme: Theme = { id: newId(), name: clean, order: Math.max(-1, ...themes.map((t) => t.order)) + 1, updatedAt: Date.now() };
+      const parent = domainId && themes.some((t) => t.id === domainId && isDomain(t)) ? domainId : undefined;
+      const ids = new Set(themes.filter(isDomain).map((t) => t.id));
+      // Without a parent, the theme shows in the default domain when there is one: order it among those.
+      const shownIn = parent ?? (ids.has(DEFAULT_DOMAIN_ID) ? DEFAULT_DOMAIN_ID : null);
+      const siblings = themes.filter((t) => !isDomain(t) && domainOf(t, ids) === shownIn);
+      const theme: Theme = { id: newId(), name: clean, order: Math.max(-1, ...siblings.map((t) => t.order)) + 1, updatedAt: Date.now(), ...(parent ? { parentId: parent } : {}) };
       await repo.putTheme(theme);
       return theme;
+    },
+
+    async createDomain(name) {
+      const clean = name.trim();
+      if (!clean) throw new Error('Le nom du domaine est obligatoire.');
+      const domains = (await repo.listThemes()).filter(isDomain);
+      const domain: Theme = { id: newId(), name: clean, order: Math.max(-1, ...domains.map((t) => t.order)) + 1, kind: 'domain', updatedAt: Date.now() };
+      await repo.putTheme(domain);
+      return domain;
+    },
+
+    async moveTheme(themeId, domainId) {
+      const themes = await repo.listThemes();
+      const theme = themes.find((t) => t.id === themeId && !isDomain(t));
+      if (!theme || !themes.some((t) => t.id === domainId && isDomain(t))) return;
+      const ids = new Set(themes.filter(isDomain).map((t) => t.id));
+      const order = Math.max(-1, ...themes.filter((t) => !isDomain(t) && domainOf(t, ids) === domainId).map((t) => t.order)) + 1;
+      await repo.putTheme({ ...theme, parentId: domainId, order, updatedAt: Math.max(Date.now(), (theme.updatedAt ?? 0) + 1) });
     },
 
     async renameTheme(id, name) {
@@ -330,6 +375,8 @@ export function createServices(repo: Repo, deviceId: string): Services {
     },
 
     async deleteTheme(id) {
+      const children = (await repo.listThemes()).filter((t) => t.parentId === id).length;
+      if (children > 0) return { ok: false, reason: `Ce domaine contient ${children} thème${children > 1 ? 's' : ''}. Déplace-les ou supprime-les d’abord.` };
       const count = (await repo.listNotes(id)).length;
       if (count > 0) return { ok: false, reason: `Ce thème contient ${count} note${count > 1 ? 's' : ''}. Déplace-les ou supprime-les d’abord.` };
       const theme = (await repo.listThemes()).find((t) => t.id === id);
@@ -341,11 +388,19 @@ export function createServices(repo: Repo, deviceId: string): Services {
       const examples = (await repo.listNotes()).filter((n) => STARTER_NOTE_IDS.has(n.id));
       await keepXp(examples.map((n) => n.id));
       for (const n of examples) await repo.deleteNote(n.id);
-      const starterIds = new Set(STARTER_THEMES.map((t) => t.id));
       let themes = 0;
-      for (const t of await repo.listThemes()) {
-        if (starterIds.has(t.id) && (await repo.listNotes(t.id)).length === 0) {
+      const all = await repo.listThemes();
+      // Chapters first, then the example domains left empty.
+      for (const t of all.filter((t) => !isDomain(t))) {
+        if (STARTER_THEME_IDS.has(t.id) && (await repo.listNotes(t.id)).length === 0) {
           await repo.deleteTheme(t.id);
+          themes++;
+        }
+      }
+      const left = await repo.listThemes();
+      for (const d of all.filter(isDomain)) {
+        if (STARTER_THEME_IDS.has(d.id) && !left.some((t) => t.parentId === d.id)) {
+          await repo.deleteTheme(d.id);
           themes++;
         }
       }
@@ -403,6 +458,7 @@ export function createServices(repo: Repo, deviceId: string): Services {
         xpToday: xpBetween(snap.reviews, snap.kinds, snap.roundEnds, todayStart, nextStudyDay(todayStart), bonus),
         xpWeek: xpBetween(snap.reviews, snap.kinds, snap.roundEnds, week, weekStart(week + 8 * 86_400_000), bonus),
         themes: [...snap.themes]
+          .filter((t) => !isDomain(t))
           .sort((a, b) => a.order - b.order)
           .map((theme) => {
             const states = byTheme.get(theme.id) ?? [];
@@ -417,6 +473,7 @@ export function createServices(repo: Repo, deviceId: string): Services {
         forecastDays,
         retention: retention(snap.reviews, snap.kinds, now - RETENTION_WINDOW),
         breakdown: stateBreakdown(allStates),
+        domains: snap.themes.filter(isDomain).sort((a, b) => a.order - b.order),
         best: streak.best,
         week: weekStrip(streak.history, todayStart, streak.todayDone),
         repair: streak.repair,
@@ -532,13 +589,14 @@ function deviceId(): string {
 }
 
 /** Opens the local database, asks the browser to keep it, and seeds the starter deck on first launch. */
-export async function boot(): Promise<Services> {
-  const repo = createDexieRepo('ancrage');
+export async function boot(profile: Profile): Promise<Services> {
+  const repo = createDexieRepo(dbName(profile.id));
   try {
     await navigator.storage?.persist?.();
   } catch {
     // Persistence is best effort; the JSON backup (iteration 5) covers eviction.
   }
-  await seedIfEmpty(repo);
+  await seedIfEmpty(repo, Date.now(), profile.starter);
+  await ensureDomains(repo);
   return createServices(repo, deviceId());
 }

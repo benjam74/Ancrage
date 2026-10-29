@@ -1,23 +1,26 @@
 <script lang="ts">
   import type { Services } from '../app/services';
-  import { browserStorage } from '../app/cloud';
+  import { EXAMPLES, coachingProfile, currentProfile, profileStore } from '../app/current';
   import { MAX_COUNT, MAX_SOURCE_CHARS, type Proposal } from '../core/generate';
   import type { NoteType, Theme } from '../core/model';
   import Editor from './Editor.svelte';
   import { TYPE_LABEL } from './format';
   import Preview from './Preview.svelte';
+  import { domainOf, groupByDomain, isDomain } from '../core/domains';
 
   let { services, onchange }: { services: Services; onchange: () => void } = $props();
 
   const TYPES: NoteType[] = ['basic', 'cloze', 'ordering', 'classify', 'mcq', 'scenario'];
-  const store = browserStorage();
+  const store = profileStore();
   const KEY_NAME = 'ancrage.ai.key';
 
   let themes = $state<Theme[]>([]);
+  let allThemes = $state<Theme[]>([]);
   let themeId = $state('');
   let sourceTitle = $state('');
   let source = $state('');
-  let types = $state<NoteType[]>([...TYPES]);
+  // Coaching scenarios only make sense for a coaching profile.
+  let types = $state<NoteType[]>(TYPES.filter((t) => coachingProfile || t !== 'scenario'));
   let count = $state(8);
   let apiKey = $state(store.get(KEY_NAME) ?? '');
   let keySaved = $state(!!store.get(KEY_NAME));
@@ -34,8 +37,9 @@
   const sourceLabel = $derived(sourceTitle.trim() || 'Texte collé');
 
   async function loadThemes() {
-    themes = [...(await services.repo.listThemes())].sort((a, b) => a.order - b.order);
-    if (!themes.some((t) => t.id === themeId)) themeId = themes[0]?.id ?? '';
+    allThemes = await services.repo.listThemes();
+    themes = allThemes.filter((t) => !isDomain(t)).sort((a, b) => a.order - b.order);
+    if (!themes.some((t) => t.id === themeId)) themeId = groupByDomain(allThemes).flatMap((g) => g.themes)[0]?.id ?? '';
   }
 
   function toggle(t: NoteType) {
@@ -66,7 +70,7 @@
       // Loaded on demand: the SDK is only needed once someone generates.
       const { createAiClient, generateProposals } = await import('../app/ai');
       const theme = themes.find((t) => t.id === themeId)!;
-      const res = await generateProposals(createAiClient(apiKey.trim()), { source, themeName: theme.name, types, count });
+      const res = await generateProposals(createAiClient(apiKey.trim()), { source, themeName: theme.name, domainName: allThemes.find((t) => t.id === domainOf(theme, new Set(allThemes.filter(isDomain).map((d) => d.id))))?.name, audience: currentProfile.audience, types, count });
       if (!res.ok) return void (error = res.error);
       saveKey();
       items = res.proposals.map((proposal) => ({ proposal, status: 'pending' }));
@@ -142,17 +146,23 @@
         <div class="field">
           <label for="g-theme">Thème des cartes</label>
           <select id="g-theme" bind:value={themeId}>
-            {#each themes as t (t.id)}<option value={t.id}>{t.name}</option>{/each}
+            {#each groupByDomain(allThemes) as g (g.domain?.id ?? 'loose')}
+              {#if g.themes.length}
+                <optgroup label={g.domain?.name ?? 'Sans domaine'}>
+                  {#each g.themes as t (t.id)}<option value={t.id}>{t.name}</option>{/each}
+                </optgroup>
+              {/if}
+            {/each}
           </select>
         </div>
         <div class="field">
           <label for="g-title">Source</label>
-          <input id="g-title" bind:value={sourceTitle} placeholder="Ex. Formation PNL, module 3" />
+          <input id="g-title" bind:value={sourceTitle} placeholder={EXAMPLES.source} />
         </div>
       </div>
       <div class="field">
         <label for="g-source">Texte</label>
-        <textarea id="g-source" bind:value={source} style="min-height:200px" placeholder="Colle ici tes notes de formation, un extrait de livre, une transcription…"></textarea>
+        <textarea id="g-source" bind:value={source} style="min-height:200px" placeholder={EXAMPLES.text}></textarea>
         <span class="hint" class:error={source.length > MAX_SOURCE_CHARS}>{source.length.toLocaleString('fr-FR')} / {MAX_SOURCE_CHARS.toLocaleString('fr-FR')} caractères</span>
       </div>
       <fieldset class="field" style="border:0;padding:0;margin:0">

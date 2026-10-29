@@ -11,6 +11,10 @@
   import { prefs } from './prefs.svelte';
   import ThemePath from './ThemePath.svelte';
   import WeekStrip from './WeekStrip.svelte';
+  import { currentProfile, profileCount } from '../app/current';
+  import { domainOf } from '../core/domains';
+  import { FACE, forgetChoice } from './faces';
+  import { updatePrefs } from './prefs.svelte';
 
   let {
     today,
@@ -27,13 +31,22 @@
     [...CATALOG].filter((i) => !shop.owned.has(i.id)).sort((a, b) => TIERS.indexOf(a.tier) - TIERS.indexOf(b.tier) || a.price - b.price)[0],
   );
   const target = $derived(goalItem ?? suggestion);
+
+  // Domain tabs: the remembered one, else the first that has themes.
+  const domainIds = $derived(new Set(progress.domains.map((d) => d.id)));
+  const loose = $derived(progress.themes.filter((t) => domainOf(t.theme, domainIds) === null));
+  const tabs = $derived([
+    ...progress.domains.map((d) => ({ id: d.id, name: d.name, themes: progress.themes.filter((t) => domainOf(t.theme, domainIds) === d.id) })),
+    ...(loose.length ? [{ id: '__loose', name: 'Sans domaine', themes: loose }] : []),
+  ]);
+  const tab = $derived(tabs.find((t) => t.id === prefs.domain) ?? tabs.find((t) => t.themes.length) ?? tabs[0]);
   const total = $derived(today.due + today.fresh);
   const RING = 2 * Math.PI * 42;
   const ring = $derived(dailyRing(progress.answersToday, today.queue.length, prefs.dailyRounds));
   const goalDone = $derived(progress.roundsToday >= prefs.dailyRounds || (progress.roundsToday > 0 && ring.done >= ring.target));
   const ringShare = $derived(goalDone ? 1 : ring.done / ring.target);
   const vsMax = $derived(Math.max(progress.xpWeek, progress.xpPrevAvg ?? 0, 1));
-  const focus = $derived(activeTheme(progress.themes));
+  const focus = $derived(activeTheme(tab?.themes ?? progress.themes));
   const todayIndex = $derived(progress.week.findIndex((d) => d.dayStart === studyDayStart(Date.now())));
   const repairDay = $derived(progress.repair && today.queue.length > 0 && todayIndex > 0 ? progress.week[todayIndex - 1].dayStart : null);
   const days = (n: number) => `${n} jour${n > 1 ? 's' : ''}`;
@@ -45,6 +58,11 @@
     <div>
       <p class="eyebrow">{new Date().toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' })}</p>
       <h1>Ancrage</h1>
+      {#if profileCount > 1}
+        <button class="profile-chip" onclick={() => { forgetChoice(); location.reload(); }} aria-label="Profil {currentProfile.name} : changer de profil">
+          <span class="face small" style="--pc:{FACE[currentProfile.color]}" aria-hidden="true">{currentProfile.name.charAt(0).toUpperCase()}</span>{currentProfile.name}
+        </button>
+      {/if}
     </div>
     <div class="chips">
       {#if prefs.showStreak}
@@ -163,8 +181,15 @@
 
     <section aria-labelledby="path-title">
       <h2 id="path-title" style="margin-bottom:8px">Ton parcours</h2>
-      {#if progress.themes.length}
-        <ThemePath themes={progress.themes} {onstart} {onpick} look={{ character: shop.avatar.character, outfit: shop.outfit, name: shop.avatar.name }} />
+      {#if tabs.length > 1}
+        <div class="domain-tabs" role="group" aria-label="Domaine">
+          {#each tabs as t (t.id)}<button aria-pressed={t.id === tab?.id} onclick={() => updatePrefs({ domain: t.id })}>{t.name}</button>{/each}
+        </div>
+      {/if}
+      {#if tab && tab.themes.length}
+        {#key tab.id}<ThemePath themes={tab.themes} {onstart} {onpick} look={{ character: shop.avatar.character, outfit: shop.outfit, name: shop.avatar.name }} />{/key}
+      {:else if tab}
+        <p class="muted">Aucun thème dans « {tab.name} » pour l’instant. Crée-en un depuis « Créer » ou la bibliothèque.</p>
       {:else}
         <p class="muted">Crée un thème et tes premières cartes pour voir ton parcours.</p>
       {/if}

@@ -10,6 +10,10 @@ const ALL_TYPES: NoteType[] = ['basic', 'cloze', 'ordering', 'classify', 'mcq', 
 export interface GenerationRequest {
   source: string;
   themeName: string;
+  /** The domain the theme belongs to, e.g. « Mathématiques ». */
+  domainName?: string;
+  /** Who the cards are for (the profile's « Pour qui ? »), e.g. « élève de 5e ». */
+  audience?: string;
   types: NoteType[];
   count: number;
 }
@@ -41,12 +45,13 @@ const TYPE_GUIDE: Record<NoteType, string> = {
 
 export function buildPrompt(r: GenerationRequest): { system: string; user: string } {
   const system = [
-    'Tu crées des cartes de répétition espacée en français pour une personne qui se forme au coaching et à la PNL.',
+    `Tu crées des cartes de répétition espacée en français pour ${r.audience?.trim() || 'une personne qui apprend seule'}, avec des mots et des exemples à sa portée.`,
     'Chaque carte teste une seule idée, formulée clairement, et doit pouvoir se réviser seule, sans le texte sous les yeux.',
     'Tu t’appuies uniquement sur le texte fourni : n’ajoute pas de connaissances qui n’y figurent pas, et n’invente ni chiffres ni citations.',
     'Pour chaque carte, remplis seulement les champs de son type et laisse les autres vides (chaîne vide, liste vide, false). Dans rationale, indique en une phrase le passage du texte dont la carte vient.',
   ].join(' ');
   const user = [
+    r.domainName ? `Domaine : ${r.domainName}` : '',
     `Thème : ${r.themeName}`,
     `Crée au plus ${r.count} cartes, uniquement de ces types :`,
     ...r.types.map((t) => `- ${TYPE_GUIDE[t]}`),
