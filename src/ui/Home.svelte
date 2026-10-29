@@ -46,7 +46,9 @@
   const goalDone = $derived(progress.roundsToday >= prefs.dailyRounds || (progress.roundsToday > 0 && ring.done >= ring.target));
   const ringShare = $derived(goalDone ? 1 : ring.done / ring.target);
   const vsMax = $derived(Math.max(progress.xpWeek, progress.xpPrevAvg ?? 0, 1));
-  const focus = $derived(activeTheme(tab?.themes ?? progress.themes));
+  // A mixed domain has no « current chapter » to single out.
+  const tabMixed = $derived(!tab || tab.id === '__loose' || newOrderOf(progress.domains.find((d) => d.id === tab.id)) === 'mixed');
+  const focus = $derived(tabMixed ? undefined : activeTheme(tab?.themes ?? progress.themes));
   const todayIndex = $derived(progress.week.findIndex((d) => d.dayStart === studyDayStart(Date.now())));
   const repairDay = $derived(progress.repair && today.queue.length > 0 && todayIndex > 0 ? progress.week[todayIndex - 1].dayStart : null);
   const days = (n: number) => `${n} jour${n > 1 ? 's' : ''}`;

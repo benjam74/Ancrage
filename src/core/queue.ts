@@ -11,10 +11,12 @@ export interface QueueCandidate {
   /** The theme's domain shows its new cards alternating between themes (else chapter by chapter). */
   mixNew?: boolean;
   noteType?: NoteType;
+  /** The theme's domain, for grouping new cards; falls back to the rank encoded in `themeOrder`. */
+  domainId?: string | null;
 }
 
-/** Domain rank inside `themeOrder` (domain order × 10 000 + theme order). */
-const domainRank = (c: QueueCandidate) => Math.floor(c.themeOrder / 10_000);
+/** Domain of a candidate: its id, else the rank encoded in `themeOrder` (domain order × 10 000 + theme order). */
+const domainRank = (c: QueueCandidate) => c.domainId ?? `#${Math.floor(c.themeOrder / 10_000)}`;
 
 function groupBy<K>(list: QueueCandidate[], key: (c: QueueCandidate) => K): Map<K, QueueCandidate[]> {
   const out = new Map<K, QueueCandidate[]>();

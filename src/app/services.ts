@@ -169,6 +169,8 @@ export interface Services {
   importBackup(dump: Dump): Promise<void>;
   /** Merges a backup from another device into local data; nothing local is lost. */
   mergeBackup(dump: Dump): Promise<void>;
+  /** A round with at least one due or new card since `startedAt`: only those count as a round (XP and streak). */
+  earnsRound(startedAt: number, now: number): Promise<boolean>;
   /** Records a finished round; returns the XP it earned (answers since `startedAt` + round bonus). */
   completeRound(startedAt: number, now: number): Promise<RoundOutcome>;
 }
@@ -295,6 +297,7 @@ export function createServices(repo: Repo, deviceId: string): Services {
     const domainOrder = new Map(themes.filter(isDomain).map((t) => [t.id, t.order]));
     const themeOrder = new Map(themes.map((t) => [t.id, (domainOrder.get(domainOf(t, domainIds) ?? '') ?? 999) * 10_000 + t.order]));
     const mixed = new Map(themes.map((t) => [t.id, newOrderOf(themes.find((d) => d.id === domainOf(t, domainIds))) === 'mixed']));
+    const domainOfTheme = new Map(themes.map((t) => [t.id, domainOf(t, domainIds)]));
     const noteById = new Map(notes.map((n) => [n.id, n]));
     const logByCard = new Map<string, ReviewEntry[]>();
     for (const e of reviews) {
@@ -313,6 +316,7 @@ export function createServices(repo: Repo, deviceId: string): Services {
         noteCreatedAt: note.createdAt,
         state: scheduler.replay(note.createdAt, logByCard.get(card.id) ?? []),
         mixNew: mixed.get(note.themeId) ?? true,
+        domainId: domainOfTheme.get(note.themeId) ?? null,
         noteType: note.fields.type,
       }];
     });
@@ -601,6 +605,11 @@ export function createServices(repo: Repo, deviceId: string): Services {
 
     async mergeBackup(dump) {
       await mergeIntoLocal(repo, dump);
+    },
+
+    async earnsRound(startedAt, now) {
+      const snap = await snapshot();
+      return snap.reviews.some((e) => e.ts >= startedAt && e.ts <= now && snap.kinds.get(e.id) !== 'early');
     },
 
     async completeRound(startedAt, now) {

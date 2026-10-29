@@ -223,3 +223,17 @@ describe('memory and effectiveness', () => {
     expect(p.insights.byType.map((r) => r.key)).toEqual(p.insights.windows[0].count ? ['basic'] : []);
   });
 });
+
+describe('rounds of cards not due yet', () => {
+  test('only a round with a due or new answer earns round XP and the streak', async () => {
+    const t = await services.createTheme('T');
+    await services.saveNote({ themeId: t.id, fields: { type: 'basic', front: 'Q', back: 'R', reverse: false }, tags: [] }, NOW - 3 * DAY);
+    const [id] = (await services.today(NOW - 3 * DAY)).queue;
+    await services.engine.answer(id, 'self', { kind: 'self', grade: 3 }, NOW - 3 * DAY);
+    expect(await services.earnsRound(NOW - 3 * DAY - 1, NOW - 3 * DAY + 1)).toBe(true);
+    // Answered again five minutes later: not due, so practice.
+    await services.engine.answer(id, 'self', { kind: 'self', grade: 3 }, NOW - 3 * DAY + 300_000);
+    expect(await services.earnsRound(NOW - 3 * DAY + 300_000 - 1, NOW - 3 * DAY + 300_000 + 1)).toBe(false);
+    expect(await services.earnsRound(NOW, NOW + 1)).toBe(false);
+  });
+});

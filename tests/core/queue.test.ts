@@ -164,3 +164,16 @@ describe('v1.9: mixed new cards and mixed sessions', async () => {
     expect(buildCustomQueue(c, NOW2, { themeIds: ['A', 'B'], mode: 'situations', limit: Infinity }, r)).toEqual(['s-due', 's-weak', 's-solid', 'k-new']);
   });
 });
+
+describe('v1.9: domains grouped by id', async () => {
+  const { buildDailyQueue } = await import('../../src/core/queue');
+  const { createEmptyCard } = await import('ts-fsrs');
+  test('two domains with the same order keep their own setting', () => {
+    const c = (cardId: string, themeId: string, themeOrder: number, at: number, mixNew: boolean, domainId: string) =>
+      ({ cardId, themeId, themeOrder, noteCreatedAt: at, state: createEmptyCard(new Date(0)), mixNew, domainId });
+    const list = [c('m1', 'M1', 10_000, 1, true, 'mix'), c('m2', 'M1', 10_000, 2, true, 'mix'), c('n1', 'M2', 10_001, 3, true, 'mix'), c('s1', 'S1', 10_000, 4, false, 'school'), c('s2', 'S1', 10_000, 5, false, 'school'), c('t1', 'S2', 10_001, 6, false, 'school')];
+    const q = buildDailyQueue(list, 0, 10);
+    expect(q.filter((id) => id.startsWith('s') || id.startsWith('t'))).toEqual(['s1', 's2', 't1']);
+    expect(q.filter((id) => id.startsWith('m') || id.startsWith('n'))).toEqual(['m1', 'n1', 'm2']);
+  });
+});
