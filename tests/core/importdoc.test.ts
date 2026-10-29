@@ -31,6 +31,12 @@ describe('splitDocument', () => {
     expect(splitDocument('c.md', '# Titre seul')).toEqual([]);
     expect(splitDocument('d.md', '---\ntags: x\n---\n')).toEqual([]);
   });
+  test('an empty YAML header, a title ending in #, and mixed fences', () => {
+    expect(splitDocument('y.md', '---\n---\n# Titre\nTexte.').map((x) => x.title)).toEqual(['Titre']);
+    expect(splitDocument('c.md', '# Langage C#\nTexte.\n## Fin ##\nOui.').map((x) => x.title)).toEqual(['Langage C#', 'Fin']);
+    const s = splitDocument('f.md', '# Un\n```\n~~~\n# dedans\n```\n# Deux\nFin.');
+    expect(s.map((x) => x.title)).toEqual(['Un', 'Deux']);
+  });
   test('a heading inside a code block does not split', () => {
     const s = splitDocument('e.md', '# Un\n```\n# pas un titre\n```\nFin.');
     expect(s.map((x) => x.title)).toEqual(['Un']);

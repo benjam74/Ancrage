@@ -212,7 +212,7 @@ describe('memory and effectiveness', () => {
     await services.saveNote({ themeId: t.id, fields: { type: 'basic', front: 'Q', back: 'R', reverse: false }, tags: [] }, NOW - 20 * DAY);
     let p = await services.progress(NOW);
     expect(p.themes[0].memory).toBeNull();
-    expect(p.loadPerNew).toBeGreaterThanOrEqual(3);
+    expect(p.loadPerNew).toBeGreaterThanOrEqual(1);
     expect(p.hard).toBe(0);
     const [id] = (await services.today(NOW - 20 * DAY)).queue;
     await services.engine.answer(id, 'recognition', ok, NOW - 20 * DAY);

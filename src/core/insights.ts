@@ -16,14 +16,14 @@ export function memoryOf(states: CardState[], now: number, scheduler: Scheduler)
   return { now: mean(now), in30: mean(now + 30 * DAY) };
 }
 
-/** Reviews one new card needs over `days` days if it is answered right (« Bien ») at each due date. */
+/** Reviews a new card brings over `days` days if answered right (« Bien ») at each due date; learning steps of the first day are not counted. */
 export function reviewLoad(scheduler: Scheduler, now: number, days = 30): number {
   let state = scheduler.initial(now);
   let at = now;
   let reviews = 0;
-  while (at < now + days * DAY && reviews < 100) {
+  for (let i = 0; at < now + days * DAY && i < 200; i++) {
+    if (state.state === State.Review) reviews++;
     state = scheduler.apply(state, 3, at);
-    reviews++;
     at = Math.max(at + 1, state.due.getTime());
   }
   return reviews;
@@ -78,7 +78,8 @@ export function effectiveness(
   });
   const last90 = since(90);
   const due90 = last90.filter((e) => kinds.get(e.id) === 'due');
-  const durations = last90.map((e) => Math.min(e.durationMs, MAX_DURATION)).sort((a, b) => a - b);
+  // Self-graded answers are recorded without a duration.
+  const durations = last90.filter((e) => e.durationMs > 0).map((e) => Math.min(e.durationMs, MAX_DURATION)).sort((a, b) => a - b);
   const mid = durations.length >> 1;
   return {
     windows,

@@ -233,8 +233,9 @@ export function createServices(repo: Repo, deviceId: string): Services {
       reviews,
     );
     const roundEnds = events.filter((e) => e.type === 'round_completed').map((e) => e.ts);
+    // Past rest days must not change when a note is put aside or resumed: every card with a note counts.
     const isRestDay = makeRestDayCheck(
-      active.map((c) => ({ cardId: c.id, createdAt: noteById.get(c.noteId)!.createdAt })),
+      cards.filter((c) => !c.orphan && noteById.has(c.noteId)).map((c) => ({ cardId: c.id, createdAt: noteById.get(c.noteId)!.createdAt })),
       reviews,
       scheduler,
       settings.newPerDay,

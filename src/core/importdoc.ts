@@ -13,7 +13,7 @@ const baseName = (file: string) => file.replace(/^.*[\\/]/, '').replace(/\.[^.]+
 /** Obsidian notes: no YAML header, wiki links reduced to the text they show, embeds dropped. */
 export function cleanMarkdown(md: string): string {
   return md
-    .replace(/^﻿?---\r?\n[\s\S]*?\r?\n---[ \t]*(\r?\n|$)/, '')
+    .replace(/^\uFEFF?---\r?\n(?:[\s\S]*?\r?\n)?---[ \t]*(\r?\n|$)/, '')
     .replace(/!\[\[[^\]]*\]\]/g, '')
     .replace(/\[\[([^\]|]*)\|([^\]]*)\]\]/g, '$2')
     .replace(/\[\[([^\]]*)\]\]/g, '$1');
@@ -26,10 +26,12 @@ export function splitDocument(fileName: string, text: string): DocSection[] {
     return text.trim() ? [{ id: `${fileName}#0`, file: fileName, title: file, text: text.trim() }] : [];
   }
   const raw: { title: string; lines: string[] }[] = [{ title: file, lines: [] }];
-  let fence = false;
+  /** Marker of the open code block, closed only by the same marker. */
+  let fence: string | null = null;
   for (const line of cleanMarkdown(text).split(/\r?\n/)) {
-    if (/^\s*(```|~~~)/.test(line)) fence = !fence;
-    const h = !fence && /^(#{1,2})\s+(.+?)\s*#*\s*$/.exec(line);
+    const marker = /^\s*(```|~~~)/.exec(line)?.[1];
+    if (marker && (fence === null || fence === marker)) fence = fence ? null : marker;
+    const h = !fence && !marker && /^(#{1,2})\s+(.+?)(?:\s+#+)?\s*$/.exec(line);
     if (h) raw.push({ title: h[2], lines: [] });
     else raw[raw.length - 1].lines.push(line);
   }

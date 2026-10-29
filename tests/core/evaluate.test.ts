@@ -53,12 +53,14 @@ describe('toEvaluation', () => {
   test('an unknown verdict, a missing point or a wrong shape gives null', () => {
     expect(toEvaluation({ ...raw, verdict: 'bof' }, input.keyPoints)).toBeNull();
     expect(toEvaluation({ ...raw, points: raw.points.slice(0, 1) }, input.keyPoints)).toBeNull();
+    expect(toEvaluation({ ...raw, points: [...raw.points, raw.points[0]] }, input.keyPoints)?.points).toHaveLength(2);
     expect(toEvaluation({ ...raw, points: [{ covered: 'oui', comment: 'x' }, raw.points[1]] }, input.keyPoints)).toBeNull();
     expect(toEvaluation(null, input.keyPoints)).toBeNull();
     expect(toEvaluation({ ...raw, feedback: 3 }, input.keyPoints)).toBeNull();
   });
   test('a card without key points evaluates on the model answer alone', () => {
     expect(toEvaluation({ ...raw, points: [] }, [])?.points).toEqual([]);
+    expect(toEvaluation(raw, [])?.points).toEqual([]);
   });
   test('the schema asks for every field', () => {
     expect(EVAL_SCHEMA.required).toEqual(['verdict', 'points', 'feedback', 'improved']);

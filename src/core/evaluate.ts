@@ -70,9 +70,10 @@ export function toEvaluation(raw: unknown, keyPoints: string[]): Evaluation | nu
   if (!raw || typeof raw !== 'object') return null;
   const o = raw as Record<string, unknown>;
   if (!VERDICTS.includes(o.verdict as Verdict) || typeof o.feedback !== 'string' || typeof o.improved !== 'string') return null;
-  if (!Array.isArray(o.points) || o.points.length !== keyPoints.length) return null;
+  // Extra comments are dropped (and ignored without key points); a missing one makes the feedback incomplete.
+  if (!Array.isArray(o.points) || o.points.length < keyPoints.length) return null;
   const points: Evaluation['points'] = [];
-  for (const [n, p] of (o.points as unknown[]).entries()) {
+  for (const [n, p] of (o.points as unknown[]).slice(0, keyPoints.length).entries()) {
     const q = p && typeof p === 'object' ? (p as Record<string, unknown>) : null;
     if (!q || typeof q.covered !== 'boolean' || typeof q.comment !== 'string') return null;
     points.push({ point: keyPoints[n], covered: q.covered, comment: q.comment.trim() });

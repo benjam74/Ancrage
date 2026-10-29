@@ -28,8 +28,8 @@ describe('memoryOf', () => {
 describe('reviewLoad', () => {
   test('a new card answered right each time needs a few reviews in 30 days, more in 90', () => {
     const r30 = reviewLoad(scheduler, NOW, 30);
-    expect(r30).toBeGreaterThanOrEqual(3);
-    expect(r30).toBeLessThanOrEqual(8);
+    expect(r30).toBeGreaterThanOrEqual(1);
+    expect(r30).toBeLessThanOrEqual(5);
     expect(reviewLoad(scheduler, NOW, 90)).toBeGreaterThanOrEqual(r30);
   });
 });
@@ -45,8 +45,9 @@ describe('effectiveness', () => {
     entry('d', 'c2', 60, true),
     entry('e', 'c3', 60, false),
     entry('f', 'c3', 2, true), // new card, not counted in success
+    entry('g', 'c3', 2, true, 0), // self-graded: no duration, left out of the median
   ];
-  const kinds = new Map<string, EntryKind>([['a', 'due'], ['b', 'due'], ['c', 'due'], ['d', 'due'], ['e', 'due'], ['f', 'new']]);
+  const kinds = new Map<string, EntryKind>([['a', 'due'], ['b', 'due'], ['c', 'due'], ['d', 'due'], ['e', 'due'], ['f', 'new'], ['g', 'new']]);
   const typeOf = (id: string) => (id === 'c3' ? 'scenario' : 'basic') as 'basic' | 'scenario';
   const domainOf = (id: string) => (id === 'c1' ? 'Coaching' : 'Maths');
   const r = effectiveness(entries, kinds, typeOf, domainOf, NOW);

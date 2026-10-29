@@ -86,3 +86,15 @@ describe('suspended notes', () => {
     expect(await services.hardNotes(NOW)).toEqual([]);
   });
 });
+
+describe('suspension and the past', () => {
+  test('putting a note aside does not rewrite past days of the streak', async () => {
+    const { note, cardId } = await aNote();
+    await services.engine.answer(cardId, 'self', good, NOW - 30 * DAY);
+    const before = await services.progress(NOW);
+    await services.setSuspended(note.id, true, NOW);
+    const after = await services.progress(NOW);
+    expect(after.week).toEqual(before.week);
+    expect(after.streak).toBe(before.streak);
+  });
+});

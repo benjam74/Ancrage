@@ -1,7 +1,8 @@
 /** Text of a PDF, page by page; pdf.js is loaded only when someone imports a PDF. */
 export async function pdfText(data: ArrayBuffer): Promise<string> {
-  const pdfjs = await import('pdfjs-dist');
-  pdfjs.GlobalWorkerOptions.workerSrc = new URL('pdfjs-dist/build/pdf.worker.min.mjs', import.meta.url).href;
+  // The legacy build runs on browsers a few versions old too (older iPhones and iPads).
+  const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs');
+  pdfjs.GlobalWorkerOptions.workerSrc = new URL('pdfjs-dist/legacy/build/pdf.worker.min.mjs', import.meta.url).href;
   const task = pdfjs.getDocument({ data: new Uint8Array(data) });
   const doc = await task.promise;
   try {
