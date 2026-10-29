@@ -15,6 +15,8 @@ export interface Theme {
   order: number;
   /** Last rename or creation, for last-writer-wins sync. */
   updatedAt?: number;
+  /** A domain groups themes (its children have it as parent); it holds no notes itself. */
+  kind?: 'domain';
 }
 
 /** Remembers a deletion so a merge with another device does not bring the item back. */
