@@ -1,7 +1,8 @@
-import { browserStorage } from '../app/cloud';
 import { loadPrefs, savePrefs, type Prefs } from '../app/prefs';
 
-const store = browserStorage();
+import { profileStore } from '../app/current';
+
+const store = profileStore();
 
 /** Device preferences shared by every screen; changes are saved at once. */
 export const prefs: Prefs = $state(loadPrefs(store));

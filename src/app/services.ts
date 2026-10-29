@@ -16,7 +16,7 @@ import { makeScheduler } from '../core/scheduler';
 import { STARTER_THEMES, starterNotes } from '../data/starter';
 import { COLLEGE5_THEMES, college5Notes } from '../data/college5';
 import { isDomain, migrateToDomains } from '../core/domains';
-import type { Starter } from './profiles';
+import { dbName, type Profile, type Starter } from './profiles';
 import { createDexieRepo } from '../storage/dexie-repo';
 import type { Repo } from '../storage/repo';
 
@@ -584,13 +584,14 @@ function deviceId(): string {
 }
 
 /** Opens the local database, asks the browser to keep it, and seeds the starter deck on first launch. */
-export async function boot(): Promise<Services> {
-  const repo = createDexieRepo('ancrage');
+export async function boot(profile: Profile): Promise<Services> {
+  const repo = createDexieRepo(dbName(profile.id));
   try {
     await navigator.storage?.persist?.();
   } catch {
     // Persistence is best effort; the JSON backup (iteration 5) covers eviction.
   }
-  await seedIfEmpty(repo);
+  await seedIfEmpty(repo, Date.now(), profile.starter);
+  await ensureDomains(repo);
   return createServices(repo, deviceId());
 }

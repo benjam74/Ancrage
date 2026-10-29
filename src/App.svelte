@@ -1,7 +1,8 @@
 <script lang="ts">
   import { boot, type Progress as ProgressData, type Services, type ShopState, type Today } from './app/services';
   import Shop from './ui/Shop.svelte';
-  import { browserStorage, createCloudSync, type CloudSync } from './app/cloud';
+  import { createCloudSync, type CloudSync } from './app/cloud';
+  import { currentProfile, profileStore } from './app/current';
   import type { Note } from './core/model';
   import Editor from './ui/Editor.svelte';
   import Generate from './ui/Generate.svelte';
@@ -101,10 +102,10 @@
     if (res.state === 'ok' && !inSession) await refresh();
   }
 
-  boot()
+  boot(currentProfile)
     .then(async (s) => {
       services = s;
-      cloud = createCloudSync(s.repo, browserStorage());
+      cloud = createCloudSync(s.repo, profileStore());
       await refresh();
       void syncInBackground();
     })

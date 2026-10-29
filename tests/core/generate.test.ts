@@ -27,6 +27,14 @@ describe('checkRequest', () => {
 });
 
 describe('buildPrompt', () => {
+  test('speaks to the profile audience and names the domain', () => {
+    const { system, user } = buildPrompt(req({ audience: 'élève de 5e', domainName: 'Mathématiques', themeName: 'Fractions' }));
+    expect(system).toContain('pour élève de 5e');
+    expect(system).not.toContain('coaching');
+    expect(user).toContain('Domaine : Mathématiques');
+    expect(user).toContain('Thème : Fractions');
+  });
+
   test('names the theme, the allowed types, the count, and wraps the source', () => {
     const { system, user } = buildPrompt(req({ types: ['cloze', 'mcq'], count: 5 }));
     expect(system).toMatch(/français/);

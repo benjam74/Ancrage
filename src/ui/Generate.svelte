@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { Services } from '../app/services';
-  import { browserStorage } from '../app/cloud';
+  import { currentProfile, profileStore } from '../app/current';
   import { MAX_COUNT, MAX_SOURCE_CHARS, type Proposal } from '../core/generate';
   import type { NoteType, Theme } from '../core/model';
   import Editor from './Editor.svelte';
@@ -10,7 +10,7 @@
   let { services, onchange }: { services: Services; onchange: () => void } = $props();
 
   const TYPES: NoteType[] = ['basic', 'cloze', 'ordering', 'classify', 'mcq', 'scenario'];
-  const store = browserStorage();
+  const store = profileStore();
   const KEY_NAME = 'ancrage.ai.key';
 
   let themes = $state<Theme[]>([]);
@@ -66,7 +66,7 @@
       // Loaded on demand: the SDK is only needed once someone generates.
       const { createAiClient, generateProposals } = await import('../app/ai');
       const theme = themes.find((t) => t.id === themeId)!;
-      const res = await generateProposals(createAiClient(apiKey.trim()), { source, themeName: theme.name, types, count });
+      const res = await generateProposals(createAiClient(apiKey.trim()), { source, themeName: theme.name, domainName: themes.find((t) => t.id === theme.parentId)?.name, audience: currentProfile.audience, types, count });
       if (!res.ok) return void (error = res.error);
       saveKey();
       items = res.proposals.map((proposal) => ({ proposal, status: 'pending' }));
