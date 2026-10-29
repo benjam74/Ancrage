@@ -2,7 +2,7 @@
   import type { ThemeProgress } from '../app/services';
   import { LEVEL_COLORS, activeTheme, nextText } from './levels';
 
-  let { themes, onstart }: { themes: ThemeProgress[]; onstart: () => void } = $props();
+  let { themes, onstart, onpick }: { themes: ThemeProgress[]; onstart: () => void; onpick: (themeId: string) => void } = $props();
   const R = 35;
   const C = 2 * Math.PI * R;
   const activeId = $derived(activeTheme(themes)?.theme.id);
@@ -48,8 +48,11 @@
     {/if}
     {#if selected.cards === 0}
       <a class="btn ghost" href="#creer">Créer les premières cartes</a>
-    {:else if selected.due > 0}
-      <button class="btn ghost" onclick={onstart}>Commencer la séance</button>
+    {:else}
+      <div class="actions">
+        <button class="btn small" onclick={() => onpick(selected.theme.id)}>Réviser ce thème</button>
+        {#if selected.due > 0}<button class="btn small ghost" onclick={onstart}>Séance du jour</button>{/if}
+      </div>
     {/if}
   </div>
 {/if}

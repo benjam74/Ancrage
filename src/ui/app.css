@@ -310,3 +310,18 @@ p.error { font-weight: 700; color: var(--bad); }
 .plan-form .field.time { flex: 0 0 120px; }
 .node .next { color: var(--coral-ink); max-width: 150px; }
 .wd.repairable .wd-dot { background: var(--surface); color: var(--coral-ink); border: 3px dashed var(--coral); }
+
+/* v1.4 custom sessions */
+.pick-list { display: grid; gap: 6px; }
+.pick { display: grid; grid-template-columns: 20px minmax(0, 1fr); column-gap: 10px; align-items: center; padding: 10px 12px; border-radius: 12px; background: var(--bg); }
+.pick-name { font-weight: 800; }
+.pick-meta { grid-column: 2; font-size: 13px; font-weight: 600; }
+.modes { display: grid; gap: 10px; }
+.mode { display: grid; gap: 4px; padding: 14px 16px; border: 2px solid var(--line); border-bottom-width: 4px; border-radius: var(--r-md); background: var(--surface); cursor: pointer; }
+.mode.on { border-color: var(--petrol); }
+.mode input { position: absolute; opacity: 0; pointer-events: none; }
+.mode:focus-within { outline: 3px solid var(--sun); outline-offset: 2px; }
+.mode-title { font-family: var(--display); font-weight: 900; font-size: 17px; display: flex; gap: 8px; align-items: center; }
+.mode .muted { font-size: 14px; }
+.home-more { display: flex; flex-wrap: wrap; gap: 8px; }
+.hero .btn.hero-pick { --b: transparent; --bd: rgba(0,0,0,.2); --fg: #fff; border: 2px solid rgba(255,255,255,.45); box-shadow: none; }

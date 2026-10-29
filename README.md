@@ -17,6 +17,7 @@ v1 complète, utilisable au quotidien.
 - **Synchronisation** entre appareils (v1.1) : automatique avec ton propre projet Supabase gratuit, ou par fichier sans compte. Les historiques des appareils sont fusionnés, rien ne se perd. Guide : [`docs/sync-supabase.md`](docs/sync-supabase.md).
 
 - **Accroche** (v1.3), fondée sur un [benchmark et une revue d'études](docs/research/2026-10-29-engagement-research.md) : sons et vibrations à chaque réponse, compteur « d'affilée », fin de manche en deux écrans (bilan puis série), semaine visible jour par jour, série récupérable par 2 manches le lendemain d'un jour manqué, bonus de retour, objectif du jour réglable (1 à 3 manches) avec un anneau qui se remplit carte par carte, ta semaine comparée à ta moyenne, cartes restantes avant le palier suivant, rendez-vous quotidien à ajouter à ton agenda. Tout se règle ou se coupe dans Réglages → Motivation.
+- **Réviser ce que tu veux** (v1.4) : Accueil → « Choisir quoi réviser », ou « Réviser ce thème » dans le parcours. Choisis un ou plusieurs thèmes, puis les cartes à réviser, de nouvelles cartes au-delà de la limite du jour, ou un entraînement libre sur les cartes déjà vues (les plus fragiles d'abord), par 10, 20, 50 ou toutes. Limite quotidienne de nouvelles cartes réglable jusqu'à 200.
 - **Cartes générées par IA** (v1.2) : Créer → « Générer depuis un texte ». Colle des notes de formation ou un extrait, Claude propose des cartes des 6 types, fidèles au texte ; tu les relis, modifies ou écartes avant tout ajout. Il faut ta propre clé API Anthropic ([console.anthropic.com](https://console.anthropic.com)), enregistrée seulement sur l'appareil. Le texte collé est envoyé à Anthropic : n'y mets pas de données de clients identifiables. Coût indicatif : quelques centimes par texte de quelques pages.
 
 ## Installer l'application
@@ -68,3 +69,4 @@ Aucun code d'Anki n'est réutilisé : seuls les principes le sont.
 6. Synchronisation (v1.1).
 7. Génération de cartes par IA (v1.2).
 8. Accroche et régularité (v1.3).
+9. Séances à la carte (v1.4).
