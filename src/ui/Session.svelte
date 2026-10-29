@@ -13,6 +13,8 @@
   import Icon from './Icon.svelte';
   import { motionOn, prefs, updatePrefs } from './prefs.svelte';
   import WeekStrip from './WeekStrip.svelte';
+  import Avatar from './Avatar.svelte';
+  import type { CharacterId, Slot } from '../core/model';
   import Choice from './exercises/Choice.svelte';
   import Order from './exercises/Order.svelte';
   import Reveal from './exercises/Reveal.svelte';
@@ -23,6 +25,7 @@
     queue,
     more,
     kind = 'daily',
+    look = null,
     onexit,
   }: {
     services: Services;
@@ -31,6 +34,8 @@
     more: (played: Set<string>) => Promise<string[]>;
     /** The daily queue, a picked selection, or free practice (cards reviewed before they are due). */
     kind?: 'daily' | 'custom' | 'practice';
+    /** The learner's character, shown celebrating on the streak screen. */
+    look?: { character: CharacterId; outfit: Partial<Record<Slot, string>> } | null;
     onexit: () => void;
   } = $props();
   const played = new Set<string>();
@@ -243,7 +248,7 @@
     {:else if ended && endStep === 'streak' && roundResult && after}
       <div class="s-inner end" aria-live="polite">
         <div class="streak-hero">
-          <span class="flame"><Icon name="flame" /></span>
+          {#if look}<span class="buddy"><Avatar character={look.character} outfit={look.outfit} pose={motionOn() ? 'jump' : 'idle'} /></span>{:else}<span class="flame"><Icon name="flame" /></span>{/if}
           <span class="n">{roundResult.streak}</span>
           <h1>{roundResult.streak > 1 ? 'jours de série' : 'jour de série'}</h1>
         </div>

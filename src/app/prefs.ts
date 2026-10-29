@@ -8,9 +8,13 @@ export interface Prefs {
   showStreak: boolean;
   dailyRounds: 1 | 2 | 3;
   plan: { time: string; cue: string } | null;
+  /** Item the learner is saving for. */
+  goal: string | null;
+  /** Chapter the character stood on at the last visit, to animate its walk to the next one. */
+  lastChapter: string | null;
 }
 
-export const DEFAULT_PREFS: Prefs = { sound: true, haptics: true, motion: true, showStreak: true, dailyRounds: 1, plan: null };
+export const DEFAULT_PREFS: Prefs = { sound: true, haptics: true, motion: true, showStreak: true, dailyRounds: 1, plan: null, goal: null, lastChapter: null };
 
 const KEY = 'ancrage.prefs';
 const TIME = /^([01]\d|2[0-3]):[0-5]\d$/;
@@ -38,6 +42,8 @@ export function loadPrefs(store: KeyValue): Prefs {
     showStreak: bool('showStreak'),
     dailyRounds: r.dailyRounds === 2 || r.dailyRounds === 3 ? r.dailyRounds : 1,
     plan: parsePlan(r.plan),
+    goal: typeof r.goal === 'string' ? r.goal : null,
+    lastChapter: typeof r.lastChapter === 'string' ? r.lastChapter : null,
   };
 }
 

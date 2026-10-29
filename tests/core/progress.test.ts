@@ -210,3 +210,19 @@ describe('weekStrip', () => {
     expect(new Set(strip.map((d) => new Date(d.dayStart).getDate())).size).toBe(7);
   });
 });
+
+describe('capNewXp', () => {
+  test('only 20 new cards per study day earn XP, counted per study day', async () => {
+    const { capNewXp } = await import('../../src/core/progress');
+    const day1 = Array.from({ length: 25 }, (_, i) => entry(`n${i}`, at(2026, 10, 1, 10) + i * MIN));
+    const capped = capNewXp(new Map(day1.map((e) => [e.id, 'new' as const])), day1);
+    expect(xpBetween(day1, capped, [], 0, Infinity)).toBe(20 * XP.new);
+    // 15 before 4 am belong to the previous study day, 15 after to the next.
+    const night = [
+      ...Array.from({ length: 15 }, (_, i) => entry(`a${i}`, at(2026, 10, 2, 3) + i * MIN)),
+      ...Array.from({ length: 15 }, (_, i) => entry(`b${i}`, at(2026, 10, 2, 5) + i * MIN)),
+    ];
+    const both = capNewXp(new Map(night.map((e) => [e.id, 'new' as const])), night);
+    expect(xpBetween(night, both, [], 0, Infinity)).toBe(30 * XP.new);
+  });
+});

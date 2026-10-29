@@ -1,12 +1,14 @@
 import { State } from 'ts-fsrs';
 import { createEngine, type Engine } from '../core/engine';
 import { newId } from '../core/ids';
-import type { Card, Note, NoteFields, ReviewEntry, Theme } from '../core/model';
+import type { Card, CharacterId, Note, NoteFields, ReviewEntry, Slot, Theme } from '../core/model';
 import { validateFields } from '../core/validate';
 import { validateSettings } from '../core/settings';
 import { backupFileName, serializeBackup, type Dump } from '../core/backup';
 import { mergeIntoLocal } from '../sync/sync';
-import { classifyEntries, comebackRounds, goalDays, makeRestDayCheck, nextStudyDay, roundsPerDay, streakState, weekStart, weekStrip, xpBetween, type StripDay } from '../core/progress';
+import { CATALOG } from '../data/items';
+import { CHARACTER_NAMES, NAME_MAX, avatarOf, outfit, owned, resale, wallet } from '../core/shop';
+import { capNewXp, classifyEntries, comebackRounds, goalDays, makeRestDayCheck, nextStudyDay, roundsPerDay, streakState, weekStart, weekStrip, xpBetween, type StripDay } from '../core/progress';
 import { dailyCounts, forecast, mastery, nextLevel, retention, stateBreakdown, type Level } from '../core/stats';
 import type { CardState } from '../core/scheduler';
 import { buildCustomQueue, buildDailyQueue, countNewIntroduced, nextDue, studyDayStart, type CustomChoice, type QueueCandidate } from '../core/queue';
@@ -48,6 +50,17 @@ export interface ThemeProgress {
   fresh: number;
   /** Next level and the mastered cards still needed; null once anchored or empty. */
   next: { level: Level; remaining: number } | null;
+}
+
+export interface ShopState {
+  /** XP earned since the first round, the same rules as every XP figure. */
+  earned: number;
+  balance: number;
+  owned: Set<string>;
+  outfit: Partial<Record<Slot, string>>;
+  avatar: { character: CharacterId; name: string };
+  /** Whether a character was ever chosen. */
+  chosen: boolean;
 }
 
 export interface RoundOutcome {
@@ -101,6 +114,12 @@ export interface Services {
   repo: Repo;
   engine: Engine;
   today(now: number): Promise<Today>;
+  /** Wallet (XP earned since the start − purchases + sales), inventory, outfit and character. */
+  shop(now: number): Promise<ShopState>;
+  buy(itemId: string, now: number): Promise<{ ok: true } | { ok: false; error: string }>;
+  sell(itemId: string, now: number): Promise<{ ok: true; refund: number } | { ok: false; error: string }>;
+  equip(slot: Slot, itemId: string | null, now: number): Promise<void>;
+  setAvatar(character: CharacterId, name: string, now: number): Promise<void>;
   /** A session the learner picks (themes, mode, count); ignores the daily new-card limit. */
   custom(now: number, choice: CustomChoice): Promise<string[]>;
   context(cardId: string): Promise<{ note: Note; card: Card; pool: Note[]; theme: Theme }>;
@@ -172,10 +191,13 @@ export function createServices(repo: Repo, deviceId: string): Services {
     const states = new Map<string, CardState>(
       active.map((c) => [c.id, scheduler.replay(noteById.get(c.noteId)!.createdAt, logByCard.get(c.id) ?? [])]),
     );
-    const kinds = classifyEntries(
-      cards.filter((c) => noteById.has(c.noteId)).map((c) => ({ cardId: c.id, createdAt: noteById.get(c.noteId)!.createdAt })),
+    const kinds = capNewXp(
+      classifyEntries(
+        cards.filter((c) => noteById.has(c.noteId)).map((c) => ({ cardId: c.id, createdAt: noteById.get(c.noteId)!.createdAt })),
+        reviews,
+        scheduler,
+      ),
       reviews,
-      scheduler,
     );
     const roundEnds = events.filter((e) => e.type === 'round_completed').map((e) => e.ts);
     const isRestDay = makeRestDayCheck(
@@ -184,7 +206,7 @@ export function createServices(repo: Repo, deviceId: string): Services {
       scheduler,
       settings.newPerDay,
     );
-    return { themes, notes, active, reviews, roundEnds, scheduler, states, kinds, noteById, isRestDay };
+    return { themes, notes, active, reviews, events, roundEnds, scheduler, states, kinds, noteById, isRestDay };
   }
 
   function streakOf(snap: Awaited<ReturnType<typeof snapshot>>, roundEnds: number[], todayStart: number) {
@@ -223,6 +245,19 @@ export function createServices(repo: Repo, deviceId: string): Services {
       }];
     });
     return { candidates, reviews, settings, scheduler };
+  }
+
+  /** Deleting a note deletes its reviews: the XP they earned stays in the wallet as a credit. */
+  async function keepXp(noteIds: string[]) {
+    const snap = await snapshot();
+    const cards = await repo.listCards();
+    const existing = new Set(snap.events.map((e) => e.id));
+    for (const noteId of noteIds) {
+      const cardIds = new Set(cards.filter((c) => c.noteId === noteId).map((c) => c.id));
+      const xp = xpBetween(snap.reviews.filter((e) => cardIds.has(e.cardId)), snap.kinds, [], -Infinity, Infinity);
+      const id = `credit:${noteId}`;
+      if (xp > 0 && !existing.has(id)) await repo.appendEvent({ id, type: 'xp_credit', ts: Date.now(), xp });
+    }
   }
 
   const services: Services = {
@@ -274,6 +309,7 @@ export function createServices(repo: Repo, deviceId: string): Services {
 
     async deleteNote(id) {
       const note = await repo.getNote(id);
+      await keepXp([id]);
       await repo.deleteNote(id, Math.max(Date.now(), (note?.updatedAt ?? 0) + 1));
     },
 
@@ -303,6 +339,7 @@ export function createServices(repo: Repo, deviceId: string): Services {
 
     async removeExamples() {
       const examples = (await repo.listNotes()).filter((n) => STARTER_NOTE_IDS.has(n.id));
+      await keepXp(examples.map((n) => n.id));
       for (const n of examples) await repo.deleteNote(n.id);
       const starterIds = new Set(STARTER_THEMES.map((t) => t.id));
       let themes = 0;
@@ -426,6 +463,51 @@ export function createServices(repo: Repo, deviceId: string): Services {
         repaired: after.history.get(yesterday) === 'repaired' && prev.history.get(yesterday) !== 'repaired',
         milestone: after.current !== prev.current && MILESTONES.includes(after.current) ? after.current : null,
       };
+    },
+
+    async shop() {
+      const snap = await snapshot();
+      const earned = xpBetween(snap.reviews, snap.kinds, snap.roundEnds, -Infinity, Infinity, comebackRounds(snap.roundEnds));
+      const credits = snap.events.reduce((n, e) => n + (e.type === 'xp_credit' ? e.xp : 0), 0);
+      return {
+        // Shown to the learner: XP kept from deleted notes counts as earned.
+        earned: earned + credits,
+        balance: wallet(earned, snap.events),
+        owned: owned(snap.events),
+        outfit: outfit(snap.events),
+        avatar: avatarOf(snap.events),
+        chosen: snap.events.some((e) => e.type === 'avatar'),
+      };
+    },
+
+    async buy(itemId, now) {
+      const item = CATALOG.find((i) => i.id === itemId);
+      if (!item) return { ok: false, error: 'Cet objet n’existe pas.' };
+      const state = await services.shop(now);
+      if (state.owned.has(itemId)) return { ok: false, error: 'Tu as déjà cet objet.' };
+      if (state.balance < item.price) return { ok: false, error: `Il te manque ${item.price - Math.max(0, state.balance)} XP.` };
+      await repo.appendEvent({ id: newId(now), type: 'purchase', ts: now, itemId, price: item.price });
+      await repo.appendEvent({ id: newId(now), type: 'equip', ts: now, slot: item.slot, itemId });
+      return { ok: true };
+    },
+
+    async sell(itemId, now) {
+      const events = await repo.listEvents();
+      const paid = events.filter((e) => e.type === 'purchase' && e.itemId === itemId).sort((a, b) => a.ts - b.ts).pop();
+      if (!owned(events).has(itemId) || !paid || paid.type !== 'purchase') return { ok: false, error: 'Tu n’as pas cet objet.' };
+      const refund = resale(paid.price);
+      await repo.appendEvent({ id: newId(now), type: 'sale', ts: now, itemId, refund });
+      return { ok: true, refund };
+    },
+
+    async equip(slot, itemId, now) {
+      if (itemId !== null && (CATALOG.find((i) => i.id === itemId)?.slot !== slot || !owned(await repo.listEvents()).has(itemId))) return;
+      await repo.appendEvent({ id: newId(now), type: 'equip', ts: now, slot, itemId });
+    },
+
+    async setAvatar(character, name, now) {
+      const clean = name.trim().slice(0, NAME_MAX) || CHARACTER_NAMES[character];
+      await repo.appendEvent({ id: newId(now), type: 'avatar', ts: now, character, name: clean });
     },
 
     async newSlotsLeft(now) {

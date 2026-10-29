@@ -51,7 +51,7 @@ describe('backup format', () => {
   });
 
   test('rejects a backup from a newer version', () => {
-    const res = parseBackup(mutate((o) => (o.version = 3)));
+    const res = parseBackup(mutate((o) => (o.version = BACKUP_VERSION + 1)));
     expect(res.ok).toBe(false);
     if (!res.ok) expect(res.error).toMatch(/plus récente/);
   });
@@ -96,5 +96,31 @@ describe('backup format', () => {
 
   test('summary counts themes, notes and reviews', () => {
     expect(summarize(dump)).toEqual({ themes: 1, notes: 1, reviews: 1 });
+  });
+});
+
+describe('shop events in backups', () => {
+  const shop: Dump = {
+    ...dump,
+    events: [
+      { id: 'e', type: 'round_completed', ts: NOW },
+      { id: 'p', type: 'purchase', ts: NOW + 1, itemId: 'bonnet', price: 60 },
+      { id: 's', type: 'sale', ts: NOW + 2, itemId: 'bonnet', refund: 30 },
+      { id: 'q', type: 'equip', ts: NOW + 3, slot: 'chapeau', itemId: null },
+      { id: 'a', type: 'avatar', ts: NOW + 4, character: 'lapin', name: 'Pompon' },
+    ],
+  };
+
+  test('purchases, sales, outfit and character round-trip', () => {
+    expect(parseBackup(serializeBackup(shop, NOW))).toEqual({ ok: true, dump: shop, exportedAt: NOW });
+  });
+
+  test('an event type from a future version is kept untouched, a malformed known one is refused', () => {
+    const future = mutate((o) => (o.events = [...(o.events as unknown[]), { id: 'z', type: 'future_thing', ts: NOW, extra: 1 }, { id: 'y', type: 'hasOwnProperty', ts: NOW }]));
+    const res = parseBackup(future);
+    expect(res.ok && res.dump.events.map((e) => e.id)).toEqual(['e', 'z', 'y']);
+    expect(res.ok && res.dump.events[1]).toEqual({ id: 'z', type: 'future_thing', ts: NOW, extra: 1 });
+    expect(parseBackup(mutate((o) => (o.events = [{ id: 'p', type: 'purchase', ts: NOW, itemId: 'bonnet' }]))).ok).toBe(false);
+    expect(parseBackup(mutate((o) => (o.events = [{ id: 'a', type: 'avatar', ts: NOW, character: 'dragon', name: 'x' }]))).ok).toBe(false);
   });
 });

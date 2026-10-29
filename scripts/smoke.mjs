@@ -398,6 +398,46 @@ await fresh13.locator('.node').nth(1).click();
 await fresh13.getByRole('button', { name: 'Réviser ce thème' }).click();
 await fresh13.getByRole('heading', { name: 'Choisir quoi réviser' }).waitFor();
 if ((await fresh13.locator('.pick input:checked').count()) !== 1) fail('« Réviser ce thème » should preselect that theme only');
+
+// --- v1.5: character, shop, character on the path ---
+await fresh13.goto(`${URL}#accueil`);
+await fresh13.locator('.walker').waitFor({ timeout: 3000 }).catch(() => fail('the character should stand on the current chapter'));
+await fresh13.getByRole('link', { name: 'Choisir mon personnage' }).click();
+await fresh13.getByRole('heading', { name: 'Choisis ton personnage' }).waitFor();
+await fresh13.screenshot({ path: `${OUT}/shop-pick.png`, fullPage: true });
+await fresh13.locator('label.char', { hasText: 'Lapin' }).click();
+await fresh13.getByLabel('Son nom').fill('Pompon');
+await fresh13.getByRole('button', { name: 'C’est parti' }).click();
+await fresh13.getByRole('heading', { name: 'Pompon' }).waitFor({ timeout: 3000 }).catch(() => fail('the chosen name should head the shop'));
+const balanceText = async () => Number((await fresh13.locator('.wallet-n').innerText()).replace(/\D/g, ''));
+const balance0 = await balanceText();
+if (balance0 < 60) fail(`expected enough XP for a common item, got ${balance0}`);
+await fresh13.getByRole('button', { name: 'Chapeaux' }).click();
+await fresh13.getByRole('button', { name: 'Essayer Couronne dorée' }).click();
+await fresh13.getByText('Essayage : Couronne dorée. Rien n’est acheté.').waitFor();
+if (await fresh13.getByRole('button', { name: 'Acheter Couronne dorée' }).isEnabled()) fail('an item too expensive should not be buyable');
+await fresh13.screenshot({ path: `${OUT}/shop.png`, fullPage: true });
+const bonnet = fresh13.locator('.item', { hasText: 'Bonnet de laine' });
+await bonnet.getByRole('button', { name: 'Acheter Bonnet de laine' }).click();
+await bonnet.getByRole('button', { name: 'Oui' }).dblclick();
+await fresh13.getByText(/Acheté et porté.*Bonnet de laine/).waitFor({ timeout: 3000 }).catch(() => fail('buying should confirm'));
+const purchases = await fresh13.evaluate(() => new Promise((resolve) => {
+  const req = indexedDB.open('ancrage');
+  req.onsuccess = () => { const r = req.result.transaction('events').objectStore('events').getAll(); r.onsuccess = () => resolve(r.result.filter((e) => e.type === 'purchase').length); };
+}));
+if (purchases !== 1) fail(`a double click should buy once, got ${purchases} purchases`);
+if ((await balanceText()) !== balance0 - 60) fail('the balance should drop by the price');
+await fresh13.reload();
+await fresh13.getByRole('button', { name: 'Chapeaux' }).click();
+if (!(await bonnet.getByText('Porté').isVisible())) fail('the bought item should be worn after reload');
+await bonnet.getByRole('button', { name: 'Revendre Bonnet de laine' }).click();
+await bonnet.getByRole('button', { name: 'Oui' }).click();
+await fresh13.getByText(/Revente.*Bonnet de laine, \+30 XP/).waitFor();
+if ((await balanceText()) !== balance0 - 30) fail('selling should give half back');
+await fresh13.goto(`${URL}#accueil`);
+await fresh13.locator('.goal-card').waitFor();
+await fresh13.waitForTimeout(800);
+await fresh13.screenshot({ path: `${OUT}/home-character.png`, fullPage: true });
 await app.goto(`${URL}#accueil`);
 await app.getByRole('button', { name: 'Fixer un rendez-vous' }).click();
 await app.getByLabel('Heure').fill('07:30');
@@ -431,7 +471,7 @@ mobile.on('pageerror', (e) => errors.push(e.message));
 await mobile.goto(URL);
 await mobile.locator('.hero').waitFor();
 await mobile.screenshot({ path: `${OUT}/mobile-dark.png`, fullPage: true });
-for (const view of ['accueil', 'creer', 'progres', 'bibliotheque', 'reglages']) {
+for (const view of ['accueil', 'creer', 'progres', 'bibliotheque', 'boutique', 'reglages']) {
   await mobile.goto(`${URL}#${view}`);
   await mobile.waitForTimeout(300);
   const width = await mobile.evaluate(() => document.documentElement.scrollWidth);

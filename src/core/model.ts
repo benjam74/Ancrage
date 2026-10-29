@@ -66,9 +66,18 @@ export interface Settings {
 
 export const DEFAULT_SETTINGS: Settings = { desiredRetention: 0.9, newPerDay: 5 };
 
-/** Facts that are not answers. Only round completions are stored: everything else is derived from the log. */
-export interface AppEvent {
-  id: string;
-  type: 'round_completed';
-  ts: number;
-}
+export type Slot = 'haut' | 'bas' | 'chapeau' | 'lunettes' | 'cou' | 'objet' | 'compagnon' | 'decor';
+export type CharacterId = 'renard' | 'loutre' | 'ourson' | 'lapin';
+
+/**
+ * Facts that are not answers: round completions and the shop (purchases, sales, outfit, character).
+ * Everything else is derived from the log. Events are only ever added, so devices merge them by id.
+ */
+export type AppEvent =
+  | { id: string; type: 'round_completed'; ts: number }
+  | { id: string; type: 'purchase'; ts: number; itemId: string; price: number }
+  | { id: string; type: 'sale'; ts: number; itemId: string; refund: number }
+  | { id: string; type: 'equip'; ts: number; slot: Slot; itemId: string | null }
+  | { id: string; type: 'avatar'; ts: number; character: CharacterId; name: string }
+  /** XP earned by reviews of a deleted note, kept in the wallet (id `credit:<noteId>`, so devices agree). */
+  | { id: string; type: 'xp_credit'; ts: number; xp: number };

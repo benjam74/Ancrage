@@ -2,7 +2,8 @@ import type { AppEvent, Card, Note, ReviewEntry, Settings, Theme, Tombstone } fr
 import { validateSettings } from './settings';
 
 export const BACKUP_FORMAT = 'ancrage-backup';
-export const BACKUP_VERSION = 2;
+// Version 3 adds the shop events; older apps then ask to be updated instead of calling the file damaged.
+export const BACKUP_VERSION = 3;
 
 /** A full snapshot of the local database. */
 export interface Dump {
@@ -50,6 +51,18 @@ const fieldsOk = (f: unknown) =>
   isObj(f) && isStr(f.type) && !!FIELD_SHAPES[f.type as string] &&
   Object.entries(FIELD_SHAPES[f.type as string]).every(([key, ok]) => ok(f[key]));
 
+const SLOT_IDS = ['haut', 'bas', 'chapeau', 'lunettes', 'cou', 'objet', 'compagnon', 'decor'];
+const CHARACTER_IDS = ['renard', 'loutre', 'ourson', 'lapin'];
+const EVENT_SHAPES: Record<string, (r: Record<string, unknown>) => boolean> = {
+  round_completed: () => true,
+  purchase: (r) => isStr(r.itemId) && isNum(r.price),
+  sale: (r) => isStr(r.itemId) && isNum(r.refund),
+  equip: (r) => SLOT_IDS.includes(r.slot as string) && (r.itemId === null || isStr(r.itemId)),
+  avatar: (r) => CHARACTER_IDS.includes(r.character as string) && isStr(r.name),
+  xp_credit: (r) => isNum(r.xp),
+};
+const knownEvent = (type: unknown) => isStr(type) && Object.hasOwn(EVENT_SHAPES, type);
+
 const CHECKS: Record<'themes' | 'notes' | 'cards' | 'reviews' | 'events', (r: Record<string, unknown>) => boolean> = {
   themes: (r) =>
     isStr(r.id) && isStr(r.name) && isNum(r.order) && (r.parentId === undefined || isStr(r.parentId)) &&
@@ -62,7 +75,8 @@ const CHECKS: Record<'themes' | 'notes' | 'cards' | 'reviews' | 'events', (r: Re
     isStr(r.id) && isStr(r.cardId) && isNum(r.ts) && [1, 2, 3, 4].includes(r.rating as number) &&
     ['recognition', 'production', 'self'].includes(r.mode as string) && typeof r.correct === 'boolean' &&
     isNum(r.durationMs) && typeof r.hintUsed === 'boolean' && isStr(r.deviceId),
-  events: (r) => isStr(r.id) && r.type === 'round_completed' && isNum(r.ts),
+  // Types from a later version are kept as they are (so syncing never deletes them) and ignored by readers.
+  events: (r) => isStr(r.id) && isNum(r.ts) && isStr(r.type) && (!knownEvent(r.type) || EVENT_SHAPES[r.type as string](r)),
 };
 const LABELS = { themes: 'thèmes', notes: 'notes', cards: 'cartes', reviews: 'révisions', events: 'manches' } as const;
 
