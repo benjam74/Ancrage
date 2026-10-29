@@ -2,12 +2,12 @@
   import type { Figure } from '../core/exercise';
 
   /** The image with the zone to find hidden behind « ? »; `uncovered` shows it with its answer. */
-  let { figure, uncovered }: { figure: Figure; uncovered: boolean } = $props();
+  let { figure, uncovered, title = '' }: { figure: Figure; uncovered: boolean; title?: string } = $props();
   const target = $derived(figure.masks.find((m) => m.id === figure.target));
 </script>
 
 <div class="figure">
-  <img src={figure.src} alt={uncovered && target?.label ? `Image, zone découverte : ${target.label}` : 'Image avec une zone masquée'} draggable="false" />
+  <img src={figure.src} alt={`${title ? `${title}. ` : ''}${uncovered && target?.label ? `Zone découverte : ${target.label}.` : 'Une zone est masquée, marquée d’un point d’interrogation.'}`} draggable="false" />
   {#if target}
     <div
       class="zone target"

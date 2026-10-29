@@ -15,6 +15,7 @@
   import { registerSW } from 'virtual:pwa-register';
   import Session from './ui/Session.svelte';
   import { prefs } from './ui/prefs.svelte';
+  import { primeSpeech } from './ui/voice';
   import Custom from './ui/Custom.svelte';
   import type { CustomChoice } from './core/queue';
 
@@ -44,6 +45,8 @@
 
   function startDaily() {
     if (!services || !today) return;
+    // The tap that starts the session also allows automatic reading on iOS.
+    if (prefs.readAloud) primeSpeech();
     const s = services;
     spec = { queue: today.queue, more: async () => (await s.today(Date.now())).queue, kind: 'daily' };
     inSession = true;
@@ -51,6 +54,7 @@
 
   async function startCustom(choice: CustomChoice) {
     if (!services) return;
+    if (prefs.readAloud) primeSpeech();
     const s = services;
     // The selection is fixed at the start; later rounds play what is left of it.
     const all = await s.custom(Date.now(), choice);

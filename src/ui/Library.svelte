@@ -73,7 +73,7 @@
 
   async function setLang(t: Theme, value: string) {
     await services.setLang(t.id, value ? (value as Lang) : null);
-    await done(`Lecture à voix haute de « ${t.name} » : ${value ? LANG_LABEL[value as Lang] : 'comme le domaine'}.`);
+    await done(`Lecture à voix haute de « ${t.name} » : ${value ? LANG_LABEL[value as Lang] : isDomain(t) ? 'Français' : 'comme le domaine'}.`);
   }
 
   async function setAside(note: Note, on: boolean) {

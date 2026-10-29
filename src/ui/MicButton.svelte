@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { Lang } from '../core/model';
+  import { onDestroy } from 'svelte';
   import { canDictate, dictate } from './voice';
 
   /** Dictates one phrase and hands it over; hidden where the browser cannot dictate. */
@@ -7,6 +8,9 @@
   let listening = $state(false);
   let error = $state('');
   let stop: (() => void) | null = null;
+  let abort: (() => void) | null = null;
+  // Leaving the card (answer checked, next card, end of session) turns the mic off at once.
+  onDestroy(() => abort?.());
 
   async function toggle() {
     if (listening) return stop?.();
@@ -14,6 +18,7 @@
     listening = true;
     const session = dictate(lang);
     stop = session.stop;
+    abort = session.abort;
     try {
       onheard(await session.done);
     } catch (e) {
@@ -21,6 +26,7 @@
     } finally {
       listening = false;
       stop = null;
+      abort = null;
     }
   }
 </script>

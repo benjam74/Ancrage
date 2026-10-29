@@ -169,6 +169,9 @@ export interface Services {
   completeRound(startedAt: number, now: number): Promise<RoundOutcome>;
 }
 
+/** Total size of the images of a profile, as data URL characters (about 10 MB). */
+export const MAX_IMAGES_CHARS = 14_000_000;
+
 const HEATMAP_DAYS = 20 * 7;
 const FORECAST_DAYS = 7;
 const RETENTION_WINDOW = 30 * 86_400_000;
@@ -360,6 +363,11 @@ export function createServices(repo: Repo, deviceId: string): Services {
 
     async saveNote(input, now) {
       const errors = validateFields(input.fields);
+      if (input.fields.type === 'image' && !errors.image) {
+        // Images travel in every sync and backup: their total stays reasonable on a phone.
+        const others = (await repo.listNotes()).reduce((n, x) => n + (x.id !== input.id && x.fields.type === 'image' ? x.fields.image.length : 0), 0);
+        if (others + input.fields.image.length > MAX_IMAGES_CHARS) errors.image = 'Ce profil a atteint la limite d’images (environ 50 schémas). Supprime des images masquées anciennes pour en ajouter.';
+      }
       if (!(await repo.listThemes()).some((t) => t.id === input.themeId && !isDomain(t))) errors.themeId = 'Ce thème n’existe plus. Choisis-en un autre.';
       if (Object.keys(errors).length) return { ok: false, errors };
       const existing = input.id ? await repo.getNote(input.id) : undefined;

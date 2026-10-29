@@ -18,7 +18,8 @@
   import Avatar from './Avatar.svelte';
   import type { CharacterId, Lang, Slot } from '../core/model';
   import { spokenText } from '../core/speech';
-  import { canSpeak, speak, stopSpeaking } from './voice';
+  import { canSpeak, primeSpeech, speak, stopSpeaking } from './voice';
+  import { onDestroy } from 'svelte';
   import Choice from './exercises/Choice.svelte';
   import Order from './exercises/Order.svelte';
   import Reveal from './exercises/Reveal.svelte';
@@ -203,11 +204,13 @@
   let readAnswerFor = '';
   $effect(() => {
     if (!shown || !answerShown || !prefs.readAloud) return;
-    const key = `${shown.cardId}:${round.done}`;
+    // One key per display: `round.done` moves on before the next card shows, `shownAt` does not.
+    const key = `${shown.cardId}:${shown.shownAt}`;
     if (readAnswerFor === key) return;
     readAnswerFor = key;
     speak(spokenText(shown.ex, true), shown.lang);
   });
+  onDestroy(stopSpeaking);
   const listen = () => shown && speak(spokenText(shown.ex, answerShown), shown.lang);
 
   /** This answer made the card a hard one. */
@@ -255,7 +258,7 @@
   next().catch((e) => (error = String(e)));
 </script>
 
-<svelte:window onkeydown={(e) => { if (prefs.sound) primeAudio(); onkey(e); }} onpointerdown={() => { if (prefs.sound) primeAudio(); }} />
+<svelte:window onkeydown={(e) => { if (prefs.sound) primeAudio(); if (prefs.readAloud) primeSpeech(); onkey(e); }} onpointerdown={() => { if (prefs.sound) primeAudio(); if (prefs.readAloud) primeSpeech(); }} />
 
 <div class="session" role="dialog" aria-modal="true" aria-label="Séance de révision">
   <div class="s-head">

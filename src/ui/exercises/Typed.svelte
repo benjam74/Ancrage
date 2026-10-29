@@ -17,7 +17,7 @@
 </script>
 
 <h2 class="ex-title">{ex.prompt}</h2>
-{#if ex.figure}<Figure figure={ex.figure} uncovered={checked} />{/if}
+{#if ex.figure}<Figure figure={ex.figure} uncovered={checked} title={ex.prompt} />{/if}
 <div class="cloze" class:solo={!!ex.figure}>
   {ex.before}<input
     bind:this={input}

@@ -183,7 +183,7 @@
         {#if spec.kind === 'check'}
           <label class="check"><input type="checkbox" {id} bind:checked={drafts[type][spec.key] as boolean} />{spec.label}</label>
         {:else if spec.kind === 'image'}
-          <ImageMasker bind:image={drafts[type].image as string} bind:masks={drafts[type].masks as string} imageError={errors.image ?? ''} masksError={errors.masks ?? ''} />
+          <ImageMasker bind:image={drafts[type].image as string} bind:masks={drafts[type].masks as string} imageError={errors.image ?? saveErrors.image ?? ''} masksError={errors.masks ?? ''} />
         {:else if spec.kind === 'masks'}
           <!-- Edited together with the image. -->
         {:else}
