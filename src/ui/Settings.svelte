@@ -104,7 +104,7 @@
     <div class="field" class:invalid={!!errors.newPerDay}>
       <label for="s-new">Nouvelles cartes par jour</label>
       <input id="s-new" inputmode="numeric" bind:value={newPerDay} aria-invalid={!!errors.newPerDay} aria-describedby="s-new-msg" style="max-width:8em" />
-      <span id="s-new-msg" class={errors.newPerDay ? 'error' : 'hint'}>{errors.newPerDay ?? 'Jusqu’à 200. Mets 0 pour faire une pause. Pour en apprendre plus un jour donné : Accueil → Choisir quoi réviser.'}</span>
+      <span id="s-new-msg" class={errors.newPerDay ? 'error' : 'hint'}>{errors.newPerDay ?? 'Mets 0 pour faire une pause. Pour en apprendre plus un jour donné : ouvre la séance à la carte depuis l’accueil et choisis « Nouvelles cartes ».'}</span>
     </div>
     <div class="row">
       <span role="status" class="muted">{saved}</span>

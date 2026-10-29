@@ -2,7 +2,7 @@ import type { Settings } from './model';
 
 export const RETENTION_MIN = 0.7;
 export const RETENTION_MAX = 0.97;
-export const NEW_PER_DAY_MAX = 200;
+export const NEW_PER_DAY_MAX = 50;
 
 const toNumber = (v: unknown) => (typeof v === 'number' ? v : typeof v !== 'string' || v.trim() === '' ? NaN : Number(v.trim().replace(',', '.')));
 
@@ -16,7 +16,7 @@ export function validateSettings(input: { desiredRetention: string | number; new
     errors.desiredRetention = 'La rétention visée doit être entre 0,70 et 0,97.';
   }
   if (!(Number.isInteger(newPerDay) && newPerDay >= 0 && newPerDay <= NEW_PER_DAY_MAX)) {
-    errors.newPerDay = 'Le nombre de nouvelles cartes doit être un entier entre 0 et 200.';
+    errors.newPerDay = 'Le nombre de nouvelles cartes doit être un entier entre 0 et 50.';
   }
   return Object.keys(errors).length ? { ok: false, errors } : { ok: true, settings: { desiredRetention, newPerDay } };
 }

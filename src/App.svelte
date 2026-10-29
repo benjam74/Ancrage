@@ -110,7 +110,7 @@
 </script>
 
 <svelte:document onvisibilitychange={() => { if (document.visibilityState === 'visible' && Date.now() - lastSync > 60_000) void syncInBackground(); }} />
-<svelte:window onhashchange={() => { view = fromHash(); if (view !== 'creer') editing = null; if (view !== 'reviser') preselect = null; window.scrollTo(0, 0); }} />
+<svelte:window onhashchange={() => { view = fromHash(); if (view !== 'creer') editing = null; if (view !== 'reviser') { preselect = null; customEmpty = ''; } window.scrollTo(0, 0); }} />
 
 {#if error}
   <main class="page"><h1>Ancrage</h1><p>Impossible d’ouvrir la base locale : {error}</p></main>

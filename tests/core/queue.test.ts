@@ -124,12 +124,12 @@ describe('buildCustomQueue', () => {
     expect(buildCustomQueue(pool, NOW, { themeIds: ['b'], mode: 'new', limit: 10 }, r)).toEqual(['n3']);
   });
 
-  test('practice mode: every card already seen, most forgotten first, due ones included', () => {
-    expect(buildCustomQueue(pool, NOW, { themeIds: ['a', 'b'], mode: 'practice', limit: 10 }, (c) => (c.cardId.startsWith('d') ? 0.6 : r(c)))).toEqual(['weak', 'd1', 'd2', 'mid', 'strong']);
+  test('practice mode: seen cards not due yet, most forgotten first', () => {
+    expect(buildCustomQueue(pool, NOW, { themeIds: ['a', 'b'], mode: 'practice', limit: 10 }, r)).toEqual(['weak', 'mid', 'strong']);
   });
 
   test('an unlimited count and an empty selection', () => {
-    expect(buildCustomQueue(pool, NOW, { themeIds: ['a'], mode: 'practice', limit: Infinity }, r)).toHaveLength(3);
+    expect(buildCustomQueue(pool, NOW, { themeIds: ['a'], mode: 'practice', limit: Infinity }, r)).toEqual(['weak', 'strong']);
     expect(buildCustomQueue(pool, NOW, { themeIds: [], mode: 'due', limit: 10 }, r)).toEqual([]);
   });
 });

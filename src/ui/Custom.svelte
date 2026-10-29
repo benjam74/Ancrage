@@ -18,7 +18,7 @@
   const counts = $derived({
     due: chosen.reduce((n, t) => n + t.due, 0),
     new: chosen.reduce((n, t) => n + t.fresh, 0),
-    practice: chosen.reduce((n, t) => n + t.cards - t.fresh, 0),
+    practice: chosen.reduce((n, t) => n + t.cards - t.fresh - t.due, 0),
   });
   // Until the learner picks a mode, suggest the most useful one that has cards.
   $effect(() => {
@@ -30,8 +30,8 @@
 
   const MODES: { id: CustomMode; title: string; text: string }[] = [
     { id: 'due', title: 'À réviser', text: 'Les cartes arrivées à échéance dans ces thèmes.' },
-    { id: 'new', title: 'Nouvelles cartes', text: 'Apprendre plus aujourd’hui, au-delà de ta limite quotidienne. Chaque nouvelle carte revient plusieurs fois les semaines suivantes.' },
-    { id: 'practice', title: 'Entraînement libre', text: 'Toutes les cartes déjà vues, les plus fragiles d’abord. Utile avant un examen ou une séance de coaching ; consolide moins que la révision au bon moment.' },
+    { id: 'new', title: 'Nouvelles cartes', text: 'Apprendre plus aujourd’hui, autant que tu veux. Elles comptent dans ta limite quotidienne : fais d’abord ta séance du jour. Chaque nouvelle carte revient plusieurs fois les semaines suivantes.' },
+    { id: 'practice', title: 'Entraînement libre', text: 'Les cartes déjà vues qui ne sont pas encore à réviser, les plus fragiles d’abord. Utile avant un examen ou une séance de coaching ; ne rapporte pas d’XP et consolide moins que la révision au bon moment.' },
   ];
   const LIMITS = [10, 20, 50, Infinity];
 
@@ -94,7 +94,7 @@
       {size === 0 ? 'Aucune carte dans cette sélection' : `Commencer (${size} carte${size > 1 ? 's' : ''})`}
     </button>
     {#if size === 0 && picked.length > 0}
-      <p class="muted">{mode === 'due' ? 'Rien n’est à réviser dans ces thèmes pour l’instant : essaie l’entraînement libre ou de nouvelles cartes.' : mode === 'new' ? 'Toutes les cartes de ces thèmes ont déjà été vues.' : 'Aucune carte de ces thèmes n’a encore été vue.'}</p>
+      <p class="muted">{mode === 'due' ? 'Rien n’est à réviser dans ces thèmes pour l’instant : essaie l’entraînement libre ou de nouvelles cartes.' : mode === 'new' ? 'Toutes les cartes de ces thèmes ont déjà été vues.' : 'Aucune carte vue de ces thèmes n’est disponible pour l’entraînement : celles qui sont dues sont dans « À réviser ».'}</p>
     {/if}
   {/if}
 </main>

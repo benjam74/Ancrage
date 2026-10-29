@@ -62,7 +62,7 @@ export interface CustomChoice {
 
 /**
  * A session the learner picks: due cards of some themes, new cards beyond the daily limit,
- * or free practice on cards already seen, the most forgotten first.
+ * or free practice on seen cards that are not due yet (due ones belong to the due mode), the most forgotten first.
  */
 export function buildCustomQueue(
   candidates: QueueCandidate[],
@@ -79,7 +79,7 @@ export function buildCustomQueue(
     picked = chosen.filter(isNew).sort((a, b) => a.themeOrder - b.themeOrder || a.noteCreatedAt - b.noteCreatedAt || a.cardId.localeCompare(b.cardId));
   } else {
     const r = new Map(chosen.map((c) => [c.cardId, retrievability(c)]));
-    picked = chosen.filter((c) => !isNew(c)).sort((a, b) => r.get(a.cardId)! - r.get(b.cardId)! || dueAt(a) - dueAt(b) || a.cardId.localeCompare(b.cardId));
+    picked = chosen.filter((c) => !isNew(c) && dueAt(c) > now).sort((a, b) => r.get(a.cardId)! - r.get(b.cardId)! || dueAt(a) - dueAt(b) || a.cardId.localeCompare(b.cardId));
   }
   return picked.slice(0, choice.limit).map((c) => c.cardId);
 }

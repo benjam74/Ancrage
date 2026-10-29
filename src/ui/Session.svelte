@@ -103,7 +103,8 @@
     else {
       const now = Date.now();
       // A round with no answer (empty queue) is not a finished round.
-      roundResult = round.answered > 0 ? await services.completeRound(roundStartedAt, now) : null;
+      // Practice reviews cards before they are due: it earns no round XP and does not count as a study day.
+      roundResult = round.answered > 0 && kind !== 'practice' ? await services.completeRound(roundStartedAt, now) : null;
       hasMore = (await more(played)).length > 0;
       after = roundResult ? await services.progress(now) : null;
       endStep = 'summary';
@@ -263,8 +264,8 @@
       <div class="s-inner end">
         <h1>Manche terminée</h1>
         {#if roundResult?.comeback}<p class="badge">Bon retour : +20 XP</p>{/if}
-        <div class="tiles three">
-          <div class="stat-tile" style="--c:var(--sun);--h-ink:var(--on-sun)"><div class="h">XP gagnée</div><div class="v" aria-label="{roundResult?.xp ?? 0} XP">+{xpShown}</div></div>
+        <div class="tiles" class:three={kind !== 'practice'}>
+          {#if kind !== 'practice'}<div class="stat-tile" style="--c:var(--sun);--h-ink:var(--on-sun)"><div class="h">XP gagnée</div><div class="v" aria-label="{roundResult?.xp ?? 0} XP">+{xpShown}</div></div>{/if}
           <div class="stat-tile" style="--c:var(--ok);--h-ink:var(--on-ok)"><div class="h">Justes</div><div class="v">{cards - missed}/{cards}</div></div>
           <div class="stat-tile" style="--c:var(--petrol);--h-ink:var(--on-petrol)"><div class="h">Durée</div><div class="v">{Math.max(1, Math.round((Date.now() - roundStartedAt) / 60_000))} min</div></div>
         </div>
@@ -278,7 +279,7 @@
           <p class="muted">{hasMore ? 'Il reste des cartes pour aujourd’hui.' : 'Tout est fait pour aujourd’hui.'}</p>
         {:else}
           <p class="muted">{hasMore ? 'Il reste des cartes dans ta sélection.' : 'Ta sélection est terminée.'}</p>
-          {#if kind === 'practice'}<p class="muted end-note">L’entraînement ne rapporte pas d’XP par carte : réviser avant l’échéance consolide moins la mémoire que réviser au bon moment.</p>{/if}
+          {#if kind === 'practice'}<p class="muted end-note">L’entraînement ne rapporte pas d’XP et ne compte pas pour la série : réviser avant l’échéance consolide moins la mémoire que réviser au bon moment.</p>{/if}
         {/if}
       </div>
     {:else if shown}
