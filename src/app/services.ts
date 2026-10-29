@@ -1,7 +1,7 @@
 import { State } from 'ts-fsrs';
 import { createEngine, type Engine } from '../core/engine';
 import { newId } from '../core/ids';
-import type { Card, CharacterId, Note, NoteFields, ReviewEntry, Slot, Theme } from '../core/model';
+import type { Card, CharacterId, Lang, Note, NoteFields, ReviewEntry, Slot, Theme } from '../core/model';
 import { validateFields } from '../core/validate';
 import { validateSettings } from '../core/settings';
 import { backupFileName, serializeBackup, type Dump } from '../core/backup';
@@ -137,7 +137,10 @@ export interface Services {
   setAvatar(character: CharacterId, name: string, now: number): Promise<void>;
   /** A session the learner picks (themes, mode, count); ignores the daily new-card limit. */
   custom(now: number, choice: CustomChoice): Promise<string[]>;
-  context(cardId: string): Promise<{ note: Note; card: Card; pool: Note[]; theme: Theme }>;
+  /** `lang`: the theme's reading language, else its domain's, else French. */
+  context(cardId: string): Promise<{ note: Note; card: Card; pool: Note[]; theme: Theme; lang: Lang }>;
+  /** Reading language of a theme or domain; null goes back to inheriting. */
+  setLang(themeId: string, lang: Lang | null): Promise<void>;
   saveNote(input: NoteInput, now: number): Promise<SaveResult>;
   deleteNote(id: string): Promise<void>;
   /** A theme (chapter), in a domain when one is given. */
@@ -165,6 +168,9 @@ export interface Services {
   /** Records a finished round; returns the XP it earned (answers since `startedAt` + round bonus). */
   completeRound(startedAt: number, now: number): Promise<RoundOutcome>;
 }
+
+/** Total size of the images of a profile, as data URL characters (about 10 MB). */
+export const MAX_IMAGES_CHARS = 14_000_000;
 
 const HEATMAP_DAYS = 20 * 7;
 const FORECAST_DAYS = 7;
@@ -341,13 +347,27 @@ export function createServices(repo: Repo, deviceId: string): Services {
       const card = await repo.getCard(cardId);
       const note = card && (await repo.getNote(card.noteId));
       if (!card || !note) throw new Error(`card ${cardId} not found`);
-      const theme = (await repo.listThemes()).find((t) => t.id === note.themeId) ?? { id: note.themeId, name: 'Sans thème', order: 0 };
+      const themes = await repo.listThemes();
+      const theme = themes.find((t) => t.id === note.themeId) ?? { id: note.themeId, name: 'Sans thème', order: 0 };
       const pool = (await repo.listNotes(note.themeId)).filter((n) => n.id !== note.id);
-      return { note, card, pool, theme };
+      const domain = themes.find((t) => t.id === domainOf(theme, new Set(themes.filter(isDomain).map((d) => d.id))));
+      return { note, card, pool, theme, lang: theme.lang ?? domain?.lang ?? 'fr-FR' };
+    },
+
+    async setLang(themeId, lang) {
+      const theme = (await repo.listThemes()).find((t) => t.id === themeId);
+      if (!theme || (theme.lang ?? null) === lang) return;
+      const { lang: _, ...rest } = theme;
+      await repo.putTheme({ ...rest, ...(lang ? { lang } : {}), updatedAt: Math.max(Date.now(), (theme.updatedAt ?? 0) + 1) });
     },
 
     async saveNote(input, now) {
       const errors = validateFields(input.fields);
+      if (input.fields.type === 'image' && !errors.image) {
+        // Images travel in every sync and backup: their total stays reasonable on a phone.
+        const others = (await repo.listNotes()).reduce((n, x) => n + (x.id !== input.id && x.fields.type === 'image' ? x.fields.image.length : 0), 0);
+        if (others + input.fields.image.length > MAX_IMAGES_CHARS) errors.image = 'Ce profil a atteint la limite d’images (environ 50 schémas). Supprime des images masquées anciennes pour en ajouter.';
+      }
       if (!(await repo.listThemes()).some((t) => t.id === input.themeId && !isDomain(t))) errors.themeId = 'Ce thème n’existe plus. Choisis-en un autre.';
       if (Object.keys(errors).length) return { ok: false, errors };
       const existing = input.id ? await repo.getNote(input.id) : undefined;

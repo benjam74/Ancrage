@@ -1,5 +1,5 @@
 import { normalizeAnswer } from './check';
-import type { NoteFields, NoteType } from './model';
+import type { Mask, NoteFields, NoteType } from './model';
 
 export type Draft = Record<string, string | boolean>;
 
@@ -7,7 +7,8 @@ export interface FieldSpec {
   key: string;
   label: string;
   /** `lines`: one entry per line · `list`: comma separated. */
-  kind: 'text' | 'longtext' | 'lines' | 'list' | 'check';
+  /** `image`: a data URL · `masks`: the zones, as JSON (edited by the zone editor). */
+  kind: 'text' | 'longtext' | 'lines' | 'list' | 'check' | 'image' | 'masks';
   hint?: string;
 }
 
@@ -37,7 +38,28 @@ export const FIELD_SPECS: Record<NoteType, FieldSpec[]> = {
     { key: 'model', label: 'Réponse modèle', kind: 'longtext' },
     { key: 'keyPoints', label: 'Points clés', kind: 'lines', hint: 'Un par ligne. Ils servent de grille pour t’auto-évaluer.' },
   ],
+  image: [
+    { key: 'title', label: 'Consigne', kind: 'text', hint: 'Facultative, par exemple « Légende le schéma du cœur ».' },
+    { key: 'image', label: 'Image', kind: 'image' },
+    { key: 'masks', label: 'Zones à masquer', kind: 'masks' },
+  ],
 };
+
+/** Zones from the editor's JSON; anything malformed is dropped. */
+export function parseMasks(json: string): Mask[] {
+  let raw: unknown;
+  try {
+    raw = JSON.parse(json || '[]');
+  } catch {
+    return [];
+  }
+  if (!Array.isArray(raw)) return [];
+  return raw.flatMap((m) =>
+    m && typeof m === 'object' && typeof m.id === 'string' && ['x', 'y', 'w', 'h'].every((k) => typeof m[k] === 'number')
+      ? [{ id: m.id, x: m.x, y: m.y, w: m.w, h: m.h, label: typeof m.label === 'string' ? m.label.trim() : '' }]
+      : [],
+  );
+}
 
 export function emptyDraft(type: NoteType): Draft {
   return Object.fromEntries(FIELD_SPECS[type].map((f) => [f.key, f.kind === 'check' ? false : '']));
@@ -63,7 +85,8 @@ export function draftToFields(type: NoteType, draft: Draft): NoteFields {
     if (spec.kind === 'check') values[spec.key] = raw === true;
     else {
       const text = typeof raw === 'string' ? raw : '';
-      if (spec.kind === 'lines') values[spec.key] = uniqueEntries(text.split('\n'));
+      if (spec.kind === 'masks') values[spec.key] = parseMasks(text);
+      else if (spec.kind === 'lines') values[spec.key] = uniqueEntries(text.split('\n'));
       else if (spec.kind === 'list') values[spec.key] = uniqueEntries(text.split(','));
       else values[spec.key] = text.trim();
     }
@@ -78,6 +101,7 @@ export function fieldsToDraft(fields: NoteFields): Draft {
       const value = record[spec.key];
       if (spec.kind === 'lines') return [spec.key, (value as string[]).join('\n')];
       if (spec.kind === 'list') return [spec.key, (value as string[]).join(', ')];
+      if (spec.kind === 'masks') return [spec.key, JSON.stringify(value)];
       return [spec.key, value as string | boolean];
     }),
   );

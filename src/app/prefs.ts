@@ -14,9 +14,11 @@ export interface Prefs {
   lastChapter: string | null;
   /** Domain shown on the home path. */
   domain: string | null;
+  /** Read each card aloud as it appears, then its answer. */
+  readAloud: boolean;
 }
 
-export const DEFAULT_PREFS: Prefs = { sound: true, haptics: true, motion: true, showStreak: true, dailyRounds: 1, plan: null, goal: null, lastChapter: null, domain: null };
+export const DEFAULT_PREFS: Prefs = { sound: true, haptics: true, motion: true, showStreak: true, dailyRounds: 1, plan: null, goal: null, lastChapter: null, domain: null, readAloud: false };
 
 const KEY = 'ancrage.prefs';
 const TIME = /^([01]\d|2[0-3]):[0-5]\d$/;
@@ -36,7 +38,7 @@ export function loadPrefs(store: KeyValue): Prefs {
   }
   if (!raw || typeof raw !== 'object') return { ...DEFAULT_PREFS };
   const r = raw as Record<string, unknown>;
-  const bool = (k: 'sound' | 'haptics' | 'motion' | 'showStreak') => (typeof r[k] === 'boolean' ? (r[k] as boolean) : DEFAULT_PREFS[k]);
+  const bool = (k: 'sound' | 'haptics' | 'motion' | 'showStreak' | 'readAloud') => (typeof r[k] === 'boolean' ? (r[k] as boolean) : DEFAULT_PREFS[k]);
   return {
     sound: bool('sound'),
     haptics: bool('haptics'),
@@ -47,6 +49,7 @@ export function loadPrefs(store: KeyValue): Prefs {
     goal: typeof r.goal === 'string' ? r.goal : null,
     lastChapter: typeof r.lastChapter === 'string' ? r.lastChapter : null,
     domain: typeof r.domain === 'string' ? r.domain : null,
+    readAloud: bool('readAloud'),
   };
 }
 

@@ -75,3 +75,25 @@ describe('domains in a profile', () => {
     expect((await s.deleteTheme(fr.id)).ok).toBe(false);
   });
 });
+
+describe('reading language', () => {
+  test('a theme reads in its own language, else its domain’s, else French', async () => {
+    const { createServices } = await import('../../src/app/services');
+    const { createDexieRepo } = await import('../../src/storage/dexie-repo');
+    const { newId } = await import('../../src/core/ids');
+    const s = createServices(createDexieRepo(`lang-${newId()}`), 'd');
+    const dom = await s.createDomain('Anglais');
+    const t = await s.createTheme('Irregular verbs', dom.id);
+    const res = await s.saveNote({ themeId: t.id, fields: { type: 'basic', front: 'go', back: 'aller', reverse: false }, tags: [] }, 1000);
+    if (!res.ok) throw new Error('save');
+    const [card] = await s.repo.listCards();
+    expect((await s.context(card.id)).lang).toBe('fr-FR');
+    await s.setLang(dom.id, 'en-GB');
+    expect((await s.context(card.id)).lang).toBe('en-GB');
+    await s.setLang(t.id, 'es-ES');
+    expect((await s.context(card.id)).lang).toBe('es-ES');
+    await s.setLang(t.id, null);
+    expect((await s.context(card.id)).lang).toBe('en-GB');
+    expect((await s.repo.listThemes()).find((x) => x.id === t.id)!.lang).toBeUndefined();
+  });
+});

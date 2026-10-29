@@ -3,8 +3,11 @@
   import type { Evaluation, Verdict } from '../../core/evaluate';
   import { currentProfile, profileStore } from '../../app/current';
   import { onDestroy, tick } from 'svelte';
+  import type { Lang } from '../../core/model';
+  import Figure from '../Figure.svelte';
+  import MicButton from '../MicButton.svelte';
 
-  let { ex, revealed, verdict = $bindable(null) }: { ex: Extract<Exercise, { kind: 'reveal' }>; revealed: boolean; verdict?: Verdict | null } = $props();
+  let { ex, revealed, verdict = $bindable(null), lang = 'fr-FR' }: { ex: Extract<Exercise, { kind: 'reveal' }>; revealed: boolean; verdict?: Verdict | null; lang?: Lang } = $props();
   let draft = $state('');
   let evaluation = $state<Evaluation | null>(null);
   let asking = $state(false);
@@ -41,14 +44,20 @@
 </script>
 
 <h2 class="ex-title">{ex.prompt}</h2>
+{#if ex.figure}<Figure figure={ex.figure} uncovered={revealed} title={ex.prompt} />{/if}
 {#if ex.quote}
   <div class="quote">
     <span class="avatar" aria-hidden="true"><svg viewBox="0 0 24 24"><g fill="currentColor"><circle cx="12" cy="8" r="4" /><path d="M4 20.5c0-4 3.6-6.5 8-6.5s8 2.5 8 6.5c0 .6-.4 1-1 1H5c-.6 0-1-.4-1-1z" /></g></svg></span>
     <div class="bubble">{ex.quote}</div>
   </div>
   <label class="eyebrow" for="draft">{ex.front}</label>
-  <textarea id="draft" class="ta" bind:value={draft} readonly={revealed} placeholder="Écris ta réponse, comme en séance…"></textarea>
+  <div class="ta-wrap">
+    <textarea id="draft" class="ta" bind:value={draft} readonly={revealed} placeholder="Écris ta réponse, comme en séance…"></textarea>
+    {#if !revealed}<MicButton {lang} onheard={(t) => (draft = draft.trim() ? `${draft.trim()} ${t}` : t)} />{/if}
+  </div>
   {#if ex.coaching && !revealed && !apiKey}<p class="muted small-note">Avec une clé API Anthropic (Créer → Générer depuis un texte), Claude peut commenter ta réponse.</p>{/if}
+{:else if ex.figure}
+  <p class="muted">{ex.front}</p>
 {:else}
   <div class="flash">{ex.front}</div>
 {/if}

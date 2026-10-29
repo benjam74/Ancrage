@@ -133,3 +133,25 @@ describe('suspended notes', () => {
     expect(parseBackup(mutate((o) => ((o.notes as Record<string, unknown>[])[0].suspended = 'oui'))).ok).toBe(false);
   });
 });
+
+describe('v1.8: image notes and theme language', () => {
+  const imageNote = { id: 'img', themeId: 't', fields: { type: 'image', title: 'Cœur', image: 'data:image/webp;base64,AAAA', masks: [{ id: 'a', x: 0.1, y: 0.1, w: 0.2, h: 0.1, label: 'Aorte' }] }, tags: [], createdAt: NOW, updatedAt: NOW };
+  test('an image note and a theme language round-trip', () => {
+    const res = parseBackup(mutate((o) => {
+      (o.notes as unknown[]).push(imageNote);
+      (o.themes as Record<string, unknown>[])[0].lang = 'en-GB';
+    }));
+    expect(res.ok).toBe(true);
+    if (res.ok) {
+      expect(res.dump.notes.find((n) => n.id === 'img')?.fields).toEqual(imageNote.fields);
+      expect(res.dump.themes[0].lang).toBe('en-GB');
+    }
+  });
+  test('a malformed zone or language is refused', () => {
+    expect(parseBackup(mutate((o) => (o.notes as unknown[]).push({ ...imageNote, fields: { ...imageNote.fields, masks: [{ id: 'a', x: 'left' }] } }))).ok).toBe(false);
+    expect(parseBackup(mutate((o) => ((o.themes as Record<string, unknown>[])[0].lang = 'klingon'))).ok).toBe(false);
+  });
+  test('backups are version 4', () => {
+    expect(BACKUP_VERSION).toBe(4);
+  });
+});

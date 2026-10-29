@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { Answer, Exercise } from '../../core/exercise';
+  import Figure from '../Figure.svelte';
 
   let { ex, answer = $bindable(), checked }: { ex: Extract<Exercise, { kind: 'choice' }>; answer: Answer | null; checked: boolean } = $props();
   const picked = $derived(answer?.kind === 'choice' ? answer.index : null);
@@ -17,6 +18,7 @@
 <svelte:window onkeydown={onkey} />
 
 <h2 class="ex-title">{ex.prompt}</h2>
+{#if ex.figure}<Figure figure={ex.figure} uncovered={checked} title={ex.prompt} />{/if}
 {#if ex.quote}
   <div class="quote">
     <span class="avatar" aria-hidden="true"><svg viewBox="0 0 24 24"><g fill="currentColor"><circle cx="12" cy="8" r="4" /><path d="M4 20.5c0-4 3.6-6.5 8-6.5s8 2.5 8 6.5c0 .6-.4 1-1 1H5c-.6 0-1-.4-1-1z" /></g></svg></span>

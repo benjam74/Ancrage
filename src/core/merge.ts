@@ -5,12 +5,21 @@ import type { Card, Note, ReviewEntry, Theme, Tombstone } from './model';
 
 const byId = <T extends { id: string }>(a: T, b: T) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
 
+// Records are never mutated: their canonical JSON is computed once (notes may carry images of several hundred KB).
+const canonicalOf = new WeakMap<object, string>();
+function key(x: object): string {
+  let k = canonicalOf.get(x);
+  if (k === undefined) canonicalOf.set(x, (k = canonical(x)));
+  return k;
+}
+
 /** Deterministic winner between two versions of one record: later `updatedAt`, then larger canonical JSON. */
 function newer<T extends { updatedAt?: number }>(x: T, y: T): T {
+  if (x === y) return x;
   const tx = x.updatedAt ?? 0;
   const ty = y.updatedAt ?? 0;
   if (tx !== ty) return tx > ty ? x : y;
-  return canonical(x) >= canonical(y) ? x : y;
+  return key(x) >= key(y) ? x : y;
 }
 
 function unite<T extends { id: string }>(a: T[], b: T[], pick: (x: T, y: T) => T): T[] {
@@ -22,7 +31,7 @@ function unite<T extends { id: string }>(a: T[], b: T[], pick: (x: T, y: T) => T
   return [...out.values()].sort(byId);
 }
 
-const same = <T>(x: T, y: T) => (canonical(x) >= canonical(y) ? x : y);
+const same = <T extends object>(x: T, y: T) => (x === y || key(x) >= key(y) ? x : y);
 
 /**
  * Cards follow their note: one card per (note, variant), the smallest id kept and the others'

@@ -36,7 +36,7 @@ export function checkRequest(r: GenerationRequest): string | null {
   return null;
 }
 
-const TYPE_GUIDE: Record<NoteType, string> = {
+const TYPE_GUIDE: Record<Exclude<NoteType, 'image'>, string> = {
   basic: 'basic — question au recto (front), réponse courte au verso (back). Pour une définition ou un fait isolé.',
   cloze: 'cloze — une phrase du texte (text) où les termes clés sont entourés de {{ }}, un à trois trous. Pour retenir un vocabulaire ou une formule.',
   ordering: 'ordering — une consigne (title) et des étapes (steps) dans le bon ordre. Seulement si le texte décrit une séquence.',
@@ -56,7 +56,7 @@ export function buildPrompt(r: GenerationRequest): { system: string; user: strin
     r.domainName ? `Domaine : ${r.domainName}` : '',
     `Thème : ${r.themeName}`,
     `Crée au plus ${r.count} cartes, uniquement de ces types :`,
-    ...r.types.map((t) => `- ${TYPE_GUIDE[t]}`),
+    ...r.types.flatMap((t) => (t === 'image' ? [] : [`- ${TYPE_GUIDE[t]}`])),
     'Choisis pour chaque idée le type qui la teste le mieux. Si le texte ne justifie pas autant de cartes, crée-en moins.',
     r.instruction?.trim() ? `Consigne : ${r.instruction.trim()}` : '',
     '',
@@ -141,6 +141,7 @@ export function describeNote(f: NoteFields): string {
     case 'classify': return `Énoncé : ${f.statement}\nCatégories : ${f.categories.join(', ')}\nBonne catégorie : ${f.answer}`;
     case 'mcq': return `Question : ${f.question}\nBonne réponse : ${f.answer}\nMauvaises réponses : ${f.distractors.join(' ; ')}`;
     case 'scenario': return `Le client dit : ${f.situation}\nRéponse modèle : ${f.model}\nPoints clés : ${f.keyPoints.join(' ; ')}`;
+    case 'image': return `Image : ${f.title}\nZones : ${f.masks.map((m) => m.label).filter(Boolean).join(' ; ')}`;
   }
 }
 

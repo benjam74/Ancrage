@@ -188,3 +188,19 @@ describe('library and slots', () => {
     expect((await services.library())[0].notes).toEqual([]);
   });
 });
+
+describe('image notes', () => {
+  test('the images of a profile have a total limit', async () => {
+    const { MAX_IMAGES_CHARS } = await import('../../src/app/services');
+    const t = await aTheme();
+    const big = `data:image/webp;base64,${'A'.repeat(Math.floor(MAX_IMAGES_CHARS / 2))}`;
+    const fields = { type: 'image' as const, title: '', image: big, masks: [{ id: 'a', x: 0.1, y: 0.1, w: 0.2, h: 0.2, label: '' }] };
+    const first = await services.saveNote({ themeId: t.id, fields, tags: [] }, NOW);
+    expect(first.ok).toBe(true);
+    // Editing the same note does not count its own image twice.
+    if (first.ok) expect((await services.saveNote({ id: first.note.id, themeId: t.id, fields, tags: [] }, NOW + 1)).ok).toBe(true);
+    const third = await services.saveNote({ themeId: t.id, fields: { ...fields, image: big + 'AAAA' }, tags: [] }, NOW + 2);
+    expect(third.ok).toBe(false);
+    if (!third.ok) expect(third.errors.image).toMatch(/limite/);
+  });
+});

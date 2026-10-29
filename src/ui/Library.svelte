@@ -4,6 +4,7 @@
   import { REWORD_INSTRUCTION, describeNote } from '../core/generate';
   import type { Rewrite } from './Generate.svelte';
   import { HARD_LAPSES } from '../core/hard';
+  import { LANGS, type Lang } from '../core/model';
   import { TYPE_LABEL } from './format';
   import { groupByDomain, isDomain } from '../core/domains';
   import { EXAMPLES } from '../app/current';
@@ -51,6 +52,7 @@
       case 'classify': return f.statement;
       case 'mcq': return f.question;
       case 'scenario': return f.situation;
+      case 'image': return f.title || `Image, ${f.masks.length} zone${f.masks.length > 1 ? 's' : ''}`;
     }
   }
 
@@ -65,6 +67,13 @@
     await services.deleteNote(id);
     confirmNote = null;
     await done('Note supprimée.');
+  }
+
+  const LANG_LABEL: Record<Lang, string> = { 'fr-FR': 'Français', 'en-GB': 'Anglais', 'es-ES': 'Espagnol', 'de-DE': 'Allemand', 'it-IT': 'Italien' };
+
+  async function setLang(t: Theme, value: string) {
+    await services.setLang(t.id, value ? (value as Lang) : null);
+    await done(`Lecture à voix haute de « ${t.name} » : ${value ? LANG_LABEL[value as Lang] : isDomain(t) ? 'Français' : 'comme le domaine'}.`);
   }
 
   async function setAside(note: Note, on: boolean) {
@@ -179,7 +188,7 @@
             </div>
             <div class="actions">
               <button class="btn small ghost" onclick={() => onedit(note)}>Modifier</button>
-              <button class="btn small ghost" onclick={() => reword(note)}>Reformuler avec l’IA</button>
+              {#if note.fields.type !== 'image'}<button class="btn small ghost" onclick={() => reword(note)}>Reformuler avec l’IA</button>{/if}
               <button class="btn small ghost" onclick={() => setAside(note, true)}>Mettre de côté</button>
             </div>
           </li>
@@ -226,6 +235,9 @@
             {@const domain = group.domain}
             <div class="actions">
               <button class="btn small ghost" onclick={() => { renaming = domain.id; renameValue = domain.name; }}>Renommer le domaine</button>
+              <select class="inline-input" style="width:auto" aria-label="Langue de lecture du domaine « {domain.name} »" value={domain.lang ?? 'fr-FR'} onchange={(e) => setLang(domain, e.currentTarget.value === 'fr-FR' ? '' : e.currentTarget.value)}>
+                {#each LANGS as l (l)}<option value={l}>Lecture : {LANG_LABEL[l]}</option>{/each}
+              </select>
               {#if group.themes.length === 0}<button class="btn small ghost" onclick={() => removeTheme(domain.id)}>Supprimer le domaine</button>{/if}
             </div>
           {/if}
@@ -251,6 +263,10 @@
                 {#each domains.filter((d) => d.id !== group.domain?.id) as d (d.id)}<option value={d.id}>{d.name}</option>{/each}
               </select>
             {/if}
+            <select class="inline-input" style="width:auto" aria-label="Langue de lecture du thème « {theme.name} »" value={theme.lang ?? ''} onchange={(e) => setLang(theme, e.currentTarget.value)}>
+              <option value="">Lecture : comme le domaine</option>
+              {#each LANGS as l (l)}<option value={l}>Lecture : {LANG_LABEL[l]}</option>{/each}
+            </select>
             <button class="btn small ghost" onclick={() => { renaming = theme.id; renameValue = theme.name; }}>Renommer</button>
             {#if notes.length === 0}<button class="btn small ghost" onclick={() => removeTheme(theme.id)}>Supprimer le thème</button>{/if}
           </div>

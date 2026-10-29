@@ -1,9 +1,10 @@
+import { LANGS } from './model';
 import type { AppEvent, Card, Note, ReviewEntry, Settings, Theme, Tombstone } from './model';
 import { validateSettings } from './settings';
 
 export const BACKUP_FORMAT = 'ancrage-backup';
-// Version 3 adds the shop events; older apps then ask to be updated instead of calling the file damaged.
-export const BACKUP_VERSION = 3;
+// Version 3 adds the shop events, version 4 image notes and theme languages; older apps then ask to be updated instead of calling the file damaged.
+export const BACKUP_VERSION = 4;
 
 /** A full snapshot of the local database. */
 export interface Dump {
@@ -46,6 +47,11 @@ const FIELD_SHAPES: Record<string, Record<string, (v: unknown) => boolean>> = {
   classify: { statement: isStr, categories: isStrList, answer: isStr },
   mcq: { question: isStr, answer: isStr, distractors: isStrList },
   scenario: { situation: isStr, model: isStr, keyPoints: isStrList },
+  image: {
+    title: isStr,
+    image: (v) => isStr(v) && (v as string).startsWith('data:image/'),
+    masks: (v) => Array.isArray(v) && v.every((m) => isObj(m) && isStr(m.id) && isStr(m.label) && ['x', 'y', 'w', 'h'].every((k) => isNum(m[k]))),
+  },
 };
 const fieldsOk = (f: unknown) =>
   isObj(f) && isStr(f.type) && !!FIELD_SHAPES[f.type as string] &&
@@ -65,7 +71,7 @@ const knownEvent = (type: unknown) => isStr(type) && Object.hasOwn(EVENT_SHAPES,
 
 const CHECKS: Record<'themes' | 'notes' | 'cards' | 'reviews' | 'events', (r: Record<string, unknown>) => boolean> = {
   themes: (r) =>
-    isStr(r.id) && isStr(r.name) && isNum(r.order) && (r.parentId === undefined || isStr(r.parentId)) && (r.kind === undefined || r.kind === 'domain') &&
+    isStr(r.id) && isStr(r.name) && isNum(r.order) && (r.parentId === undefined || isStr(r.parentId)) && (r.kind === undefined || r.kind === 'domain') && (r.lang === undefined || (LANGS as readonly unknown[]).includes(r.lang)) &&
     (r.updatedAt === undefined || isNum(r.updatedAt)),
   notes: (r) =>
     isStr(r.id) && isStr(r.themeId) && fieldsOk(r.fields) && isStrList(r.tags) &&

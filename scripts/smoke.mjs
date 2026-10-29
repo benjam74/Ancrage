@@ -676,6 +676,75 @@ if (!works.includes('Par type d’exercice')) fail('dashboard breaks success dow
 await v17.screenshot({ path: `${OUT}/progress-works.png`, fullPage: true });
 await ctx17.close();
 
+// --- v1.8: masked images, reading aloud, reading language ---
+function tinyPng(w, h) {
+  const zlib = require('node:zlib');
+  const crcTable = Array.from({ length: 256 }, (_, n) => { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1; return c >>> 0; });
+  const crc = (buf) => { let c = 0xffffffff; for (const b of buf) c = crcTable[(c ^ b) & 0xff] ^ (c >>> 8); return (c ^ 0xffffffff) >>> 0; };
+  const chunk = (type, data) => { const len = Buffer.alloc(4); len.writeUInt32BE(data.length); const td = Buffer.concat([Buffer.from(type), data]); const c = Buffer.alloc(4); c.writeUInt32BE(crc(td)); return Buffer.concat([len, td, c]); };
+  const ihdr = Buffer.alloc(13); ihdr.writeUInt32BE(w, 0); ihdr.writeUInt32BE(h, 4); ihdr[8] = 8; ihdr[9] = 2;
+  const rows = []; for (let y = 0; y < h; y++) { const row = Buffer.alloc(1 + w * 3); for (let x = 0; x < w; x++) { row[1 + x * 3] = (x * 255) / w; row[2 + x * 3] = 120; row[3 + x * 3] = (y * 255) / h; } rows.push(row); }
+  return Buffer.concat([Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]), chunk('IHDR', ihdr), chunk('IDAT', zlib.deflateSync(Buffer.concat(rows))), chunk('IEND', Buffer.alloc(0))]);
+}
+const v18 = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+v18.on('pageerror', (e) => errors.push(`v1.8: ${e.message}`));
+await v18.goto(`${URL}#bibliotheque`);
+await v18.locator('#new-theme').fill('Schémas');
+await v18.locator('form', { has: v18.locator('#new-theme') }).getByRole('button', { name: 'Créer' }).click();
+await v18.getByText('Thème « Schémas » créé.').waitFor();
+await v18.goto(`${URL}#creer`);
+await v18.getByRole('button', { name: 'Image masquée' }).click();
+await v18.getByLabel('Thème').selectOption({ label: 'Schémas' });
+await v18.locator('.file-btn input[type=file]').setInputFiles({ name: 'coeur.png', mimeType: 'image/png', buffer: tinyPng(600, 400) });
+const masker = v18.locator('.masker');
+await masker.locator('img').waitFor({ timeout: 5000 }).catch(() => fail('the chosen image should show in the zone editor'));
+const src = await masker.locator('img').getAttribute('src');
+if (!/^data:image\/(webp|jpeg)/.test(src ?? '')) fail(`image should be compressed to webp or jpeg, got ${src?.slice(0, 30)}`);
+for (const [x, y] of [[0.1, 0.1], [0.5, 0.2], [0.2, 0.6]]) {
+  await masker.scrollIntoViewIfNeeded();
+  const box = await masker.boundingBox();
+  await v18.mouse.move(box.x + box.width * x, box.y + box.height * y);
+  await v18.mouse.down();
+  await v18.mouse.move(box.x + box.width * (x + 0.2), box.y + box.height * (y + 0.15), { steps: 5 });
+  await v18.mouse.up();
+}
+if ((await masker.locator('.zone.edit').count()) !== 3) fail(`three zones should be drawn, got ${await masker.locator('.zone.edit').count()}`);
+for (const [i, label] of ['Oreillette droite', 'Aorte', 'Ventricule gauche'].entries()) await v18.getByLabel(`Réponse de la zone ${i + 1}`).fill(label);
+await v18.getByLabel('Consigne').fill('Légende le schéma du cœur');
+await v18.screenshot({ path: `${OUT}/image-editor.png`, fullPage: true });
+await v18.getByRole('button', { name: 'Ajouter au thème' }).click();
+await v18.getByText(/Ajouté à «.Schémas.» : 3 cartes/).waitFor({ timeout: 5000 }).catch(async () => fail(`saving the image note failed: ${(await v18.locator('main').innerText()).slice(0, 300)}`));
+
+await v18.goto(`${URL}#reviser`);
+await v18.getByRole('button', { name: 'Aucun', exact: true }).click();
+await v18.locator('label.pick', { hasText: 'Schémas' }).locator('input').check();
+await v18.getByRole('button', { name: /Commencer \(3 cartes\)/ }).click();
+await v18.getByRole('heading', { name: 'Légende le schéma du cœur' }).waitFor();
+if (!(await v18.locator('.figure .zone.target').textContent()).includes('?')) fail('the zone to find is hidden behind ?');
+if (!(await v18.getByRole('button', { name: 'Écouter la question' }).isVisible())) fail('the listen button shows where speech is available');
+await v18.getByRole('button', { name: 'Écouter la question' }).click();
+if ((await v18.locator('.opts .opt').count()) !== 3) fail('a young zone is a choice among the 3 answers');
+await v18.locator('.opts .opt').first().click();
+await v18.getByRole('button', { name: 'Vérifier' }).click();
+await v18.locator('.figure .zone.target.uncovered').waitFor();
+await v18.locator('.figure .zone-label').waitFor();
+await v18.screenshot({ path: `${OUT}/image-session.png`, fullPage: true });
+await v18.keyboard.press('Escape');
+await v18.locator('.session').waitFor({ state: 'detached' });
+
+// Reading language per domain, and the device setting.
+await v18.goto(`${URL}#bibliotheque`);
+const dsel = v18.getByLabel(/Langue de lecture du domaine/).first();
+await dsel.selectOption('en-GB');
+await v18.getByText(/Lecture à voix haute de .* : Anglais/).waitFor();
+await v18.reload();
+if ((await v18.getByLabel(/Langue de lecture du domaine/).first().inputValue()) !== 'en-GB') fail('the domain language should persist');
+await v18.goto(`${URL}#reglages`);
+await v18.getByLabel('Lire chaque carte automatiquement, puis sa réponse').check();
+await v18.reload();
+if (!(await v18.getByLabel('Lire chaque carte automatiquement, puis sa réponse').isChecked())) fail('the read aloud setting should persist');
+await v18.close();
+
 const mobile = await browser.newPage({ viewport: { width: 390, height: 844 }, colorScheme: 'dark' });
 mobile.on('pageerror', (e) => errors.push(e.message));
 await mobile.goto(URL);

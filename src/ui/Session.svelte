@@ -16,7 +16,10 @@
   import { motionOn, prefs, updatePrefs } from './prefs.svelte';
   import WeekStrip from './WeekStrip.svelte';
   import Avatar from './Avatar.svelte';
-  import type { CharacterId, Slot } from '../core/model';
+  import type { CharacterId, Lang, Slot } from '../core/model';
+  import { spokenText } from '../core/speech';
+  import { canSpeak, primeSpeech, speak, stopSpeaking } from './voice';
+  import { onDestroy } from 'svelte';
   import Choice from './exercises/Choice.svelte';
   import Order from './exercises/Order.svelte';
   import Reveal from './exercises/Reveal.svelte';
@@ -42,7 +45,7 @@
   } = $props();
   const played = new Set<string>();
 
-  type Shown = { cardId: string; ex: Exercise; mode: Mode; themeName: string; isNew: boolean; retry: boolean; shownAt: number; lapses: number };
+  type Shown = { cardId: string; ex: Exercise; mode: Mode; themeName: string; isNew: boolean; retry: boolean; shownAt: number; lapses: number; lang: Lang };
   type Result = { correct: boolean; entry: ReviewEntry | null; state: CardState | null; corrected: boolean };
 
   let round = $state<Round>(untrack(() => startRound(queue)));
@@ -106,7 +109,9 @@
       retry: isRetry(round, cardId),
       shownAt: Date.now(),
       lapses: state.lapses,
+      lang: ctx.lang,
     };
+    if (prefs.readAloud) speak(spokenText(ex, false), ctx.lang);
   }
 
   async function next() {
@@ -194,6 +199,20 @@
     await next();
   });
 
+  /** The answer is on screen: « Écouter » reads it, and so does automatic reading, once. */
+  const answerShown = $derived(!!result || revealed);
+  let readAnswerFor = '';
+  $effect(() => {
+    if (!shown || !answerShown || !prefs.readAloud) return;
+    // One key per display: `round.done` moves on before the next card shows, `shownAt` does not.
+    const key = `${shown.cardId}:${shown.shownAt}`;
+    if (readAnswerFor === key) return;
+    readAnswerFor = key;
+    speak(spokenText(shown.ex, true), shown.lang);
+  });
+  onDestroy(stopSpeaking);
+  const listen = () => shown && speak(spokenText(shown.ex, answerShown), shown.lang);
+
   /** This answer made the card a hard one. */
   const becameHard = $derived(!!shown && !!result?.state && result.state.lapses >= HARD_LAPSES && shown.lapses < HARD_LAPSES);
   const showStreakStep = $derived(!!roundResult && !!after && prefs.showStreak);
@@ -215,7 +234,10 @@
   }
 
   // Waits for nothing in flight, so the home screen never reads the log before the last answer is saved.
-  const exit = once(async () => onexit());
+  const exit = once(async () => {
+    stopSpeaking();
+    onexit();
+  });
 
   function onkey(e: KeyboardEvent) {
     if (e.key === 'Escape') return void exit();
@@ -236,7 +258,7 @@
   next().catch((e) => (error = String(e)));
 </script>
 
-<svelte:window onkeydown={(e) => { if (prefs.sound) primeAudio(); onkey(e); }} onpointerdown={() => { if (prefs.sound) primeAudio(); }} />
+<svelte:window onkeydown={(e) => { if (prefs.sound) primeAudio(); if (prefs.readAloud) primeSpeech(); onkey(e); }} onpointerdown={() => { if (prefs.sound) primeAudio(); if (prefs.readAloud) primeSpeech(); }} />
 
 <div class="session" role="dialog" aria-modal="true" aria-label="Séance de révision">
   <div class="s-head">
@@ -304,15 +326,20 @@
             {#if kind === 'practice'}<span class="pill">Entraînement</span>{/if}
             {#if shown.retry}<span class="pill retry">À revoir</span>{:else if shown.isNew}<span class="pill new">Nouvelle carte</span>{/if}
             <span class="pill">{shown.themeName}</span>
+            {#if canSpeak()}
+              <button class="icon-btn listen" aria-label={answerShown ? 'Écouter la réponse' : 'Écouter la question'} onclick={listen}>
+                <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9h4l5-4v14l-5-4H4z" fill="currentColor" /><path d="M16.5 8.5a5 5 0 0 1 0 7" /></svg>
+              </button>
+            {/if}
           </div>
           {#if shown.ex.kind === 'choice'}
             <Choice ex={shown.ex} bind:answer checked={!!result} />
           {:else if shown.ex.kind === 'typed'}
-            <Typed ex={shown.ex} bind:answer checked={!!result} correct={!!result?.correct} />
+            <Typed ex={shown.ex} bind:answer checked={!!result} correct={!!result?.correct} lang={shown.lang} />
           {:else if shown.ex.kind === 'order'}
             <Order ex={shown.ex} bind:answer checked={!!result} />
           {:else}
-            <Reveal ex={shown.ex} {revealed} bind:verdict />
+            <Reveal ex={shown.ex} {revealed} bind:verdict lang={shown.lang} />
           {/if}
         </div>
       {/key}

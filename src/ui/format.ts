@@ -27,4 +27,5 @@ export const TYPE_LABEL = {
   classify: 'Classement',
   mcq: 'QCM',
   scenario: 'Mise en situation',
+  image: 'Image masquée',
 } as const;

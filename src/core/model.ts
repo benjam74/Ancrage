@@ -1,4 +1,19 @@
-export type NoteType = 'basic' | 'cloze' | 'ordering' | 'classify' | 'mcq' | 'scenario';
+export type NoteType = 'basic' | 'cloze' | 'ordering' | 'classify' | 'mcq' | 'scenario' | 'image';
+
+/** A hidden zone of an image, in fractions of its width and height (0 to 1). */
+export interface Mask {
+  id: string;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  /** What the zone hides; empty when the learner grades themself. */
+  label: string;
+}
+
+/** Languages the cards can be read aloud in. */
+export const LANGS = ['fr-FR', 'en-GB', 'es-ES', 'de-DE', 'it-IT'] as const;
+export type Lang = (typeof LANGS)[number];
 
 export type NoteFields =
   | { type: 'basic'; front: string; back: string; reverse: boolean }
@@ -6,7 +21,9 @@ export type NoteFields =
   | { type: 'ordering'; title: string; steps: string[] }
   | { type: 'classify'; statement: string; categories: string[]; answer: string }
   | { type: 'mcq'; question: string; answer: string; distractors: string[] }
-  | { type: 'scenario'; situation: string; model: string; keyPoints: string[] };
+  | { type: 'scenario'; situation: string; model: string; keyPoints: string[] }
+  /** `image`: a compressed data URL. One card per zone. */
+  | { type: 'image'; title: string; image: string; masks: Mask[] };
 
 export interface Theme {
   id: string;
@@ -17,6 +34,8 @@ export interface Theme {
   updatedAt?: number;
   /** A domain groups themes (its children have it as parent); it holds no notes itself. */
   kind?: 'domain';
+  /** Language for reading aloud; a theme without one uses its domain's, then French. */
+  lang?: Lang;
 }
 
 /** Remembers a deletion so a merge with another device does not bring the item back. */

@@ -134,6 +134,12 @@
     <label class="check"><input type="checkbox" checked={prefs.showStreak} onchange={(e) => updatePrefs({ showStreak: e.currentTarget.checked })} />Afficher la série</label>
   </section>
 
+  <section class="panel prefs" aria-labelledby="s-voice">
+    <h2 id="s-voice">Voix</h2>
+    <p class="muted">En séance, le bouton haut-parleur lit la carte avec la voix de l’appareil, dans la langue du thème (à choisir dans la Bibliothèque). Le micro dicte ta réponse là où le navigateur le permet ; la dictée passe par son service (Google ou Apple).</p>
+    <label class="check"><input type="checkbox" checked={prefs.readAloud} onchange={(e) => updatePrefs({ readAloud: e.currentTarget.checked })} />Lire chaque carte automatiquement, puis sa réponse</label>
+  </section>
+
   <SyncSettings {cloud} onsynced={async () => { onchange(); await load(); }} />
 
   <section class="panel">
