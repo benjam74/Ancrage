@@ -16,6 +16,8 @@ export interface GenerationRequest {
   audience?: string;
   types: NoteType[];
   count: number;
+  /** An extra instruction, e.g. to reword a card the learner keeps missing. */
+  instruction?: string;
 }
 
 export interface Proposal {
@@ -56,6 +58,7 @@ export function buildPrompt(r: GenerationRequest): { system: string; user: strin
     `Crée au plus ${r.count} cartes, uniquement de ces types :`,
     ...r.types.map((t) => `- ${TYPE_GUIDE[t]}`),
     'Choisis pour chaque idée le type qui la teste le mieux. Si le texte ne justifie pas autant de cartes, crée-en moins.',
+    r.instruction?.trim() ? `Consigne : ${r.instruction.trim()}` : '',
     '',
     '<source>',
     // A pasted closing tag must not end the source early.

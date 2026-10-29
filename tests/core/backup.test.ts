@@ -124,3 +124,12 @@ describe('shop events in backups', () => {
     expect(parseBackup(mutate((o) => (o.events = [{ id: 'a', type: 'avatar', ts: NOW, character: 'dragon', name: 'x' }]))).ok).toBe(false);
   });
 });
+
+describe('suspended notes', () => {
+  test('a suspended note round-trips; a non-boolean value is refused', () => {
+    const withFlag = mutate((o) => ((o.notes as Record<string, unknown>[])[0].suspended = true));
+    const res = parseBackup(withFlag);
+    expect(res.ok && res.dump.notes[0].suspended).toBe(true);
+    expect(parseBackup(mutate((o) => ((o.notes as Record<string, unknown>[])[0].suspended = 'oui'))).ok).toBe(false);
+  });
+});

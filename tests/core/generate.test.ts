@@ -107,3 +107,12 @@ describe('toProposals', () => {
     expect(toProposals({ notes: [42] }, ALL)).toEqual({ proposals: [], rejected: 1 });
   });
 });
+
+describe('instruction', () => {
+  test('an extra instruction goes before the source', () => {
+    const { user } = buildPrompt(req({ instruction: 'Scinde cette carte en deux plus simples.' }));
+    expect(user).toContain('Consigne : Scinde cette carte en deux plus simples.');
+    expect(user.indexOf('Consigne')).toBeLessThan(user.indexOf('<source>'));
+    expect(buildPrompt(req()).user).not.toContain('Consigne');
+  });
+});

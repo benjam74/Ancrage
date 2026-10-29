@@ -32,6 +32,8 @@ export interface Note {
   fields: NoteFields;
   tags: string[];
   source?: string;
+  /** Put aside: out of every queue, history kept, can be resumed. */
+  suspended?: boolean;
   createdAt: number;
   updatedAt: number;
 }

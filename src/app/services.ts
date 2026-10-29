@@ -11,6 +11,7 @@ import { CHARACTER_NAMES, NAME_MAX, avatarOf, outfit, owned, resale, wallet } fr
 import { capNewXp, classifyEntries, comebackRounds, goalDays, makeRestDayCheck, nextStudyDay, roundsPerDay, streakState, weekStart, weekStrip, xpBetween, type StripDay } from '../core/progress';
 import { dailyCounts, forecast, mastery, nextLevel, retention, stateBreakdown, type Level } from '../core/stats';
 import type { CardState } from '../core/scheduler';
+import { isHard } from '../core/hard';
 import { buildCustomQueue, buildDailyQueue, countNewIntroduced, nextDue, studyDayStart, type CustomChoice, type QueueCandidate } from '../core/queue';
 import { makeScheduler } from '../core/scheduler';
 import { STARTER_THEMES, starterNotes } from '../data/starter';
@@ -140,6 +141,10 @@ export interface Services {
   removeExamples(): Promise<{ notes: number; themes: number }>;
   examplesCount(): Promise<number>;
   library(): Promise<LibraryTheme[]>;
+  /** Puts a note aside (out of every queue, history kept) or brings it back. */
+  setSuspended(noteId: string, on: boolean, now: number): Promise<void>;
+  /** Notes with a card forgotten HARD_LAPSES times and not yet answered right HARD_CLEAR times in a row. */
+  hardNotes(now: number): Promise<{ note: Note; theme: Theme; lapses: number }[]>;
   newSlotsLeft(now: number): Promise<number>;
   progress(now: number): Promise<Progress>;
   updateSettings(input: { desiredRetention: string | number; newPerDay: string | number }): Promise<ReturnType<typeof validateSettings>>;
@@ -200,7 +205,7 @@ export function createServices(repo: Repo, deviceId: string): Services {
     ]);
     const scheduler = makeScheduler(settings);
     const noteById = new Map(notes.map((n) => [n.id, n]));
-    const active = cards.filter((c) => !c.orphan && noteById.has(c.noteId));
+    const active = cards.filter((c) => !c.orphan && noteById.has(c.noteId) && !noteById.get(c.noteId)!.suspended);
     const logByCard = new Map<string, ReviewEntry[]>();
     for (const e of reviews) {
       const list = logByCard.get(e.cardId);
@@ -257,7 +262,7 @@ export function createServices(repo: Repo, deviceId: string): Services {
 
     const candidates: QueueCandidate[] = cards.flatMap((card) => {
       const note = noteById.get(card.noteId);
-      if (!note || card.orphan) return [];
+      if (!note || card.orphan || note.suspended) return [];
       return [{
         cardId: card.id,
         themeId: note.themeId,
@@ -320,6 +325,7 @@ export function createServices(repo: Repo, deviceId: string): Services {
         fields: input.fields,
         tags: [...new Set(input.tags.map((t) => t.trim()).filter(Boolean))],
         ...(input.source?.trim() ? { source: input.source.trim() } : {}),
+        ...(existing?.suspended ? { suspended: true } : {}),
         createdAt: existing?.createdAt ?? now,
         // A device whose clock is behind must still produce the newest version.
         updatedAt: Math.max(now, (existing?.updatedAt ?? 0) + 1),
@@ -424,6 +430,31 @@ export function createServices(repo: Repo, deviceId: string): Services {
             .sort((a, b) => a.createdAt - b.createdAt)
             .map((note) => ({ note, cards: activeCards.get(note.id) ?? 0 })),
         }));
+    },
+
+    async setSuspended(noteId, on, now) {
+      const note = await repo.getNote(noteId);
+      if (!note || !!note.suspended === on) return;
+      const { suspended: _, ...rest } = note;
+      await repo.putNote({ ...rest, ...(on ? { suspended: true } : {}), updatedAt: Math.max(now, note.updatedAt + 1) });
+    },
+
+    async hardNotes() {
+      const snap = await snapshot();
+      const logByCard = new Map<string, ReviewEntry[]>();
+      for (const e of snap.reviews) logByCard.set(e.cardId, [...(logByCard.get(e.cardId) ?? []), e]);
+      const worst = new Map<string, number>();
+      for (const card of snap.active) {
+        const lapses = snap.states.get(card.id)!.lapses;
+        if (isHard(lapses, logByCard.get(card.id) ?? [])) worst.set(card.noteId, Math.max(lapses, worst.get(card.noteId) ?? 0));
+      }
+      const themeById = new Map(snap.themes.map((t) => [t.id, t]));
+      return [...worst]
+        .map(([id, lapses]) => {
+          const note = snap.noteById.get(id)!;
+          return { note, theme: themeById.get(note.themeId) ?? { id: note.themeId, name: 'Sans thème', order: 0 }, lapses };
+        })
+        .sort((a, b) => b.lapses - a.lapses || a.note.createdAt - b.note.createdAt);
     },
 
     async progress(now) {
