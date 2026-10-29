@@ -2,8 +2,7 @@
   import { boot, type Progress as ProgressData, type Services, type ShopState, type Today } from './app/services';
   import Shop from './ui/Shop.svelte';
   import { createCloudSync, type CloudSync } from './app/cloud';
-  import { currentProfile, profileCount, profileStore } from './app/current';
-  import { chosenThisTab } from './ui/faces';
+  import { currentProfile, mustChoose, profileStore } from './app/current';
   import WhoReviews from './ui/WhoReviews.svelte';
   import type { Note } from './core/model';
   import Editor from './ui/Editor.svelte';
@@ -105,8 +104,7 @@
   }
 
   // With several profiles, the tab opens on « Qui révise ? » before loading anyone's data.
-  const mustPick = profileCount > 1 && !chosenThisTab();
-  let picking = $state(mustPick);
+  let picking = $state(mustChoose);
   const start = () =>
   boot(currentProfile)
     .then(async (s) => {
@@ -116,7 +114,7 @@
       void syncInBackground();
     })
     .catch((e) => (error = String(e)));
-  if (!mustPick) start();
+  if (!mustChoose) start();
 </script>
 
 <svelte:document onvisibilitychange={() => { if (document.visibilityState === 'visible' && Date.now() - lastSync > 60_000) void syncInBackground(); }} />

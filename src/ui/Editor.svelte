@@ -19,6 +19,8 @@
   import { TYPE_LABEL } from './format';
   import Preview from './Preview.svelte';
   import { groupByDomain, isDomain } from '../core/domains';
+  import { EXAMPLES } from '../app/current';
+  import { prefs } from './prefs.svelte';
 
   let {
     services,
@@ -65,7 +67,8 @@
     allThemes = await services.repo.listThemes();
     themes = allThemes.filter((t) => !isDomain(t)).sort((a, b) => a.order - b.order);
     if (!themeId && themes.length) themeId = groups.flatMap((g) => g.themes)[0]?.id ?? themes[0].id;
-    if (!domains.some((d) => d.id === newThemeDomain)) newThemeDomain = domains[0]?.id ?? '';
+    // The new theme goes by default into the domain chosen on the home screen.
+    if (!domains.some((d) => d.id === newThemeDomain)) newThemeDomain = domains.find((d) => d.id === prefs.domain)?.id ?? domains[0]?.id ?? '';
   }
 
   $effect(() => {
@@ -154,7 +157,7 @@
               style="flex:1"
               aria-label="Nom du nouveau thème"
               bind:value={newThemeName}
-              placeholder="Ex. Écoute active"
+              placeholder={EXAMPLES.theme}
               onkeydown={(e) => { if (e.key === 'Enter') { e.preventDefault(); createTheme(); } }}
             />
             {#if domains.length}
@@ -196,7 +199,7 @@
       </div>
       <div class="field">
         <label for="f-source">Source</label>
-        <input id="f-source" bind:value={source} placeholder="Ex. Formation PNL, module 2" />
+        <input id="f-source" bind:value={source} placeholder={EXAMPLES.source} />
       </div>
       <button class="btn wide">{editing ? 'Enregistrer les modifications' : 'Ajouter au thème'}</button>
       {#if oncancel}<button type="button" class="btn ghost wide" onclick={oncancel}>Annuler</button>{/if}

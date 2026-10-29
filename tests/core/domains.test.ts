@@ -21,15 +21,15 @@ describe('groupByDomain', () => {
 });
 
 describe('migrateToDomains', () => {
-  test('existing themes go into the default domain, with a fixed id', () => {
-    const m = migrateToDomains([t('x', 0), t('y', 1)], 1000)!;
-    expect(m.domain).toMatchObject({ id: DEFAULT_DOMAIN_ID, name: 'Coaching et PNL', kind: 'domain' });
-    expect(m.moved.map((x) => [x.id, x.parentId])).toEqual([['x', DEFAULT_DOMAIN_ID], ['y', DEFAULT_DOMAIN_ID]]);
-    expect(m.moved.every((x) => (x.updatedAt ?? 0) >= 1000)).toBe(true);
+  test('creates the default domain, oldest possible, and the loose themes show in it without being rewritten', () => {
+    const themes = [t('x', 0), t('y', 1)];
+    const dom = migrateToDomains(themes)!;
+    expect(dom).toEqual({ id: DEFAULT_DOMAIN_ID, name: 'Coaching et PNL', order: 0, kind: 'domain', updatedAt: 0 });
+    expect(groupByDomain([...themes, dom]).map((g) => [g.domain?.id, g.themes.map((x) => x.id)])).toEqual([[DEFAULT_DOMAIN_ID, ['x', 'y']]]);
   });
 
   test('nothing to do with a domain already there, or no theme at all', () => {
-    expect(migrateToDomains([d('A', 0), t('x', 0)], 1)).toBeNull();
-    expect(migrateToDomains([], 1)).toBeNull();
+    expect(migrateToDomains([d('A', 0), t('x', 0)])).toBeNull();
+    expect(migrateToDomains([])).toBeNull();
   });
 });

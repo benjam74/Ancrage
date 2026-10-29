@@ -46,15 +46,20 @@ function validProfile(p: unknown): p is Profile {
   );
 }
 
+/** Keeps every valid profile (one damaged entry must not hide the others), always with the main one first. */
 export function loadRegistry(store: KeyValue): Registry {
+  let raw: { profiles?: unknown; current?: unknown } | null;
   try {
-    const raw = JSON.parse(store.get(KEY) ?? 'null');
-    if (!raw || !Array.isArray(raw.profiles) || !raw.profiles.every(validProfile) || !raw.profiles.some((p: Profile) => p.id === MAIN)) return fresh();
-    const current = raw.profiles.some((p: Profile) => p.id === raw.current) ? raw.current : MAIN;
-    return { profiles: raw.profiles, current };
+    raw = JSON.parse(store.get(KEY) ?? 'null');
   } catch {
     return fresh();
   }
+  if (!raw || !Array.isArray(raw.profiles)) return fresh();
+  const seen = new Set<string>();
+  const valid = (raw.profiles as unknown[]).filter((p): p is Profile => validProfile(p) && !seen.has(p.id) && !!seen.add(p.id));
+  const profiles = valid.some((p) => p.id === MAIN) ? valid : [fresh().profiles[0], ...valid];
+  const current = profiles.some((p) => p.id === raw!.current) ? (raw.current as string) : MAIN;
+  return { profiles, current };
 }
 
 export function saveRegistry(store: KeyValue, r: Registry): void {
@@ -104,9 +109,10 @@ export function updateProfile(store: KeyValue, id: string, patch: Partial<Input>
   return { ok: true, profile };
 }
 
-export function removeProfile(store: KeyValue, id: string): { ok: true } | { ok: false; error: string } {
+/** `openHere`: the profile this tab runs, which another tab's choice may differ from. */
+export function removeProfile(store: KeyValue, id: string, openHere: string): { ok: true } | { ok: false; error: string } {
   const r = loadRegistry(store);
-  if (id === r.current) return { ok: false, error: 'Change de profil avant de supprimer celui-ci.' };
+  if (id === openHere) return { ok: false, error: 'Change de profil avant de supprimer celui-ci.' };
   if (id === MAIN) return { ok: false, error: 'Le profil principal ne peut pas être supprimé.' };
   saveRegistry(store, { ...r, profiles: r.profiles.filter((p) => p.id !== id) });
   return { ok: true };

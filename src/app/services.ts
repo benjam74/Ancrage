@@ -15,7 +15,7 @@ import { buildCustomQueue, buildDailyQueue, countNewIntroduced, nextDue, studyDa
 import { makeScheduler } from '../core/scheduler';
 import { STARTER_THEMES, starterNotes } from '../data/starter';
 import { COLLEGE5_THEMES, college5Notes } from '../data/college5';
-import { isDomain, migrateToDomains } from '../core/domains';
+import { domainOf, isDomain, migrateToDomains } from '../core/domains';
 import { dbName, type Profile, type Starter } from './profiles';
 import { createDexieRepo } from '../storage/dexie-repo';
 import type { Repo } from '../storage/repo';
@@ -159,8 +159,8 @@ const RETENTION_WINDOW = 30 * 86_400_000;
 const SEEDED = 'starterSeeded';
 /** Starter notes are recognized by id, never by tag: a user may tag their own notes "exemple". */
 const STARTER_NOTE_IDS = new Set([...starterNotes(0), ...college5Notes(0)].map((n) => n.id));
-const STARTER_THEME_IDS = new Set([...STARTER_THEMES, ...COLLEGE5_THEMES].map((t) => t.id));
-const DOMAINS_MIGRATED = 'domainsMigrated';
+// The coaching example themes go with their notes; the 5e subjects and chapters stay, ready for the pupil's own cards.
+const STARTER_THEME_IDS = new Set(STARTER_THEMES.map((t) => t.id));
 export const EXAMPLE_TAG = 'exemple';
 
 /** Seeds the starter deck once in the database's life, so removing the examples is permanent. */
@@ -178,16 +178,11 @@ export async function seedIfEmpty(repo: Repo, now: number = Date.now(), starter:
   return true;
 }
 
-/** Puts themes created before domains existed into the default domain, once per database. */
-export async function ensureDomains(repo: Repo, now: number = Date.now()): Promise<boolean> {
-  if (await repo.getFlag(DOMAINS_MIGRATED)) return false;
-  const migration = migrateToDomains(await repo.listThemes(), now);
-  if (migration) {
-    await repo.putTheme(migration.domain);
-    for (const t of migration.moved) await repo.putTheme(t);
-  }
-  await repo.setFlag(DOMAINS_MIGRATED);
-  return !!migration;
+/** Gives themes created before domains a default domain; runs at every start (cheap, idempotent). */
+export async function ensureDomains(repo: Repo): Promise<boolean> {
+  const domain = migrateToDomains(await repo.listThemes());
+  if (domain) await repo.putTheme(domain);
+  return !!domain;
 }
 
 export function createServices(repo: Repo, deviceId: string): Services {
@@ -248,7 +243,10 @@ export function createServices(repo: Repo, deviceId: string): Services {
       repo.getSettings(),
     ]);
     const scheduler = makeScheduler(settings);
-    const themeOrder = new Map(themes.map((t) => [t.id, t.order]));
+    // New cards follow the domains' order, then each theme's order inside its domain.
+    const domainIds = new Set(themes.filter(isDomain).map((t) => t.id));
+    const domainOrder = new Map(themes.filter(isDomain).map((t) => [t.id, t.order]));
+    const themeOrder = new Map(themes.map((t) => [t.id, (domainOrder.get(domainOf(t, domainIds) ?? '') ?? 999) * 10_000 + t.order]));
     const noteById = new Map(notes.map((n) => [n.id, n]));
     const logByCard = new Map<string, ReviewEntry[]>();
     for (const e of reviews) {
@@ -313,7 +311,7 @@ export function createServices(repo: Repo, deviceId: string): Services {
 
     async saveNote(input, now) {
       const errors = validateFields(input.fields);
-      if (!(await repo.listThemes()).some((t) => t.id === input.themeId)) errors.themeId = 'Ce thème n’existe plus. Choisis-en un autre.';
+      if (!(await repo.listThemes()).some((t) => t.id === input.themeId && !isDomain(t))) errors.themeId = 'Ce thème n’existe plus. Choisis-en un autre.';
       if (Object.keys(errors).length) return { ok: false, errors };
       const existing = input.id ? await repo.getNote(input.id) : undefined;
       const note: Note = {

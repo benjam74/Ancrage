@@ -400,3 +400,15 @@ p.error { font-weight: 700; color: var(--bad); }
 .profile-row { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 10px 14px; align-items: center; padding: 10px 12px; border-radius: 12px; background: var(--bg); }
 .pick-domain { gap: 10px; padding: 6px 2px; }
 .pick-domain .muted { font-size: 13px; }
+.btn.danger:disabled { --b: var(--surface-2); --bd: var(--line); --fg: var(--ink-soft); }
+.profile-row { grid-template-columns: auto minmax(0, 1fr); }
+.profile-row .profile-wide { grid-column: 1 / -1; }
+@media (min-width: 640px) { .profile-row { grid-template-columns: auto minmax(0, 1fr) auto; } .profile-row > .actions.profile-wide:not(form) { grid-column: auto; } }
+.face { outline: 2px solid color-mix(in srgb, var(--ink) 18%, transparent); outline-offset: 1px; }
+.nav-profile { display: flex; align-items: center; gap: 8px; margin: -8px 10px 14px; padding: 4px 10px 4px 4px; border: 2px solid var(--line); border-radius: 99px; background: var(--surface); font-family: var(--display); font-weight: 800; color: var(--ink); }
+@media (max-width: 760px) { .nav-profile { display: none; } }
+@media (max-width: 640px) { .note-item { grid-template-columns: minmax(0, 1fr); } }
+.domain-block > summary { list-style: none; cursor: pointer; }
+.domain-block > summary::-webkit-details-marker { display: none; }
+.domain-block > summary h2::before { content: "▸ "; color: var(--ink-soft); }
+.domain-block[open] > summary h2::before { content: "▾ "; }

@@ -46,7 +46,7 @@ const CONTENT: [themeId: string, fields: NoteFields][] = [
   ['c5-triangles', { type: 'mcq', question: 'Un triangle a deux angles de 50° et 60°. Combien mesure le troisième ?', answer: '70°', distractors: ['80°', '90°', '60°'] }],
   ['c5-triangles', { type: 'classify', statement: 'Un triangle dont les trois côtés ont la même longueur', categories: TRIANGLES, answer: 'Équilatéral' }],
   ['c5-triangles', { type: 'classify', statement: 'Un triangle qui a un angle droit', categories: TRIANGLES, answer: 'Rectangle' }],
-  ['c5-triangles', { type: 'classify', statement: 'Un triangle qui a deux côtés de même longueur', categories: TRIANGLES, answer: 'Isocèle' }],
+  ['c5-triangles', { type: 'classify', statement: 'Un triangle qui a exactement deux côtés de même longueur', categories: TRIANGLES, answer: 'Isocèle' }],
   ['c5-triangles', { type: 'basic', front: 'Peut-on construire un triangle de côtés 2 cm, 3 cm et 6 cm ?', back: 'Non : 2 + 3 = 5, plus petit que 6. Le plus grand côté doit être plus court que la somme des deux autres (inégalité triangulaire).', reverse: false }],
   ['c5-priorites', { type: 'mcq', question: '2 + 3 × 4 = ?', answer: '14', distractors: ['20', '24', '9'] }],
   ['c5-priorites', { type: 'ordering', title: 'Dans quel ordre effectue-t-on les calculs ?', steps: ['Les calculs entre parenthèses', 'Les multiplications et les divisions', 'Les additions et les soustractions'] }],

@@ -44,11 +44,11 @@ describe('profile registry', () => {
     if (!res.ok) throw new Error(res.error);
     setCurrent(store, res.profile.id);
     expect(loadRegistry(store).current).toBe(res.profile.id);
-    expect(removeProfile(store, res.profile.id).ok).toBe(false);
+    expect(removeProfile(store, res.profile.id, res.profile.id).ok).toBe(false);
     expect(updateProfile(store, 'principal', { name: 'Papa' }).ok).toBe(true);
     expect(loadRegistry(store).profiles[0].name).toBe('Papa');
     setCurrent(store, 'principal');
-    expect(removeProfile(store, res.profile.id).ok).toBe(true);
+    expect(removeProfile(store, res.profile.id, 'principal').ok).toBe(true);
     expect(loadRegistry(store).profiles).toHaveLength(1);
   });
 
@@ -58,6 +58,13 @@ describe('profile registry', () => {
     expect(loadRegistry(store)).toEqual(DEFAULT_REGISTRY);
     store.set('ancrage.profiles', JSON.stringify({ profiles: [{ id: 'x' }], current: 'x' }));
     expect(loadRegistry(store)).toEqual(DEFAULT_REGISTRY);
+  });
+
+  test('one damaged entry does not hide the other profiles', () => {
+    const store = memoryStorage();
+    const lea = { id: 'lea', name: 'Léa', color: 'coral', audience: '', pin: null, starter: 'none' };
+    store.set('ancrage.profiles', JSON.stringify({ profiles: [{ id: 'broken' }, lea, lea], current: 'lea' }));
+    expect(loadRegistry(store)).toEqual({ profiles: [DEFAULT_REGISTRY.profiles[0], lea], current: 'lea' });
   });
 
   test('a profile without code always opens; with one, only the right code', () => {

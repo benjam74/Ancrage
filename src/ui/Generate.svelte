@@ -1,12 +1,12 @@
 <script lang="ts">
   import type { Services } from '../app/services';
-  import { currentProfile, profileStore } from '../app/current';
+  import { EXAMPLES, coachingProfile, currentProfile, profileStore } from '../app/current';
   import { MAX_COUNT, MAX_SOURCE_CHARS, type Proposal } from '../core/generate';
   import type { NoteType, Theme } from '../core/model';
   import Editor from './Editor.svelte';
   import { TYPE_LABEL } from './format';
   import Preview from './Preview.svelte';
-  import { groupByDomain, isDomain } from '../core/domains';
+  import { domainOf, groupByDomain, isDomain } from '../core/domains';
 
   let { services, onchange }: { services: Services; onchange: () => void } = $props();
 
@@ -19,7 +19,8 @@
   let themeId = $state('');
   let sourceTitle = $state('');
   let source = $state('');
-  let types = $state<NoteType[]>([...TYPES]);
+  // Coaching scenarios only make sense for a coaching profile.
+  let types = $state<NoteType[]>(TYPES.filter((t) => coachingProfile || t !== 'scenario'));
   let count = $state(8);
   let apiKey = $state(store.get(KEY_NAME) ?? '');
   let keySaved = $state(!!store.get(KEY_NAME));
@@ -69,7 +70,7 @@
       // Loaded on demand: the SDK is only needed once someone generates.
       const { createAiClient, generateProposals } = await import('../app/ai');
       const theme = themes.find((t) => t.id === themeId)!;
-      const res = await generateProposals(createAiClient(apiKey.trim()), { source, themeName: theme.name, domainName: allThemes.find((t) => t.id === theme.parentId)?.name, audience: currentProfile.audience, types, count });
+      const res = await generateProposals(createAiClient(apiKey.trim()), { source, themeName: theme.name, domainName: allThemes.find((t) => t.id === domainOf(theme, new Set(allThemes.filter(isDomain).map((d) => d.id))))?.name, audience: currentProfile.audience, types, count });
       if (!res.ok) return void (error = res.error);
       saveKey();
       items = res.proposals.map((proposal) => ({ proposal, status: 'pending' }));
@@ -156,12 +157,12 @@
         </div>
         <div class="field">
           <label for="g-title">Source</label>
-          <input id="g-title" bind:value={sourceTitle} placeholder="Ex. Formation PNL, module 3" />
+          <input id="g-title" bind:value={sourceTitle} placeholder={EXAMPLES.source} />
         </div>
       </div>
       <div class="field">
         <label for="g-source">Texte</label>
-        <textarea id="g-source" bind:value={source} style="min-height:200px" placeholder="Colle ici tes notes de formation, un extrait de livre, une transcription…"></textarea>
+        <textarea id="g-source" bind:value={source} style="min-height:200px" placeholder={EXAMPLES.text}></textarea>
         <span class="hint" class:error={source.length > MAX_SOURCE_CHARS}>{source.length.toLocaleString('fr-FR')} / {MAX_SOURCE_CHARS.toLocaleString('fr-FR')} caractères</span>
       </div>
       <fieldset class="field" style="border:0;padding:0;margin:0">

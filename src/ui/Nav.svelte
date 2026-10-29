@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { currentProfile, forgetChoice, profileCount } from '../app/current';
+  import { FACE } from './faces';
   let { current, onselect }: { current: string; onselect?: (view: string) => void } = $props();
   const links = [
     { view: 'accueil', label: 'Accueil', path: 'M11.3 2.7a1 1 0 0 1 1.4 0l8.6 8.1c.6.6.2 1.7-.7 1.7H19v7a1.5 1.5 0 0 1-1.5 1.5h-3a.5.5 0 0 1-.5-.5v-4.5a2 2 0 0 0-4 0v4.5a.5.5 0 0 1-.5.5h-3A1.5 1.5 0 0 1 5 19.5v-7H3.4c-.9 0-1.3-1.1-.7-1.7z' },
@@ -14,6 +16,11 @@
   <div class="brand">
     <svg viewBox="0 0 24 24" aria-hidden="true"><g fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="5" r="2.5" /><path d="M12 7.5V21M5 13a7 7 0 0 0 14 0M8 11h8" /></g></svg>ancrage
   </div>
+  {#if profileCount > 1}
+    <button class="nav-profile" aria-label="Profil {currentProfile.name} : changer de profil" onclick={() => { forgetChoice(); location.hash = 'accueil'; location.reload(); }}>
+      <span class="face small" style="--pc:{FACE[currentProfile.color]}" aria-hidden="true">{currentProfile.name.charAt(0).toUpperCase()}</span>{currentProfile.name}
+    </button>
+  {/if}
   {#each links as link (link.view)}
     <a href={`#${link.view}`} aria-current={current === link.view ? 'page' : undefined} onclick={() => onselect?.(link.view)}>
       <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d={link.path} /></svg>{#if 'short' in link}<span class="long">{link.label}</span><span class="short">{link.short}</span>{:else}{link.label}{/if}

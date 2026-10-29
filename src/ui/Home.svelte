@@ -12,6 +12,7 @@
   import ThemePath from './ThemePath.svelte';
   import WeekStrip from './WeekStrip.svelte';
   import { currentProfile, profileCount } from '../app/current';
+  import { domainOf } from '../core/domains';
   import { FACE, forgetChoice } from './faces';
   import { updatePrefs } from './prefs.svelte';
 
@@ -32,9 +33,10 @@
   const target = $derived(goalItem ?? suggestion);
 
   // Domain tabs: the remembered one, else the first that has themes.
-  const loose = $derived(progress.themes.filter((t) => !t.theme.parentId || !progress.domains.some((d) => d.id === t.theme.parentId)));
+  const domainIds = $derived(new Set(progress.domains.map((d) => d.id)));
+  const loose = $derived(progress.themes.filter((t) => domainOf(t.theme, domainIds) === null));
   const tabs = $derived([
-    ...progress.domains.map((d) => ({ id: d.id, name: d.name, themes: progress.themes.filter((t) => t.theme.parentId === d.id) })),
+    ...progress.domains.map((d) => ({ id: d.id, name: d.name, themes: progress.themes.filter((t) => domainOf(t.theme, domainIds) === d.id) })),
     ...(loose.length ? [{ id: '__loose', name: 'Sans domaine', themes: loose }] : []),
   ]);
   const tab = $derived(tabs.find((t) => t.id === prefs.domain) ?? tabs.find((t) => t.themes.length) ?? tabs[0]);

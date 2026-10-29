@@ -3,6 +3,7 @@
   import type { Note, NoteFields } from '../core/model';
   import { TYPE_LABEL } from './format';
   import { groupByDomain, isDomain } from '../core/domains';
+  import { EXAMPLES } from '../app/current';
 
   let { services, onedit, onchange }: { services: Services; onedit: (note: Note) => void; onchange: () => void } = $props();
 
@@ -23,6 +24,7 @@
   const byId = $derived(new Map(lib.map((t) => [t.theme.id, t])));
   const groups = $derived(groupByDomain(lib.map((t) => t.theme)));
   const domains = $derived(lib.map((t) => t.theme).filter(isDomain));
+  const hasSchool = $derived(lib.some((t) => t.theme.id.startsWith('c5-')));
   $effect(() => {
     if (!domains.some((d) => d.id === themeDomain)) themeDomain = domains[0]?.id ?? '';
   });
@@ -116,7 +118,7 @@
     </form>
     <form class="actions" onsubmit={addTheme}>
       <label class="eyebrow" for="new-theme" style="align-self:center">Nouveau thème</label>
-      <input id="new-theme" class="inline-input" style="width:auto;flex:1 1 160px" bind:value={newTheme} placeholder="Ex. Écoute active" />
+      <input id="new-theme" class="inline-input" style="width:auto;flex:1 1 160px" bind:value={newTheme} placeholder={EXAMPLES.theme} />
       {#if domains.length}
         <select class="inline-input" style="width:auto" aria-label="Domaine du nouveau thème" bind:value={themeDomain}>
           {#each domains as d (d.id)}<option value={d.id}>{d.name}</option>{/each}
@@ -132,7 +134,7 @@
   {#if examples > 0}
     <section class="panel">
       <div class="row">
-        <p>Le deck de démarrage est chargé. Retire-le quand tu as tes propres cartes.</p>
+        <p>Les cartes d’exemple sont chargées. Retire-les quand tu as tes propres cartes{hasSchool ? ' : les domaines et chapitres restent, prêts pour tes cours' : ''}.</p>
         {#if confirmExamples}
           <span class="confirm">Supprimer les {examples} notes d’exemple et leur historique ? Tes propres notes sont conservées.
             <button class="btn small danger" onclick={removeExamples}>Oui, retirer</button>
@@ -150,8 +152,8 @@
   {/if}
 
   {#each groups as group (group.domain?.id ?? 'loose')}
-    <section class="domain-block" aria-labelledby={`domain-${group.domain?.id ?? 'loose'}`}>
-      <div class="row domain-head">
+    <details class="domain-block" open={groups.length < 3 || group === groups[0]}>
+      <summary class="row domain-head">
         {#if group.domain && renaming === group.domain.id}
           <form class="actions" onsubmit={(e) => { e.preventDefault(); rename(group.domain!.id); }}>
             <input class="inline-input" style="width:auto" aria-label="Nouveau nom du domaine" bind:value={renameValue} />
@@ -168,7 +170,7 @@
             </div>
           {/if}
         {/if}
-      </div>
+      </summary>
       {#if group.themes.length === 0}<p class="muted">Aucun thème dans ce domaine.</p>{/if}
       {#each group.themes as t (t.id)}
       {@const { theme, notes } = byId.get(t.id)!}
@@ -221,6 +223,6 @@
       {/if}
     </section>
       {/each}
-    </section>
+    </details>
   {/each}
 </main>

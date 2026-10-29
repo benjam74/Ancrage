@@ -4,13 +4,4 @@ import type { ProfileColor } from '../app/profiles';
 export const FACE: Record<ProfileColor, string> = { petrol: '#13505e', coral: '#b63c24', sun: '#8a5f00', ok: '#1f6a41', violet: '#6c3483' };
 export const COLOR_LABEL: Record<ProfileColor, string> = { petrol: 'Bleu', coral: 'Corail', sun: 'Ocre', ok: 'Vert', violet: 'Violet' };
 
-const CHOSEN = 'ancrage.profileChosen';
-export function chosenThisTab(): boolean {
-  try { return sessionStorage.getItem(CHOSEN) === '1'; } catch { return true; }
-}
-export function markChosen(): void {
-  try { sessionStorage.setItem(CHOSEN, '1'); } catch { /* the picker will show again: harmless */ }
-}
-export function forgetChoice(): void {
-  try { sessionStorage.removeItem(CHOSEN); } catch { /* nothing to forget */ }
-}
+export { forgetChoice, markChosen } from '../app/current';
