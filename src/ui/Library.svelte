@@ -24,6 +24,9 @@
   const byId = $derived(new Map(lib.map((t) => [t.theme.id, t])));
   const groups = $derived(groupByDomain(lib.map((t) => t.theme)));
   const domains = $derived(lib.map((t) => t.theme).filter(isDomain));
+  /** Open or closed per domain, kept across reloads of the list; by default the first open when there are many. */
+  let opened = $state<Record<string, boolean>>({});
+  const isOpen = (key: string, first: boolean) => opened[key] ?? (groups.length < 3 || first);
   const hasSchool = $derived(lib.some((t) => t.theme.id.startsWith('c5-')));
   $effect(() => {
     if (!domains.some((d) => d.id === themeDomain)) themeDomain = domains[0]?.id ?? '';
@@ -152,8 +155,10 @@
   {/if}
 
   {#each groups as group (group.domain?.id ?? 'loose')}
-    <details class="domain-block" open={groups.length < 3 || group === groups[0]}>
-      <summary class="row domain-head">
+    {@const key = group.domain?.id ?? 'loose'}
+    <details class="domain-block" open={isOpen(key, group === groups[0])} ontoggle={(e) => (opened[key] = e.currentTarget.open)}>
+      <summary class="domain-head"><h2 id={`domain-${key}`}>{group.domain?.name ?? 'Sans domaine'}</h2></summary>
+      <div class="row">
         {#if group.domain && renaming === group.domain.id}
           <form class="actions" onsubmit={(e) => { e.preventDefault(); rename(group.domain!.id); }}>
             <input class="inline-input" style="width:auto" aria-label="Nouveau nom du domaine" bind:value={renameValue} />
@@ -161,7 +166,6 @@
             <button type="button" class="btn small ghost" onclick={() => (renaming = null)}>Annuler</button>
           </form>
         {:else}
-          <h2 id={`domain-${group.domain?.id ?? 'loose'}`}>{group.domain?.name ?? 'Sans domaine'}</h2>
           {#if group.domain}
             {@const domain = group.domain}
             <div class="actions">
@@ -170,7 +174,7 @@
             </div>
           {/if}
         {/if}
-      </summary>
+      </div>
       {#if group.themes.length === 0}<p class="muted">Aucun thème dans ce domaine.</p>{/if}
       {#each group.themes as t (t.id)}
       {@const { theme, notes } = byId.get(t.id)!}

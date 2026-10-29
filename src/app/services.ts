@@ -15,7 +15,7 @@ import { buildCustomQueue, buildDailyQueue, countNewIntroduced, nextDue, studyDa
 import { makeScheduler } from '../core/scheduler';
 import { STARTER_THEMES, starterNotes } from '../data/starter';
 import { COLLEGE5_THEMES, college5Notes } from '../data/college5';
-import { domainOf, isDomain, migrateToDomains } from '../core/domains';
+import { DEFAULT_DOMAIN_ID, domainOf, isDomain, migrateToDomains } from '../core/domains';
 import { dbName, type Profile, type Starter } from './profiles';
 import { createDexieRepo } from '../storage/dexie-repo';
 import type { Repo } from '../storage/repo';
@@ -340,7 +340,10 @@ export function createServices(repo: Repo, deviceId: string): Services {
       if (!clean) throw new Error('Le nom du thème est obligatoire.');
       const themes = await repo.listThemes();
       const parent = domainId && themes.some((t) => t.id === domainId && isDomain(t)) ? domainId : undefined;
-      const siblings = themes.filter((t) => !isDomain(t) && t.parentId === parent);
+      const ids = new Set(themes.filter(isDomain).map((t) => t.id));
+      // Without a parent, the theme shows in the default domain when there is one: order it among those.
+      const shownIn = parent ?? (ids.has(DEFAULT_DOMAIN_ID) ? DEFAULT_DOMAIN_ID : null);
+      const siblings = themes.filter((t) => !isDomain(t) && domainOf(t, ids) === shownIn);
       const theme: Theme = { id: newId(), name: clean, order: Math.max(-1, ...siblings.map((t) => t.order)) + 1, updatedAt: Date.now(), ...(parent ? { parentId: parent } : {}) };
       await repo.putTheme(theme);
       return theme;
@@ -359,7 +362,8 @@ export function createServices(repo: Repo, deviceId: string): Services {
       const themes = await repo.listThemes();
       const theme = themes.find((t) => t.id === themeId && !isDomain(t));
       if (!theme || !themes.some((t) => t.id === domainId && isDomain(t))) return;
-      const order = Math.max(-1, ...themes.filter((t) => t.parentId === domainId).map((t) => t.order)) + 1;
+      const ids = new Set(themes.filter(isDomain).map((t) => t.id));
+      const order = Math.max(-1, ...themes.filter((t) => !isDomain(t) && domainOf(t, ids) === domainId).map((t) => t.order)) + 1;
       await repo.putTheme({ ...theme, parentId: domainId, order, updatedAt: Math.max(Date.now(), (theme.updatedAt ?? 0) + 1) });
     },
 

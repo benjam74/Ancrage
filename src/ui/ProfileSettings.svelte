@@ -118,6 +118,7 @@
     }
     deleting = null;
     confirmName = '';
+    created = null;
     reload();
     const outcome = await deleteDatabase(p.id);
     message = outcome === 'done'
