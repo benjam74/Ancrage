@@ -43,7 +43,8 @@ export function emptyDraft(type: NoteType): Draft {
   return Object.fromEntries(FIELD_SPECS[type].map((f) => [f.key, f.kind === 'check' ? false : '']));
 }
 
-function uniqueEntries(items: string[]): string[] {
+/** Trims, drops empty entries and case/accent duplicates (first occurrence kept). */
+export function uniqueEntries(items: string[]): string[] {
   const seen = new Set<string>();
   return items
     .map((s) => s.trim())
