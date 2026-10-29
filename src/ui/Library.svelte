@@ -4,7 +4,8 @@
   import { REWORD_INSTRUCTION, describeNote } from '../core/generate';
   import type { Rewrite } from './Generate.svelte';
   import { HARD_LAPSES } from '../core/hard';
-  import { LANGS, type Lang } from '../core/model';
+  import { LANGS, type Lang, type NewOrder } from '../core/model';
+  import { newOrderOf } from '../core/domains';
   import { TYPE_LABEL } from './format';
   import { groupByDomain, isDomain } from '../core/domains';
   import { EXAMPLES } from '../app/current';
@@ -70,6 +71,11 @@
   }
 
   const LANG_LABEL: Record<Lang, string> = { 'fr-FR': 'Français', 'en-GB': 'Anglais', 'es-ES': 'Espagnol', 'de-DE': 'Allemand', 'it-IT': 'Italien' };
+
+  async function setOrder(d: Theme, order: NewOrder) {
+    await services.setNewOrder(d.id, order);
+    await done(order === 'mixed' ? `« ${d.name} » : les nouvelles cartes alternent entre ses thèmes.` : `« ${d.name} » : les nouvelles cartes viennent chapitre par chapitre.`);
+  }
 
   async function setLang(t: Theme, value: string) {
     await services.setLang(t.id, value ? (value as Lang) : null);
@@ -235,6 +241,10 @@
             {@const domain = group.domain}
             <div class="actions">
               <button class="btn small ghost" onclick={() => { renaming = domain.id; renameValue = domain.name; }}>Renommer le domaine</button>
+              <select class="inline-input" style="width:auto" aria-label="Ordre des nouvelles cartes du domaine « {domain.name} »" value={newOrderOf(domain)} onchange={(e) => setOrder(domain, e.currentTarget.value as NewOrder)}>
+                <option value="mixed">Nouvelles cartes : tout mélanger</option>
+                <option value="chapter">Nouvelles cartes : chapitre par chapitre</option>
+              </select>
               <select class="inline-input" style="width:auto" aria-label="Langue de lecture du domaine « {domain.name} »" value={domain.lang ?? 'fr-FR'} onchange={(e) => setLang(domain, e.currentTarget.value === 'fr-FR' ? '' : e.currentTarget.value)}>
                 {#each LANGS as l (l)}<option value={l}>Lecture : {LANG_LABEL[l]}</option>{/each}
               </select>

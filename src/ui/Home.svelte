@@ -12,7 +12,7 @@
   import ThemePath from './ThemePath.svelte';
   import WeekStrip from './WeekStrip.svelte';
   import { currentProfile, profileCount } from '../app/current';
-  import { domainOf } from '../core/domains';
+  import { domainOf, newOrderOf } from '../core/domains';
   import { FACE, forgetChoice } from './faces';
   import { updatePrefs } from './prefs.svelte';
 
@@ -46,7 +46,9 @@
   const goalDone = $derived(progress.roundsToday >= prefs.dailyRounds || (progress.roundsToday > 0 && ring.done >= ring.target));
   const ringShare = $derived(goalDone ? 1 : ring.done / ring.target);
   const vsMax = $derived(Math.max(progress.xpWeek, progress.xpPrevAvg ?? 0, 1));
-  const focus = $derived(activeTheme(tab?.themes ?? progress.themes));
+  // A mixed domain has no « current chapter » to single out.
+  const tabMixed = $derived(!tab || tab.id === '__loose' || newOrderOf(progress.domains.find((d) => d.id === tab.id)) === 'mixed');
+  const focus = $derived(tabMixed ? undefined : activeTheme(tab?.themes ?? progress.themes));
   const todayIndex = $derived(progress.week.findIndex((d) => d.dayStart === studyDayStart(Date.now())));
   const repairDay = $derived(progress.repair && today.queue.length > 0 && todayIndex > 0 ? progress.week[todayIndex - 1].dayStart : null);
   const days = (n: number) => `${n} jour${n > 1 ? 's' : ''}`;
@@ -180,14 +182,15 @@
     </div>
 
     <section aria-labelledby="path-title">
-      <h2 id="path-title" style="margin-bottom:8px">Ton parcours</h2>
+      <h2 id="path-title" style="margin-bottom:8px">{tab && (tab.id === '__loose' || newOrderOf(progress.domains.find((d) => d.id === tab.id)) === 'mixed') ? 'Tes thèmes' : 'Ton parcours'}</h2>
       {#if tabs.length > 1}
         <div class="domain-tabs" role="group" aria-label="Domaine">
           {#each tabs as t (t.id)}<button aria-pressed={t.id === tab?.id} onclick={() => updatePrefs({ domain: t.id })}>{t.name}</button>{/each}
         </div>
       {/if}
       {#if tab && tab.themes.length}
-        {#key tab.id}<ThemePath themes={tab.themes} {onstart} {onpick} look={{ character: shop.avatar.character, outfit: shop.outfit, name: shop.avatar.name }} />{/key}
+        {@const mapMode = tab.id !== '__loose' ? newOrderOf(progress.domains.find((d) => d.id === tab.id)) === 'mixed' : true}
+        {#key tab.id + mapMode}<ThemePath themes={tab.themes} {onstart} {onpick} map={mapMode} look={{ character: shop.avatar.character, outfit: shop.outfit, name: shop.avatar.name }} />{/key}
       {:else if tab}
         <p class="muted">Aucun thème dans « {tab.name} » pour l’instant. Crée-en un depuis « Créer » ou la bibliothèque.</p>
       {:else}

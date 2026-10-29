@@ -30,6 +30,13 @@
     due: chosen.reduce((n, t) => n + t.due, 0),
     new: chosen.reduce((n, t) => n + t.fresh, 0),
     practice: chosen.reduce((n, t) => n + t.cards - t.fresh - t.due, 0),
+    mix: chosen.reduce((n, t) => n + t.cards, 0),
+    situations: chosen.reduce((n, t) => n + t.situations, 0),
+  });
+  /** « Situations mêlées » only exists for themes that have scenarios or classifications. */
+  const hasSituations = $derived(chosen.some((t) => t.situations > 0));
+  $effect(() => {
+    if (mode === 'situations' && !hasSituations) mode = 'mix';
   });
   // Until the learner picks a mode, suggest the most useful one that has cards.
   $effect(() => {
@@ -38,10 +45,30 @@
   });
   const available = $derived(counts[mode]);
   const size = $derived(Math.min(available, limit));
+  /** New cards the session would introduce (a mix takes them in turn with due and fragile cards). */
+  const newInSession = $derived(mode === 'new' ? size : mode === 'mix' ? newInMix(counts.due, counts.new, counts.practice, size) : 0);
+
+  /** New cards among the first `size` of a mix that takes due, new and fragile cards in turn. */
+  function newInMix(due: number, fresh: number, fragile: number, size: number): number {
+    const left = [due, fresh, fragile];
+    let taken = 0;
+    let news = 0;
+    while (taken < size && left.some((n) => n > 0)) {
+      for (let i = 0; i < 3 && taken < size; i++) {
+        if (left[i] === 0) continue;
+        left[i]--;
+        taken++;
+        if (i === 1) news++;
+      }
+    }
+    return news;
+  }
 
   const MODES: { id: CustomMode; title: string; text: string }[] = [
     { id: 'due', title: 'À réviser', text: 'Les cartes arrivées à échéance dans ces thèmes.' },
     { id: 'new', title: 'Nouvelles cartes', text: 'Apprendre plus aujourd’hui, autant que tu veux. Elles comptent dans ta limite quotidienne : fais d’abord ta séance du jour. Chaque nouvelle carte revient plusieurs fois les semaines suivantes.' },
+    { id: 'mix', title: 'Mélange', text: 'Un peu de tout, en alternance : des cartes à réviser, des nouvelles et les plus fragiles, de tous les thèmes choisis. Le mélange oblige à retrouver la bonne notion parmi toutes, comme dans la vraie vie. Les nouvelles cartes comptent dans ta limite quotidienne.' },
+    { id: 'situations', title: 'Situations mêlées', text: 'Les mises en situation et les classements de tous les thèmes choisis, mélangés : à chaque carte, trouver l’outil adapté. Celles à réviser d’abord, puis les plus fragiles, puis les nouvelles.' },
     { id: 'practice', title: 'Entraînement libre', text: 'Les cartes déjà vues qui ne sont pas encore à réviser, les plus fragiles d’abord. Utile avant un contrôle, un examen ou une présentation ; ne rapporte pas d’XP et consolide moins que la révision au bon moment.' },
   ];
   const LIMITS = [10, 20, 50, Infinity];
@@ -89,7 +116,7 @@
     <section class="panel" aria-labelledby="c-mode">
       <h2 id="c-mode">Quoi</h2>
       <div class="modes" role="radiogroup" aria-labelledby="c-mode">
-        {#each MODES as m (m.id)}
+        {#each MODES.filter((m) => m.id !== 'situations' || hasSituations) as m (m.id)}
           <label class="mode" class:on={mode === m.id}>
             <input type="radio" name="mode" value={m.id} checked={mode === m.id} onchange={() => { mode = m.id; touchedMode = true; }} />
             <span class="mode-title">{m.title} <span class="pill">{counts[m.id]}</span></span>
@@ -110,11 +137,11 @@
     <button class="btn sun wide" disabled={size === 0} onclick={() => onstart({ themeIds: picked, mode, limit })}>
       {size === 0 ? 'Aucune carte dans cette sélection' : `Commencer (${size} carte${size > 1 ? 's' : ''})`}
     </button>
-    {#if mode === 'new' && size > 0 && progress.loadPerNew > 0}
-      <p class="muted">Environ {Math.round(size * progress.loadPerNew)} révisions de plus dans les 30 prochains jours, si tu les réussis à chaque fois.</p>
+    {#if (mode === 'new' || mode === 'mix') && newInSession > 0 && progress.loadPerNew > 0}
+      <p class="muted">{mode === 'mix' ? `Dont environ ${newInSession} nouvelle${newInSession > 1 ? 's' : ''} : ` : ''}environ {Math.round(newInSession * progress.loadPerNew)} révisions de plus dans les 30 prochains jours, si tu les réussis à chaque fois.</p>
     {/if}
     {#if size === 0 && picked.length > 0}
-      <p class="muted">{mode === 'due' ? 'Rien n’est à réviser dans ces thèmes pour l’instant : essaie l’entraînement libre ou de nouvelles cartes.' : mode === 'new' ? 'Toutes les cartes de ces thèmes ont déjà été vues.' : 'Aucune carte vue de ces thèmes n’est disponible pour l’entraînement : celles qui sont dues sont dans « À réviser ».'}</p>
+      <p class="muted">{mode === 'due' ? 'Rien n’est à réviser dans ces thèmes pour l’instant : essaie l’entraînement libre ou de nouvelles cartes.' : mode === 'new' ? 'Toutes les cartes de ces thèmes ont déjà été vues.' : mode === 'mix' ? 'Ces thèmes n’ont pas encore de cartes.' : mode === 'situations' ? 'Ces thèmes n’ont ni mise en situation ni classement.' : 'Aucune carte vue de ces thèmes n’est disponible pour l’entraînement : celles qui sont dues sont dans « À réviser ».'}</p>
     {/if}
   {/if}
 </main>

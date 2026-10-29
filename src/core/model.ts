@@ -36,7 +36,11 @@ export interface Theme {
   kind?: 'domain';
   /** Language for reading aloud; a theme without one uses its domain's, then French. */
   lang?: Lang;
+  /** Domains only: new cards alternate between themes (`mixed`) or come chapter by chapter. Default: see `newOrderOf`. */
+  newOrder?: NewOrder;
 }
+
+export type NewOrder = 'mixed' | 'chapter';
 
 /** Remembers a deletion so a merge with another device does not bring the item back. */
 export interface Tombstone {

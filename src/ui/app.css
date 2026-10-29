@@ -472,3 +472,9 @@ p.error { font-weight: 700; color: var(--bad); }
 .ta-wrap .mic-wrap { justify-self: end; margin-top: 4px; }
 .icon-btn.listen { width: 34px; height: 34px; }
 @media (max-width: 640px) { .zone-list li { grid-template-columns: auto minmax(0, 1fr); } }
+
+/* v1.9: progress map for mixed domains */
+.path.map { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; padding-top: 6px; }
+.path.map .node-row, .path.map .node-row:nth-child(n) { justify-content: center; padding: 0; }
+.path.map::before, .path.map::after { display: none; }
+.map-note { margin: 0 0 6px; }

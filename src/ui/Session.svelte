@@ -60,6 +60,8 @@
   let ended = $state(false);
   let hasMore = $state(false);
   let roundResult = $state<RoundOutcome | null>(null);
+  /** The round had due or new cards, so it earns round XP and counts for the streak. */
+  let earned = $state(true);
   let after = $state<Progress | null>(null);
   /** The round end shows the summary first, then the streak. */
   let endStep = $state<'summary' | 'streak'>('summary');
@@ -121,7 +123,9 @@
       const now = Date.now();
       // A round with no answer (empty queue) is not a finished round.
       // Practice reviews cards before they are due: it earns no round XP and does not count as a study day.
-      roundResult = round.answered > 0 && kind !== 'practice' ? await services.completeRound(roundStartedAt, now) : null;
+      // A picked selection of cards that were not due yet (mix, situations) is practice too.
+      earned = round.answered > 0 && kind !== 'practice' && (kind === 'daily' || (await services.earnsRound(roundStartedAt, now)));
+      roundResult = earned ? await services.completeRound(roundStartedAt, now) : null;
       hasMore = (await more(played)).length > 0;
       after = roundResult ? await services.progress(now) : null;
       endStep = 'summary';
@@ -315,6 +319,7 @@
           <p class="muted">{hasMore ? 'Il reste des cartes pour aujourd’hui.' : 'Tout est fait pour aujourd’hui.'}</p>
         {:else}
           <p class="muted">{hasMore ? 'Il reste des cartes dans ta sélection.' : 'Ta sélection est terminée.'}</p>
+          {#if kind === 'custom' && !earned}<p class="muted end-note">Ces cartes n’étaient pas encore à réviser : cette manche compte comme un entraînement, sans XP de manche ni série.</p>{/if}
           {#if kind === 'practice'}<p class="muted end-note">L’entraînement ne rapporte pas d’XP et ne compte pas pour la série : réviser avant l’échéance consolide moins la mémoire que réviser au bon moment.</p>{/if}
         {/if}
       </div>

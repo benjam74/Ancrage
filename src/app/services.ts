@@ -1,7 +1,7 @@
 import { State } from 'ts-fsrs';
 import { createEngine, type Engine } from '../core/engine';
 import { newId } from '../core/ids';
-import type { Card, CharacterId, Lang, Note, NoteFields, ReviewEntry, Slot, Theme } from '../core/model';
+import type { Card, CharacterId, Lang, NewOrder, Note, NoteFields, ReviewEntry, Slot, Theme } from '../core/model';
 import { validateFields } from '../core/validate';
 import { validateSettings } from '../core/settings';
 import { backupFileName, serializeBackup, type Dump } from '../core/backup';
@@ -13,11 +13,11 @@ import { dailyCounts, forecast, mastery, nextLevel, retention, stateBreakdown, t
 import type { CardState } from '../core/scheduler';
 import { isHard } from '../core/hard';
 import { effectiveness, memoryOf, reviewLoad, type Effectiveness } from '../core/insights';
-import { buildCustomQueue, buildDailyQueue, countNewIntroduced, nextDue, studyDayStart, type CustomChoice, type QueueCandidate } from '../core/queue';
+import { SITUATION_TYPES, buildCustomQueue, buildDailyQueue, countNewIntroduced, nextDue, studyDayStart, type CustomChoice, type QueueCandidate } from '../core/queue';
 import { makeScheduler } from '../core/scheduler';
 import { STARTER_THEMES, starterNotes } from '../data/starter';
 import { COLLEGE5_THEMES, college5Notes } from '../data/college5';
-import { DEFAULT_DOMAIN_ID, domainOf, isDomain, migrateToDomains } from '../core/domains';
+import { DEFAULT_DOMAIN_ID, domainOf, isDomain, migrateToDomains, newOrderOf } from '../core/domains';
 import { dbName, type Profile, type Starter } from './profiles';
 import { createDexieRepo } from '../storage/dexie-repo';
 import type { Repo } from '../storage/repo';
@@ -55,6 +55,8 @@ export interface ThemeProgress {
   fresh: number;
   /** Next level and the mastered cards still needed; null once anchored or empty. */
   next: { level: Level; remaining: number } | null;
+  /** Cards of the theme that train choosing a tool (scenarios, classifications), for « Situations mêlées ». */
+  situations: number;
   /** Mean recall of the studied cards, now and in 30 days without review; null before any study. */
   memory: { now: number; in30: number } | null;
 }
@@ -139,6 +141,8 @@ export interface Services {
   custom(now: number, choice: CustomChoice): Promise<string[]>;
   /** `lang`: the theme's reading language, else its domain's, else French. */
   context(cardId: string): Promise<{ note: Note; card: Card; pool: Note[]; theme: Theme; lang: Lang }>;
+  /** How a domain introduces new cards; last writer wins on sync, like a rename. */
+  setNewOrder(domainId: string, order: NewOrder): Promise<void>;
   /** Reading language of a theme or domain; null goes back to inheriting. */
   setLang(themeId: string, lang: Lang | null): Promise<void>;
   saveNote(input: NoteInput, now: number): Promise<SaveResult>;
@@ -165,6 +169,8 @@ export interface Services {
   importBackup(dump: Dump): Promise<void>;
   /** Merges a backup from another device into local data; nothing local is lost. */
   mergeBackup(dump: Dump): Promise<void>;
+  /** A round with at least one due or new card since `startedAt`: only those count as a round (XP and streak). */
+  earnsRound(startedAt: number, now: number): Promise<boolean>;
   /** Records a finished round; returns the XP it earned (answers since `startedAt` + round bonus). */
   completeRound(startedAt: number, now: number): Promise<RoundOutcome>;
 }
@@ -290,6 +296,8 @@ export function createServices(repo: Repo, deviceId: string): Services {
     const domainIds = new Set(themes.filter(isDomain).map((t) => t.id));
     const domainOrder = new Map(themes.filter(isDomain).map((t) => [t.id, t.order]));
     const themeOrder = new Map(themes.map((t) => [t.id, (domainOrder.get(domainOf(t, domainIds) ?? '') ?? 999) * 10_000 + t.order]));
+    const mixed = new Map(themes.map((t) => [t.id, newOrderOf(themes.find((d) => d.id === domainOf(t, domainIds))) === 'mixed']));
+    const domainOfTheme = new Map(themes.map((t) => [t.id, domainOf(t, domainIds)]));
     const noteById = new Map(notes.map((n) => [n.id, n]));
     const logByCard = new Map<string, ReviewEntry[]>();
     for (const e of reviews) {
@@ -307,6 +315,9 @@ export function createServices(repo: Repo, deviceId: string): Services {
         themeOrder: themeOrder.get(note.themeId) ?? Number.MAX_SAFE_INTEGER,
         noteCreatedAt: note.createdAt,
         state: scheduler.replay(note.createdAt, logByCard.get(card.id) ?? []),
+        mixNew: mixed.get(note.themeId) ?? true,
+        domainId: domainOfTheme.get(note.themeId) ?? null,
+        noteType: note.fields.type,
       }];
     });
     return { candidates, reviews, settings, scheduler };
@@ -352,6 +363,12 @@ export function createServices(repo: Repo, deviceId: string): Services {
       const pool = (await repo.listNotes(note.themeId)).filter((n) => n.id !== note.id);
       const domain = themes.find((t) => t.id === domainOf(theme, new Set(themes.filter(isDomain).map((d) => d.id))));
       return { note, card, pool, theme, lang: theme.lang ?? domain?.lang ?? 'fr-FR' };
+    },
+
+    async setNewOrder(domainId, order) {
+      const domain = (await repo.listThemes()).find((t) => t.id === domainId && isDomain(t));
+      if (!domain || domain.newOrder === order) return;
+      await repo.putTheme({ ...domain, newOrder: order, updatedAt: Math.max(Date.now(), (domain.updatedAt ?? 0) + 1) });
     },
 
     async setLang(themeId, lang) {
@@ -513,8 +530,11 @@ export function createServices(repo: Repo, deviceId: string): Services {
       const forecastDays = [todayStart];
       while (forecastDays.length < FORECAST_DAYS) forecastDays.push(nextStudyDay(forecastDays[forecastDays.length - 1]));
       const byTheme = new Map<string, CardState[]>();
+      const situations = new Map<string, number>();
       for (const card of snap.active) {
-        const t = snap.noteById.get(card.noteId)!.themeId;
+        const note = snap.noteById.get(card.noteId)!;
+        const t = note.themeId;
+        if (SITUATION_TYPES.includes(note.fields.type)) situations.set(t, (situations.get(t) ?? 0) + 1);
         const list = byTheme.get(t);
         if (list) list.push(snap.states.get(card.id)!);
         else byTheme.set(t, [snap.states.get(card.id)!]);
@@ -538,7 +558,7 @@ export function createServices(repo: Repo, deviceId: string): Services {
             const due = states.filter((c) => c.state !== State.New && c.due.getTime() <= now).length;
             const next = nextLevel(m.cards, m.mastered, m.level !== 'Nouveau');
             const fresh = states.filter((c) => c.state === State.New).length;
-            return { theme, cards: m.cards, due, fresh, mastery: m.pct, level: m.level, next, memory: memoryOf(states, now, snap.scheduler) };
+            return { theme, cards: m.cards, due, fresh, mastery: m.pct, level: m.level, next, memory: memoryOf(states, now, snap.scheduler), situations: situations.get(theme.id) ?? 0 };
           }),
         heatmap: dailyCounts(snap.reviews, todayStart, HEATMAP_DAYS),
         forecast: forecast(allStates, now, FORECAST_DAYS),
@@ -585,6 +605,11 @@ export function createServices(repo: Repo, deviceId: string): Services {
 
     async mergeBackup(dump) {
       await mergeIntoLocal(repo, dump);
+    },
+
+    async earnsRound(startedAt, now) {
+      const snap = await snapshot();
+      return snap.reviews.some((e) => e.ts >= startedAt && e.ts <= now && snap.kinds.get(e.id) !== 'early');
     },
 
     async completeRound(startedAt, now) {

@@ -155,3 +155,11 @@ describe('v1.8: image notes and theme language', () => {
     expect(BACKUP_VERSION).toBe(4);
   });
 });
+
+describe('v1.9: order of new cards', () => {
+  test('stored on a domain; any other value is refused', () => {
+    const ok = parseBackup(mutate((o) => ((o.themes as Record<string, unknown>[])[0].newOrder = 'chapter')));
+    expect(ok.ok && ok.dump.themes[0].newOrder).toBe('chapter');
+    expect(parseBackup(mutate((o) => ((o.themes as Record<string, unknown>[])[0].newOrder = 'random'))).ok).toBe(false);
+  });
+});
