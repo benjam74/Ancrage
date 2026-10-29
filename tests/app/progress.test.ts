@@ -183,3 +183,25 @@ describe('engagement', () => {
     expect(dailyRing(25, 5, 2)).toEqual({ done: 20, target: 20 });
   });
 });
+
+describe('custom sessions', () => {
+  test('new cards beyond the daily limit, for the chosen themes only', async () => {
+    await seedIfEmpty(services.repo, NOW);
+    await playNew(NOW);
+    expect((await services.today(NOW + 1)).fresh).toBe(0);
+    const themes = (await services.progress(NOW + 1)).themes;
+    const target = themes.find((t) => t.fresh > 0)!;
+    const queue = await services.custom(NOW + 1, { themeIds: [target.theme.id], mode: 'new', limit: 3 });
+    expect(queue.length).toBe(Math.min(3, target.fresh));
+    for (const id of queue) expect((await services.context(id)).theme.id).toBe(target.theme.id);
+  });
+
+  test('practice offers cards already seen even when nothing is due', async () => {
+    await seedIfEmpty(services.repo, NOW);
+    const seen = await playNew(NOW);
+    const all = (await services.progress(NOW + 1)).themes.map((t) => t.theme.id);
+    expect(await services.custom(NOW + 1, { themeIds: all, mode: 'due', limit: Infinity })).toEqual([]);
+    const practice = await services.custom(NOW + 1, { themeIds: all, mode: 'practice', limit: Infinity });
+    expect(new Set(practice)).toEqual(new Set(seen));
+  });
+});

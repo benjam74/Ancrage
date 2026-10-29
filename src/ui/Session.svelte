@@ -18,7 +18,22 @@
   import Reveal from './exercises/Reveal.svelte';
   import Typed from './exercises/Typed.svelte';
 
-  let { services, queue, onexit }: { services: Services; queue: string[]; onexit: () => void } = $props();
+  let {
+    services,
+    queue,
+    more,
+    kind = 'daily',
+    onexit,
+  }: {
+    services: Services;
+    queue: string[];
+    /** What comes next once a round ends, given the cards already shown in this session. */
+    more: (played: Set<string>) => Promise<string[]>;
+    /** The daily queue, a picked selection, or free practice (cards reviewed before they are due). */
+    kind?: 'daily' | 'custom' | 'practice';
+    onexit: () => void;
+  } = $props();
+  const played = new Set<string>();
 
   type Shown = { cardId: string; ex: Exercise; mode: Mode; themeName: string; isNew: boolean; retry: boolean; shownAt: number };
   type Result = { correct: boolean; entry: ReviewEntry | null; state: CardState | null; corrected: boolean };
@@ -70,6 +85,7 @@
     answer = null;
     revealed = false;
     result = null;
+    played.add(cardId);
     shown = {
       cardId,
       ex,
@@ -87,8 +103,9 @@
     else {
       const now = Date.now();
       // A round with no answer (empty queue) is not a finished round.
-      roundResult = round.answered > 0 ? await services.completeRound(roundStartedAt, now) : null;
-      hasMore = (await services.today(now)).queue.length > 0;
+      // Practice reviews cards before they are due: it earns no round XP and does not count as a study day.
+      roundResult = round.answered > 0 && kind !== 'practice' ? await services.completeRound(roundStartedAt, now) : null;
+      hasMore = (await more(played)).length > 0;
       after = roundResult ? await services.progress(now) : null;
       endStep = 'summary';
       shown = null;
@@ -157,8 +174,7 @@
   });
 
   const nextRound = once(async () => {
-    const { queue: fresh } = await services.today(Date.now());
-    round = startRound(fresh);
+    round = startRound(await more(played));
     roundStartedAt = Date.now();
     ended = false;
     combo = 0;
@@ -248,8 +264,8 @@
       <div class="s-inner end">
         <h1>Manche terminée</h1>
         {#if roundResult?.comeback}<p class="badge">Bon retour : +20 XP</p>{/if}
-        <div class="tiles three">
-          <div class="stat-tile" style="--c:var(--sun);--h-ink:var(--on-sun)"><div class="h">XP gagnée</div><div class="v" aria-label="{roundResult?.xp ?? 0} XP">+{xpShown}</div></div>
+        <div class="tiles" class:three={kind !== 'practice'}>
+          {#if kind !== 'practice'}<div class="stat-tile" style="--c:var(--sun);--h-ink:var(--on-sun)"><div class="h">XP gagnée</div><div class="v" aria-label="{roundResult?.xp ?? 0} XP">+{xpShown}</div></div>{/if}
           <div class="stat-tile" style="--c:var(--ok);--h-ink:var(--on-ok)"><div class="h">Justes</div><div class="v">{cards - missed}/{cards}</div></div>
           <div class="stat-tile" style="--c:var(--petrol);--h-ink:var(--on-petrol)"><div class="h">Durée</div><div class="v">{Math.max(1, Math.round((Date.now() - roundStartedAt) / 60_000))} min</div></div>
         </div>
@@ -259,13 +275,19 @@
         {:else if cards > 0}
           <p class="muted end-note">Sans faute. Les prochaines révisions s’espacent.</p>
         {/if}
-        <p class="muted">{hasMore ? 'Il reste des cartes pour aujourd’hui.' : 'Tout est fait pour aujourd’hui.'}</p>
+        {#if kind === 'daily'}
+          <p class="muted">{hasMore ? 'Il reste des cartes pour aujourd’hui.' : 'Tout est fait pour aujourd’hui.'}</p>
+        {:else}
+          <p class="muted">{hasMore ? 'Il reste des cartes dans ta sélection.' : 'Ta sélection est terminée.'}</p>
+          {#if kind === 'practice'}<p class="muted end-note">L’entraînement ne rapporte pas d’XP et ne compte pas pour la série : réviser avant l’échéance consolide moins la mémoire que réviser au bon moment.</p>{/if}
+        {/if}
       </div>
     {:else if shown}
       {#key shown.cardId + ':' + round.done}
         <div class="s-inner">
           <div class="kicker">
             {#if combo >= 3}<span class="combo" aria-hidden="true"><Icon name="flame" />{combo} d’affilée</span>{/if}
+            {#if kind === 'practice'}<span class="pill">Entraînement</span>{/if}
             {#if shown.retry}<span class="pill retry">À revoir</span>{:else if shown.isNew}<span class="pill new">Nouvelle carte</span>{/if}
             <span class="pill">{shown.themeName}</span>
           </div>

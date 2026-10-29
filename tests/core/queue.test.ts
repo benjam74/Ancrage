@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import { State } from 'ts-fsrs';
-import { buildDailyQueue, countNewIntroduced, nextDue, studyDayStart, type QueueCandidate } from '../../src/core/queue';
+import { buildCustomQueue, buildDailyQueue, countNewIntroduced, nextDue, studyDayStart, type QueueCandidate } from '../../src/core/queue';
 import { makeScheduler } from '../../src/core/scheduler';
 import { DEFAULT_SETTINGS, type ReviewEntry } from '../../src/core/model';
 
@@ -98,5 +98,38 @@ describe('studyDayStart', () => {
 
   test('after 4 am starts at 4 am the same day', () => {
     expect(studyDayStart(new Date(2026, 9, 28, 10, 0).getTime())).toBe(new Date(2026, 9, 28, 4, 0).getTime());
+  });
+});
+
+describe('buildCustomQueue', () => {
+  const r = (c: QueueCandidate) => (c.cardId.startsWith('weak') ? 0.4 : c.cardId.startsWith('mid') ? 0.7 : 0.95);
+  const pool = [
+    cand('d1', 'a', 0, { due: NOW - 2 * DAY }),
+    cand('d2', 'b', 1, { due: NOW - DAY }),
+    cand('strong', 'a', 0, { due: NOW + 5 * DAY }),
+    cand('weak', 'a', 0, { due: NOW + 2 * DAY }),
+    cand('mid', 'b', 1, { due: NOW + 3 * DAY }),
+    fresh('n1', 0, 1),
+    { ...fresh('n2', 0, 2), themeId: 'a' },
+    { ...fresh('n3', 1, 3), themeId: 'b' },
+  ].map((c) => (c.cardId === 'n1' ? { ...c, themeId: 'a' } : c));
+
+  test('due mode: only due cards of the chosen themes', () => {
+    expect(buildCustomQueue(pool, NOW, { themeIds: ['a'], mode: 'due', limit: 10 }, r)).toEqual(['d1']);
+    expect(buildCustomQueue(pool, NOW, { themeIds: ['a', 'b'], mode: 'due', limit: 10 }, r)).toEqual(['d1', 'd2']);
+  });
+
+  test('new mode ignores the daily limit, in creation order, up to the chosen count', () => {
+    expect(buildCustomQueue(pool, NOW, { themeIds: ['a', 'b'], mode: 'new', limit: 2 }, r)).toEqual(['n1', 'n2']);
+    expect(buildCustomQueue(pool, NOW, { themeIds: ['b'], mode: 'new', limit: 10 }, r)).toEqual(['n3']);
+  });
+
+  test('practice mode: seen cards not due yet, most forgotten first', () => {
+    expect(buildCustomQueue(pool, NOW, { themeIds: ['a', 'b'], mode: 'practice', limit: 10 }, r)).toEqual(['weak', 'mid', 'strong']);
+  });
+
+  test('an unlimited count and an empty selection', () => {
+    expect(buildCustomQueue(pool, NOW, { themeIds: ['a'], mode: 'practice', limit: Infinity }, r)).toEqual(['weak', 'strong']);
+    expect(buildCustomQueue(pool, NOW, { themeIds: [], mode: 'due', limit: 10 }, r)).toEqual([]);
   });
 });

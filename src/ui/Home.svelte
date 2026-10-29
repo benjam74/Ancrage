@@ -10,7 +10,7 @@
   import ThemePath from './ThemePath.svelte';
   import WeekStrip from './WeekStrip.svelte';
 
-  let { today, progress, onstart }: { today: Today; progress: Progress; onstart: () => void } = $props();
+  let { today, progress, onstart, onpick }: { today: Today; progress: Progress; onstart: () => void; onpick: (themeId: string | null) => void } = $props();
   const total = $derived(today.due + today.fresh);
   const RING = 2 * Math.PI * 42;
   const ring = $derived(dailyRing(progress.answersToday, today.queue.length, prefs.dailyRounds));
@@ -75,6 +75,9 @@
         {/if}
         {#if focus && focus.level !== 'Nouveau' && focus.next}<p class="hero-xp">{focus.theme.name} : {nextText(focus).charAt(0).toLowerCase() + nextText(focus).slice(1)}</p>{/if}
         <p class="hero-xp">{progress.xpToday} XP aujourd’hui</p>
+        {#if progress.themes.some((t) => t.cards > 0)}
+          <button class="btn ghost wide hero-pick" onclick={() => onpick(null)}>{total > 0 ? 'Choisir quoi réviser' : 'S’entraîner ou apprendre plus'}</button>
+        {/if}
       </section>
 
       {#if prefs.showStreak && progress.repair && today.queue.length > 0}
@@ -120,7 +123,7 @@
     <section aria-labelledby="path-title">
       <h2 id="path-title" style="margin-bottom:8px">Ton parcours</h2>
       {#if progress.themes.length}
-        <ThemePath themes={progress.themes} {onstart} />
+        <ThemePath themes={progress.themes} {onstart} {onpick} />
       {:else}
         <p class="muted">Crée un thème et tes premières cartes pour voir ton parcours.</p>
       {/if}
