@@ -434,11 +434,12 @@ p.error { font-weight: 700; color: var(--bad); }
 .eval-points li { display: grid; grid-template-columns: 1.4em minmax(0, 1fr); gap: 6px; overflow-wrap: anywhere; }
 .eval-points .mark { font-weight: 800; color: var(--bad); }
 .eval-points li.covered .mark { color: var(--ok); }
-.verdict-reussi { color: var(--ok); }
-.verdict-partiel { color: var(--sun-deep); }
-.verdict-a_revoir { color: var(--bad); }
-.self.has-suggestion .btn:not(.suggested) { opacity: .55; }
-.self .btn.suggested { outline: 3px solid var(--ink); outline-offset: 2px; }
+.ai-eval .pill { margin-left: 6px; }
+.pill.verdict-reussi { background: var(--ok); color: var(--on-ok); }
+.pill.verdict-partiel { background: var(--sun); color: var(--on-sun); }
+.pill.verdict-a_revoir { background: var(--bad-bg); color: var(--bad); }
+.self .btn.suggested { outline: 3px solid var(--ink); outline-offset: 3px; }
+.self .btn .sugg { display: block; font-size: 11px; letter-spacing: .04em; opacity: .9; }
 .memory-line { font-size: 15px; }
 .works { display: grid; gap: 14px; }
 .works-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }

@@ -13,6 +13,7 @@
   import Preview from './Preview.svelte';
   import { domainOf, groupByDomain, isDomain } from '../core/domains';
   import { splitDocument, splitLong, type DocSection } from '../core/importdoc';
+  import { untrack } from 'svelte';
 
   let { services, onchange, rewrite = null }: { services: Services; onchange: () => void; rewrite?: Rewrite | null } = $props();
 
@@ -46,10 +47,13 @@
   let importDomain = $state('');
   let reading = $state(false);
   let importErrors = $state<string[]>([]);
-  /** Themes created on the first card added, by name, so the parts of a section share one. */
-  let created: Record<string, string> = {};
+  /** Themes created on the first card added, by name, so the parts of a section share one (the promise: two clicks create one theme). */
+  let created: Record<string, Promise<string>> = {};
+  /** Theme created only to open the editor: removed again if the editor is cancelled and it stayed empty. */
+  let editCreated: string | null = null;
 
-  type Item = { proposal: Proposal; status: 'pending' | 'added' | 'dismissed'; part: number | null };
+  /** Each proposal keeps the section and destination it was generated for, whatever happens to the import list later. */
+  type Item = { proposal: Proposal; status: 'pending' | 'added' | 'dismissed'; part: Part | null };
   let items = $state.raw<Item[]>([]);
   let rejected = $state(0);
   let editingIndex = $state<number | null>(null);
@@ -60,8 +64,13 @@
   const domains = $derived(allThemes.filter(isDomain).sort((a, b) => a.order - b.order));
   const chosenParts = $derived(parts.filter((p) => p.on));
   const groups = $derived(
-    parts.length
-      ? parts.map((p, i) => ({ key: p.section.id, title: p.section.title, file: p.section.file, items: items.map((it, j) => ({ it, j })).filter(({ it }) => it.part === i) })).filter((g) => g.items.length)
+    items.some((it) => it.part)
+      ? [...new Map(items.map((it) => [it.part?.section.id ?? '', it.part])).values()].map((p) => ({
+          key: p?.section.id ?? 'all',
+          title: p?.section.title ?? '',
+          file: p?.section.file ?? '',
+          items: items.map((it, j) => ({ it, j })).filter(({ it }) => it.part?.section.id === p?.section.id),
+        }))
       : [{ key: 'all', title: '', file: '', items: items.map((it, j) => ({ it, j })) }],
   );
   const fr = (n: number) => n.toLocaleString('fr-FR');
@@ -73,8 +82,12 @@
     if (!allThemes.some((t) => t.id === importDomain && isDomain(t))) importDomain = allThemes.filter(isDomain).sort((a, b) => a.order - b.order)[0]?.id ?? '';
   }
 
+  /** Last reword request handled: cancelling must not bring it back. */
+  let handledNonce = 0;
   $effect(() => {
-    if (!rewrite || rewrite.nonce === rewriting?.nonce) return;
+    if (!rewrite || rewrite.nonce === handledNonce) return;
+    handledNonce = rewrite.nonce;
+    if (untrack(() => items.some((i) => i.status === 'pending')) && !confirm('Remplacer les propositions pas encore ajoutées par la reformulation ?')) return;
     rewriting = rewrite;
     rewriteDone = false;
     parts = [];
@@ -105,6 +118,13 @@
 
   /** Base name of a section, shared by its numbered parts: « Long (2/3) » → « Long ». */
   const baseTitle = (s: DocSection) => s.title.replace(/ \(\d+\/\d+\)$/, '');
+  const fileBase = (file: string) => file.replace(/^.*[\\/]/, '').replace(/\.[^.]+$/, '');
+  /** Theme for a section: its title, prefixed by the file when another imported file has a section of that title (« Introduction »). */
+  function themeNameOf(s: DocSection): string {
+    const title = baseTitle(s);
+    const clash = parts.some((p) => p.section.file !== s.file && baseTitle(p.section).toLowerCase() === title.toLowerCase());
+    return clash ? `${fileBase(s.file)} — ${title}` : title;
+  }
 
   async function importFiles(e: Event) {
     const input = e.currentTarget as HTMLInputElement;
@@ -122,7 +142,7 @@
           if (/\.pdf$/i.test(file.name)) {
             const { pdfText } = await import('../app/pdftext');
             text = await pdfText(await file.arrayBuffer());
-            if (!text.trim()) importErrors = [...importErrors, `${file.name} : aucun texte trouvé (PDF scanné ?).`];
+            if (!text.trim()) importErrors = [...importErrors, `${file.name} : aucun texte trouvé (PDF scanné ?).`];
           } else text = await file.text();
           found.push(...splitDocument(file.name, text));
         } catch {
@@ -132,8 +152,11 @@
     } finally {
       reading = false;
     }
-    const known = new Set(parts.map((p) => p.section.id));
-    parts = [...parts, ...splitLong(found).filter((s) => !known.has(s.id)).map((section) => ({ section, on: true, dest: NEW }))];
+    // Importing a file again (edited since) replaces its sections.
+    const again = new Set(found.map((s) => s.file));
+    const replaced = parts.some((p) => again.has(p.section.file));
+    parts = [...parts.filter((p) => !again.has(p.section.file)), ...splitLong(found).map((section) => ({ section, on: true, dest: NEW }))];
+    if (replaced) importErrors = [...importErrors, 'Fichier déjà importé : ses sections ont été remplacées.'];
     rewriting = null;
     instruction = '';
   }
@@ -171,12 +194,12 @@
       const { createAiClient, generateProposals } = await import('../app/ai');
       const client = createAiClient(apiKey.trim());
       const jobs = parts.length
-        ? parts.flatMap((p, i) => {
+        ? parts.flatMap((p) => {
             if (!p.on) return [];
             const theme = themes.find((t) => t.id === p.dest);
-            return [{ part: i, source: p.section.text, themeName: theme?.name ?? baseTitle(p.section), domainName: theme ? domainNameOf(theme) : allThemes.find((t) => t.id === importDomain)?.name }];
+            return [{ part: { ...p, section: { ...p.section, title: p.section.title } }, source: p.section.text, themeName: theme?.name ?? themeNameOf(p.section), domainName: theme ? domainNameOf(theme) : allThemes.find((t) => t.id === importDomain)?.name }];
           })
-        : [{ part: null, source, themeName: themes.find((t) => t.id === themeId)!.name, domainName: domainNameOf(themes.find((t) => t.id === themeId)) }];
+        : [{ part: null as Part | null, source, themeName: themes.find((t) => t.id === themeId)!.name, domainName: domainNameOf(themes.find((t) => t.id === themeId)) }];
       const found: Item[] = [];
       let dropped = 0;
       const failures: string[] = [];
@@ -184,9 +207,9 @@
         progressText = jobs.length > 1 ? `Section ${n + 1} sur ${jobs.length}…` : '';
         const res = await generateProposals(client, { source: job.source, themeName: job.themeName, domainName: job.domainName, audience: currentProfile.audience, types, count, instruction });
         if (!res.ok) {
-          // A refused key or no credit fails every section: stop at the first.
+          // A refused key, no credit or no network fails every section: stop at the first (messages from app/ai.ts).
           if (jobs.length === 1 || /Clé|Crédit|crédit|joindre/.test(res.error)) return void (error = res.error);
-          failures.push(`${parts[job.part!].section.title} : ${res.error}`);
+          failures.push(`${job.part!.section.title} : ${res.error}`);
           continue;
         }
         saveKey();
@@ -210,19 +233,22 @@
   /** Theme of an item; a section's new theme is created on its first card, or reused when the domain has one of that name. */
   async function targetOf(item: Item): Promise<string> {
     if (item.part === null) return themeId;
-    const p = parts[item.part];
+    const p = item.part;
     if (p.dest !== NEW) return p.dest;
-    const name = baseTitle(p.section);
-    const key = `${importDomain}:${name}`;
-    if (created[key] && (await services.repo.listThemes()).some((t) => t.id === created[key])) return created[key];
-    const all = await services.repo.listThemes();
-    const ids = new Set(all.filter(isDomain).map((d) => d.id));
-    const same = all.find((t) => !isDomain(t) && t.name.trim().toLowerCase() === name.trim().toLowerCase() && domainOf(t, ids) === importDomain);
-    created[key] = same?.id ?? (await services.createTheme(name, importDomain || undefined)).id;
+    const name = themeNameOf(p.section);
+    const key = `${importDomain}:${name.trim().toLowerCase()}`;
+    const known = key in created ? await created[key] : null;
+    if (known && (await services.repo.listThemes()).some((t) => t.id === known)) return known;
+    created[key] = (async () => {
+      const all = await services.repo.listThemes();
+      const ids = new Set(all.filter(isDomain).map((d) => d.id));
+      const same = all.find((t) => !isDomain(t) && t.name.trim().toLowerCase() === name.trim().toLowerCase() && domainOf(t, ids) === importDomain);
+      return same?.id ?? (await services.createTheme(name, importDomain || undefined)).id;
+    })();
     return created[key];
   }
 
-  const sourceOf = (item: Item) => (item.part === null ? sourceLabel : `${parts[item.part].section.file.replace(/\.[^.]+$/, '')} — ${baseTitle(parts[item.part].section)}`);
+  const sourceOf = (item: Item) => (item.part === null ? sourceLabel : `${fileBase(item.part.section.file)} — ${baseTitle(item.part.section)}`);
 
   async function save(index: number): Promise<boolean> {
     const item = items[index];
@@ -272,10 +298,25 @@
   }
 
   async function startEdit(index: number) {
-    const item = items[index];
-    editTheme = await targetOf(item);
+    if (adding) return;
+    adding = true;
+    try {
+      const before = new Set((await services.repo.listThemes()).map((t) => t.id));
+      editTheme = await targetOf(items[index]);
+      editCreated = before.has(editTheme) ? null : editTheme;
+      await loadThemes();
+      editingIndex = index;
+    } finally {
+      adding = false;
+    }
+  }
+
+  async function cancelEdit() {
+    editingIndex = null;
+    if (editCreated && (await services.repo.listNotes(editCreated)).length === 0) await services.deleteTheme(editCreated);
+    editCreated = null;
     await loadThemes();
-    editingIndex = index;
+    onchange();
   }
   let editTheme = $state('');
 
@@ -288,8 +329,8 @@
     {services}
     editing={null}
     prefill={{ fields: item.proposal.fields, themeId: editTheme, tags: ['ia'], source: sourceOf(item) }}
-    onsaved={() => { mark(editingIndex!, 'added'); editingIndex = null; onchange(); }}
-    oncancel={() => (editingIndex = null)}
+    onsaved={() => { mark(editingIndex!, 'added'); editingIndex = null; editCreated = null; onchange(); }}
+    oncancel={cancelEdit}
   />
 {:else}
   <main class="page wide">
@@ -328,7 +369,7 @@
                 <span><b>{p.section.title}</b> <span class="muted">· {p.section.file} · {fr(p.section.text.length)} caractères</span></span>
               </label>
               <select class="inline-input" aria-label="Thème de « {p.section.title} »" value={p.dest} onchange={(e) => setPart(i, { dest: e.currentTarget.value })} disabled={!p.on}>
-                <option value={NEW}>Nouveau thème « {baseTitle(p.section)} »</option>
+                <option value={NEW}>Thème « {themeNameOf(p.section)} » (créé au besoin)</option>
                 {#each groupByDomain(allThemes) as g (g.domain?.id ?? 'loose')}
                   {#if g.themes.length}
                     <optgroup label={g.domain?.name ?? 'Sans domaine'}>
@@ -369,9 +410,9 @@
         <div class="field">
           <label class="btn small ghost file-btn" class:disabled={reading}>
             {reading ? 'Lecture des fichiers…' : parts.length ? 'Ajouter des fichiers' : 'Importer des fichiers'}
-            <input type="file" accept=".md,.markdown,.txt,.pdf,text/markdown,text/plain,application/pdf" multiple onchange={importFiles} disabled={reading} />
+            <input type="file" aria-describedby="g-files-hint" accept=".md,.markdown,.txt,.pdf,text/markdown,text/plain,application/pdf" multiple onchange={importFiles} disabled={reading} />
           </label>
-          <span class="hint">Markdown (un export Obsidian par exemple), texte ou PDF, plusieurs à la fois. Chaque titre devient une section, et chaque section un thème.</span>
+          <span class="hint" id="g-files-hint">Markdown (un export Obsidian par exemple), texte ou PDF, plusieurs à la fois. Chaque titre devient une section, et chaque section un thème.</span>
           {#each importErrors as msg (msg)}<span class="hint error">{msg}</span>{/each}
         </div>
       {/if}
@@ -402,6 +443,7 @@
         N’y mets pas d’informations sur des clients identifiables. Rien n’est ajouté sans ton accord.
       </p>
       <button class="btn wide" disabled={busy || reading}>{busy ? progressText || 'Génération en cours…' : parts.length ? `Générer pour ${chosenParts.length} section${chosenParts.length > 1 ? 's' : ''}` : 'Générer les cartes'}</button>
+      <p class="sr" role="status">{progressText}</p>
       {#if error}<p class="error" role="alert">{error}</p>{/if}
     </form>
 

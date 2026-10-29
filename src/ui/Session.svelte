@@ -344,9 +344,9 @@
         {#if revealed}
           <p style="font-weight:700;flex:1 1 200px">{verdict ? 'Claude suggère une note ; c’est toi qui décides.' : 'Compare avec ta réponse. Tu savais ?'}</p>
           <div class="self" class:has-suggestion={!!verdict}>
-            <button class="btn bad" class:suggested={verdict && SUGGESTED[verdict] === 1} aria-keyshortcuts="1" onclick={() => record(false, 1)}>Raté</button>
-            <button class="btn sun" class:suggested={verdict && SUGGESTED[verdict] === 2} aria-keyshortcuts="2" onclick={() => record(true, 2)}>Difficile</button>
-            <button class="btn ok" class:suggested={verdict && SUGGESTED[verdict] === 3} aria-keyshortcuts="3" onclick={() => record(true, 3)}>Su</button>
+            <button class="btn bad" class:suggested={verdict && SUGGESTED[verdict] === 1} aria-keyshortcuts="1" onclick={() => record(false, 1)}>Raté{#if verdict && SUGGESTED[verdict] === 1}<span class="sugg">suggéré</span>{/if}</button>
+            <button class="btn sun" class:suggested={verdict && SUGGESTED[verdict] === 2} aria-keyshortcuts="2" onclick={() => record(true, 2)}>Difficile{#if verdict && SUGGESTED[verdict] === 2}<span class="sugg">suggéré</span>{/if}</button>
+            <button class="btn ok" class:suggested={verdict && SUGGESTED[verdict] === 3} aria-keyshortcuts="3" onclick={() => record(true, 3)}>Su{#if verdict && SUGGESTED[verdict] === 3}<span class="sugg">suggéré</span>{/if}</button>
           </div>
         {:else}
           <span></span><button class="btn ok" onclick={() => (revealed = true)}>Afficher la réponse</button>

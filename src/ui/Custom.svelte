@@ -110,7 +110,7 @@
     <button class="btn sun wide" disabled={size === 0} onclick={() => onstart({ themeIds: picked, mode, limit })}>
       {size === 0 ? 'Aucune carte dans cette sélection' : `Commencer (${size} carte${size > 1 ? 's' : ''})`}
     </button>
-    {#if mode === 'new' && size > 0}
+    {#if mode === 'new' && size > 0 && progress.loadPerNew > 0}
       <p class="muted">Environ {Math.round(size * progress.loadPerNew)} révisions de plus dans les 30 prochains jours, si tu les réussis à chaque fois.</p>
     {/if}
     {#if size === 0 && picked.length > 0}

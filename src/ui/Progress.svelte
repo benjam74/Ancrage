@@ -41,8 +41,8 @@
   <div class="kpis">
     <div class="panel kpi">
       <span class="eyebrow">Rétention réelle</span>
-      <span class="v">{progress.retention === null ? '—' : `${Math.round(progress.retention * 1000) / 10} %`.replace('.', ',')}</span>
-      <span class="muted">{progress.retention === null ? 'Disponible après tes premières révisions dues.' : 'Réussite sur les cartes dues, 30 derniers jours. Objectif FSRS : 90 %.'}</span>
+      <span class="v">{ins.windows[0].rate === null ? '—' : `${Math.round(ins.windows[0].rate * 1000) / 10} %`.replace('.', ',')}</span>
+      <span class="muted">{ins.windows[0].rate === null ? 'Disponible après tes premières révisions dues.' : 'Réussite sur les cartes dues, 30 derniers jours. Objectif FSRS : 90 %.'}</span>
     </div>
     <div class="panel kpi">
       <span class="eyebrow">Cartes ancrées</span>
@@ -65,8 +65,8 @@
   </div>
 
   <section class="panel works" aria-labelledby="works-title">
-    <h3 id="works-title">Est-ce que ça marche ?</h3>
-    <p class="muted">La vraie mesure : la part des cartes que tu retrouves quand elles reviennent à leur date. Entre 80 et 95 %, la répétition espacée fait son travail.</p>
+    <h3 id="works-title">Est-ce que ça marche ?</h3>
+    <p class="muted">La vraie mesure : la part des cartes que tu retrouves quand elles reviennent à leur date. Entre 80 et 95 %, la répétition espacée fait son travail.</p>
     <div class="works-grid">
       {#each ins.windows as w (w.days)}
         <div class="works-tile">

@@ -3,6 +3,7 @@
   import type { Note, NoteFields, Theme } from '../core/model';
   import { REWORD_INSTRUCTION, describeNote } from '../core/generate';
   import type { Rewrite } from './Generate.svelte';
+  import { HARD_LAPSES } from '../core/hard';
   import { TYPE_LABEL } from './format';
   import { groupByDomain, isDomain } from '../core/domains';
   import { EXAMPLES } from '../app/current';
@@ -71,8 +72,10 @@
     await done(on ? 'Note mise de côté : elle ne revient plus en révision.' : 'Note reprise : elle revient dans tes révisions.');
   }
 
+  const short = (text: string) => (text.length > 60 ? `${text.slice(0, 60).replace(/\s+\S*$/, '')}…` : text);
+
   function reword(note: Note) {
-    onreword({ nonce: Date.now(), noteId: note.id, source: describeNote(note.fields), themeId: note.themeId, instruction: REWORD_INSTRUCTION, label: summary(note.fields).slice(0, 60) });
+    onreword({ nonce: Date.now(), noteId: note.id, source: describeNote(note.fields), themeId: note.themeId, instruction: REWORD_INSTRUCTION, label: short(summary(note.fields)) });
   }
 
   async function addTheme(e: SubmitEvent) {
@@ -166,7 +169,7 @@
   {#if hard.length}
     <section class="panel" aria-labelledby="hard-title">
       <h2 id="hard-title">Cartes difficiles</h2>
-      <p class="muted">Oubliées au moins 4 fois. Une carte qui résiste est souvent trop chargée ou ambiguë : reformule-la, scinde-la, ou mets-la de côté.</p>
+      <p class="muted">Oubliées au moins {HARD_LAPSES} fois. Une carte qui résiste est souvent trop chargée ou ambiguë : reformule-la, scinde-la, ou mets-la de côté.</p>
       <ul class="note-list">
         {#each hard as { note, theme, lapses } (note.id)}
           <li class="note-item">
