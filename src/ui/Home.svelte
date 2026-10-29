@@ -19,7 +19,7 @@
   const vsMax = $derived(Math.max(progress.xpWeek, progress.xpPrevAvg ?? 0, 1));
   const focus = $derived(activeTheme(progress.themes));
   const todayIndex = $derived(progress.week.findIndex((d) => d.dayStart === studyDayStart(Date.now())));
-  const repairDay = $derived(progress.repair && todayIndex > 0 ? progress.week[todayIndex - 1].dayStart : null);
+  const repairDay = $derived(progress.repair && today.queue.length > 0 && todayIndex > 0 ? progress.week[todayIndex - 1].dayStart : null);
   const days = (n: number) => `${n} jour${n > 1 ? 's' : ''}`;
   const record = $derived(progress.xpPrevBest !== null && progress.xpWeek > progress.xpPrevBest);
 </script>

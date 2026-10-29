@@ -206,7 +206,7 @@
   next().catch((e) => (error = String(e)));
 </script>
 
-<svelte:window onkeydown={(e) => { primeAudio(); onkey(e); }} onpointerdown={primeAudio} />
+<svelte:window onkeydown={(e) => { if (prefs.sound) primeAudio(); onkey(e); }} onpointerdown={() => { if (prefs.sound) primeAudio(); }} />
 
 <div class="session" role="dialog" aria-modal="true" aria-label="Séance de révision">
   <div class="s-head">
