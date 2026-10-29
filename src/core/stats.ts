@@ -74,3 +74,19 @@ export function stateBreakdown(states: CardState[]): { nouvelles: number; appren
   }
   return out;
 }
+
+const THRESHOLDS: [Level, number][] = [['En cours', 25], ['Solide', 60], ['Ancré', 90]];
+
+/** Next level and how many more mastered cards reach it; `null` when anchored or empty. */
+export function nextLevel(cards: number, mastered: number, reviewed: boolean): { level: Level; remaining: number } | null {
+  if (cards === 0) return null;
+  if (!reviewed) return { level: 'Découverte', remaining: 0 };
+  for (const [level, pct] of THRESHOLDS) {
+    // Smallest count whose exact share reaches the threshold (same rule as levelOf).
+    let needed = Math.ceil((pct / 100) * cards);
+    while (needed > 0 && ((needed - 1) / cards) * 100 >= pct) needed--;
+    while ((needed / cards) * 100 < pct) needed++;
+    if (mastered < needed) return { level, remaining: needed - mastered };
+  }
+  return null;
+}
