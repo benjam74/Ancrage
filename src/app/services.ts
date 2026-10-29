@@ -468,8 +468,10 @@ export function createServices(repo: Repo, deviceId: string): Services {
     async shop() {
       const snap = await snapshot();
       const earned = xpBetween(snap.reviews, snap.kinds, snap.roundEnds, -Infinity, Infinity, comebackRounds(snap.roundEnds));
+      const credits = snap.events.reduce((n, e) => n + (e.type === 'xp_credit' ? e.xp : 0), 0);
       return {
-        earned,
+        // Shown to the learner: XP kept from deleted notes counts as earned.
+        earned: earned + credits,
         balance: wallet(earned, snap.events),
         owned: owned(snap.events),
         outfit: outfit(snap.events),

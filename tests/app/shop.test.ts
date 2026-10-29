@@ -79,6 +79,19 @@ describe('shop services', () => {
 });
 
 describe('deleting history keeps the XP to spend', () => {
+  test('deleting one note credits the XP its reviews earned, once', async () => {
+    await earn45();
+    const before = await services.shop(NOW + 2000);
+    const reviewed = (await services.repo.listReviews()).map((r) => r.cardId);
+    const cards = await services.repo.listCards();
+    const target = (await services.repo.listNotes()).find((n) => cards.some((c) => c.noteId === n.id && reviewed.includes(c.id)))!;
+    await services.deleteNote(target.id);
+    const after = await services.shop(NOW + 3000);
+    expect(after.balance).toBe(before.balance);
+    expect(after.earned).toBe(before.earned);
+    expect((await services.repo.listEvents()).filter((e) => e.type === 'xp_credit').map((e) => e.id)).toEqual([`credit:${target.id}`]);
+  });
+
   test('removing the examples after earning XP leaves the wallet intact', async () => {
     await earn45();
     await services.completeRound(NOW + 1500, NOW + 1600);
