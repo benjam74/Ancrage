@@ -70,3 +70,11 @@ describe('avatar', () => {
     expect(avatarOf(events)).toEqual({ character: 'lapin', name: 'Pompon' });
   });
 });
+
+describe('art', () => {
+  test('every catalogue item has a drawing for its slot, and nothing else is drawn', async () => {
+    const { ART } = await import('../../src/data/art');
+    expect(Object.keys(ART).sort()).toEqual(CATALOG.map((i) => i.id).sort());
+    for (const i of CATALOG) expect(ART[i.id].slot, i.id).toBe(i.slot);
+  });
+});

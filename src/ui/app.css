@@ -324,3 +324,13 @@ p.error { font-weight: 700; color: var(--bad); }
 .mode-title { font-family: var(--display); font-weight: 900; font-size: 17px; display: flex; gap: 8px; align-items: center; }
 .mode .muted { font-size: 14px; }
 .hero .btn.hero-pick { --b: transparent; --bd: rgba(0,0,0,.2); --fg: #fff; border: 2px solid rgba(255,255,255,.45); box-shadow: none; }
+
+/* v1.5 avatar */
+.avatar-svg { display: block; width: 100%; height: auto; overflow: visible; }
+.avatar-svg .avatar-body { transform-origin: 50% 90%; }
+.avatar-svg.idle .avatar-body { animation: breathe 3.2s ease-in-out infinite; }
+.avatar-svg.walk .avatar-body { animation: walk .3s ease-in-out infinite alternate; }
+.avatar-svg.jump .avatar-body { animation: hop .6s cubic-bezier(.3,1.6,.5,1) 2; }
+@keyframes breathe { 50% { transform: scale(1.015, .985); } }
+@keyframes walk { from { transform: rotate(-4deg) translateY(0); } to { transform: rotate(4deg) translateY(-3px); } }
+@keyframes hop { 50% { transform: translateY(-18px) scale(1.03); } }
