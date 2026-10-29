@@ -12,6 +12,23 @@ export const XP = { due: 10, new: 5, early: 0, round: 20, comeback: 20 } as cons
 export type DayStatus = 'done' | 'freeze' | 'rest' | 'missed' | 'repaired';
 export type StripDay = { dayStart: number; status: DayStatus | 'today' | 'future' | 'none' };
 
+/** New cards per study day that earn XP: adding cards in bulk must not pay (no farming). */
+export const XP_NEW_CAP = 20;
+
+/** Beyond XP_NEW_CAP new cards in a study day, the next ones earn nothing (they still count as reviews). */
+export function capNewXp(kinds: Map<string, EntryKind>, entries: ReviewEntry[], cap = XP_NEW_CAP): Map<string, EntryKind> {
+  const out = new Map(kinds);
+  const perDay = new Map<number, number>();
+  for (const e of [...entries].sort(byTimeThenId)) {
+    if (out.get(e.id) !== 'new') continue;
+    const d = studyDayStart(e.ts);
+    const n = (perDay.get(d) ?? 0) + 1;
+    perDay.set(d, n);
+    if (n > cap) out.set(e.id, 'early');
+  }
+  return out;
+}
+
 /** Rounds needed the day after a missed day to repair the streak. */
 export const REPAIR_ROUNDS = 2;
 /** Study days since the previous goal day that make a round a comeback. */

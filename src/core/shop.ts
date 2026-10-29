@@ -5,6 +5,7 @@ export const SLOTS: Slot[] = ['haut', 'bas', 'chapeau', 'lunettes', 'cou', 'obje
 export const CHARACTERS: CharacterId[] = ['renard', 'loutre', 'ourson', 'lapin'];
 export const TIER_BANDS: Record<Tier, [number, number]> = { commun: [60, 150], rare: [300, 600], epique: [1000, 1800], legendaire: [3000, 6000] };
 export const NAME_MAX = 20;
+export const CHARACTER_NAMES: Record<CharacterId, string> = { renard: 'Renard', loutre: 'Loutre', ourson: 'Ourson', lapin: 'Lapin' };
 export const DEFAULT_AVATAR: { character: CharacterId; name: string } = { character: 'renard', name: 'Renard' };
 
 const byTime = (a: AppEvent, b: AppEvent) => a.ts - b.ts || a.id.localeCompare(b.id);
