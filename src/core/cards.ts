@@ -27,6 +27,8 @@ export function cardVariants(fields: NoteFields): string[] {
         return n === 1 ? key : `${key}#${n}`;
       });
     }
+    case 'image':
+      return fields.masks.map((m) => m.id);
     default:
       return ['main'];
   }

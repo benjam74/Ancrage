@@ -5,7 +5,7 @@ import { DEFAULT_PREFS, loadPrefs, savePrefs } from '../../src/app/prefs';
 describe('device preferences', () => {
   test('defaults when nothing is stored', () => {
     expect(loadPrefs(memoryStorage())).toEqual(DEFAULT_PREFS);
-    expect(DEFAULT_PREFS).toEqual({ sound: true, haptics: true, motion: true, showStreak: true, dailyRounds: 1, plan: null, goal: null, lastChapter: null, domain: null });
+    expect(DEFAULT_PREFS).toEqual({ sound: true, haptics: true, motion: true, showStreak: true, dailyRounds: 1, plan: null, goal: null, lastChapter: null, domain: null, readAloud: false });
   });
 
   test('round trip', () => {
@@ -23,5 +23,18 @@ describe('device preferences', () => {
     expect(loadPrefs(store)).toEqual({ ...DEFAULT_PREFS, haptics: false });
     store.set('ancrage.prefs', 'null');
     expect(loadPrefs(store)).toEqual(DEFAULT_PREFS);
+  });
+});
+
+describe('reading aloud', () => {
+  test('off by default, kept when set, a wrong value falls back to off', async () => {
+    const { loadPrefs, savePrefs, DEFAULT_PREFS } = await import('../../src/app/prefs');
+    const { memoryStorage } = await import('../../src/app/cloud');
+    const store = memoryStorage();
+    expect(loadPrefs(store).readAloud).toBe(false);
+    savePrefs(store, { ...DEFAULT_PREFS, readAloud: true });
+    expect(loadPrefs(store).readAloud).toBe(true);
+    store.set('ancrage.prefs', JSON.stringify({ readAloud: 'yes' }));
+    expect(loadPrefs(store).readAloud).toBe(false);
   });
 });

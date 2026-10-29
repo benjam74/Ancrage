@@ -1,7 +1,7 @@
 import { State } from 'ts-fsrs';
 import { createEngine, type Engine } from '../core/engine';
 import { newId } from '../core/ids';
-import type { Card, CharacterId, Note, NoteFields, ReviewEntry, Slot, Theme } from '../core/model';
+import type { Card, CharacterId, Lang, Note, NoteFields, ReviewEntry, Slot, Theme } from '../core/model';
 import { validateFields } from '../core/validate';
 import { validateSettings } from '../core/settings';
 import { backupFileName, serializeBackup, type Dump } from '../core/backup';
@@ -137,7 +137,10 @@ export interface Services {
   setAvatar(character: CharacterId, name: string, now: number): Promise<void>;
   /** A session the learner picks (themes, mode, count); ignores the daily new-card limit. */
   custom(now: number, choice: CustomChoice): Promise<string[]>;
-  context(cardId: string): Promise<{ note: Note; card: Card; pool: Note[]; theme: Theme }>;
+  /** `lang`: the theme's reading language, else its domain's, else French. */
+  context(cardId: string): Promise<{ note: Note; card: Card; pool: Note[]; theme: Theme; lang: Lang }>;
+  /** Reading language of a theme or domain; null goes back to inheriting. */
+  setLang(themeId: string, lang: Lang | null): Promise<void>;
   saveNote(input: NoteInput, now: number): Promise<SaveResult>;
   deleteNote(id: string): Promise<void>;
   /** A theme (chapter), in a domain when one is given. */
@@ -341,9 +344,18 @@ export function createServices(repo: Repo, deviceId: string): Services {
       const card = await repo.getCard(cardId);
       const note = card && (await repo.getNote(card.noteId));
       if (!card || !note) throw new Error(`card ${cardId} not found`);
-      const theme = (await repo.listThemes()).find((t) => t.id === note.themeId) ?? { id: note.themeId, name: 'Sans thème', order: 0 };
+      const themes = await repo.listThemes();
+      const theme = themes.find((t) => t.id === note.themeId) ?? { id: note.themeId, name: 'Sans thème', order: 0 };
       const pool = (await repo.listNotes(note.themeId)).filter((n) => n.id !== note.id);
-      return { note, card, pool, theme };
+      const domain = themes.find((t) => t.id === domainOf(theme, new Set(themes.filter(isDomain).map((d) => d.id))));
+      return { note, card, pool, theme, lang: theme.lang ?? domain?.lang ?? 'fr-FR' };
+    },
+
+    async setLang(themeId, lang) {
+      const theme = (await repo.listThemes()).find((t) => t.id === themeId);
+      if (!theme || (theme.lang ?? null) === lang) return;
+      const { lang: _, ...rest } = theme;
+      await repo.putTheme({ ...rest, ...(lang ? { lang } : {}), updatedAt: Math.max(Date.now(), (theme.updatedAt ?? 0) + 1) });
     },
 
     async saveNote(input, now) {

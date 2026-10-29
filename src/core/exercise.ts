@@ -1,12 +1,19 @@
 import { cardVariants } from './cards';
 import { checkChoice, checkOrder, checkTyped, normalizeAnswer } from './check';
-import type { Card, Mode, Note } from './model';
+import type { Card, Mask, Mode, Note } from './model';
+
+/** An image with its zones; `target` is the zone to find, hidden and marked with « ? ». */
+export interface Figure {
+  src: string;
+  masks: Mask[];
+  target: string;
+}
 
 export type Exercise =
-  | { kind: 'choice'; prompt: string; quote?: string; options: string[]; answerIndex: number; explain?: string }
-  | { kind: 'typed'; prompt: string; before: string; after: string; expected: string }
+  | { kind: 'choice'; prompt: string; quote?: string; options: string[]; answerIndex: number; explain?: string; figure?: Figure }
+  | { kind: 'typed'; prompt: string; before: string; after: string; expected: string; figure?: Figure }
   | { kind: 'order'; prompt: string; steps: string[]; shuffled: number[]; given: number }
-  | { kind: 'reveal'; prompt: string; quote?: string; front: string; back: string; keyPoints: string[]; /** A coaching scenario, whose written answer the AI can assess. */ coaching?: true };
+  | { kind: 'reveal'; prompt: string; quote?: string; front: string; back: string; keyPoints: string[]; /** A coaching scenario, whose written answer the AI can assess. */ coaching?: true; figure?: Figure };
 
 export type Answer = { kind: 'choice'; index: number } | { kind: 'typed'; text: string } | { kind: 'order'; order: number[] };
 
@@ -121,6 +128,21 @@ export function buildExercise(note: Note, card: Card, mode: Mode, pool: Note[], 
     }
     case 'scenario':
       return { kind: 'reveal', prompt: 'Ton client te dit :', quote: f.situation, front: 'Quelle question poses-tu ?', back: f.model, keyPoints: f.keyPoints, coaching: true };
+    case 'image': {
+      const target = f.masks.find((m) => m.id === card.variant) ?? f.masks[0];
+      const figure: Figure = { src: f.image, masks: f.masks, target: target.id };
+      const prompt = f.title.trim() || 'Que cache la zone\u202f?';
+      if (!target.label) return { kind: 'reveal', prompt, front: 'Rappelle-toi ce que cache la zone, puis découvre-la.', back: 'Compare avec l’image découverte.', keyPoints: [], figure };
+      if (mode === 'recognition') {
+        const others = [
+          ...f.masks.map((m) => m.label),
+          ...pool.flatMap((n) => (n.fields.type === 'image' ? n.fields.masks.map((m) => m.label) : [])),
+        ];
+        const distractors = pickDistractors(target.label, others, 3, rng);
+        if (distractors.length >= 2) return { ...choice(prompt, target.label, distractors, rng), figure } as Exercise;
+      }
+      return { kind: 'typed', prompt, before: '', after: '', expected: target.label, figure };
+    }
   }
 }
 

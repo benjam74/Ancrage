@@ -1,6 +1,9 @@
 import { clozeGaps } from './cards';
 import { checkChoice, normalizeAnswer } from './check';
-import type { NoteFields } from './model';
+import type { Mask, NoteFields } from './model';
+
+/** Smallest zone side, as a fraction of the image. */
+export const MIN_ZONE = 0.02;
 
 const REQUIRED = 'Ce champ est obligatoire.';
 
@@ -48,6 +51,17 @@ export function validateFields(fields: NoteFields): Record<string, string> {
       required('situation', fields.situation);
       required('model', fields.model);
       break;
+    case 'image': {
+      if (!/^data:image\//.test(fields.image)) errors.image = 'Choisis une image.';
+      const inside = (m: Mask) =>
+        [m.x, m.y, m.w, m.h].every(Number.isFinite) && m.x >= 0 && m.y >= 0 && m.w >= MIN_ZONE && m.h >= MIN_ZONE && m.x + m.w <= 1.0001 && m.y + m.h <= 1.0001;
+      const labels = fields.masks.map((m) => normalizeAnswer(m.label)).filter(Boolean);
+      if (fields.masks.length === 0) errors.masks = 'Trace au moins une zone à masquer sur l’image.';
+      else if (!fields.masks.every(inside)) errors.masks = 'Une zone est trop petite ou dépasse de l’image.';
+      else if (new Set(fields.masks.map((m) => m.id)).size !== fields.masks.length) errors.masks = 'Deux zones ont le même identifiant.';
+      else if (new Set(labels).size !== labels.length) errors.masks = 'Deux zones ont la même réponse.';
+      break;
+    }
   }
   return errors;
 }
