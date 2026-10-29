@@ -1,6 +1,7 @@
 import { State } from 'ts-fsrs';
 import type { ReviewEntry } from './model';
 import { studyDayStart } from './queue';
+import { ROUND_SIZE } from './round';
 import { byTimeThenId, type Scheduler } from './scheduler';
 
 export type EntryKind = 'new' | 'due' | 'early';
@@ -145,6 +146,12 @@ export function weekStrip(history: Map<number, DayStatus>, todayStart: number, t
     out.push({ dayStart: d, status });
   }
   return out;
+}
+
+/** Daily goal ring: answers today out of the goal's cards, never more than what is left to do. */
+export function dailyRing(answersToday: number, remaining: number, dailyRounds: number): { done: number; target: number } {
+  const target = Math.max(1, Math.min(dailyRounds * ROUND_SIZE, answersToday + remaining));
+  return { done: Math.min(answersToday, target), target };
 }
 
 export function weekStart(now: number): number {
