@@ -4,6 +4,8 @@
   import { prefs, updatePrefs } from './prefs.svelte';
 
   let editing = $state(false);
+  // Collapsed to one line until asked for: the plan helps, but it must not take over the home screen.
+  let open = $state(false);
   let time = $state(prefs.plan?.time ?? '08:00');
   let cue = $state(prefs.plan?.cue ?? '');
 
@@ -38,10 +40,12 @@
     <div class="actions">
       <button class="btn small" onclick={download}>Ajouter à mon agenda</button>
       <button class="btn small ghost" onclick={() => (editing = true)}>Modifier</button>
-      <button class="btn small ghost" onclick={() => updatePrefs({ plan: null })}>Retirer</button>
+      <button class="btn small ghost" onclick={() => { updatePrefs({ plan: null }); open = false; }}>Retirer</button>
     </div>
+  {:else if !open && !editing}
+    <div class="row"><p class="muted">Choisis un moment fixe pour ta manche.</p><button class="btn small ghost" onclick={() => (open = true)}>Fixer un rendez-vous</button></div>
   {:else}
-    <p class="muted">Quand feras-tu ta manche ? Décider d’un moment précis aide beaucoup à tenir.</p>
+    <p class="muted">Quand feras-tu ta manche ? Décider d’un moment précis aide beaucoup à tenir.</p>
     <form class="plan-form" onsubmit={save}>
       <div class="field time"><label for="plan-time">Heure</label><input id="plan-time" type="time" bind:value={time} required /></div>
       <div class="field"><label for="plan-cue">Moment</label><input id="plan-cue" bind:value={cue} maxlength="80" placeholder="Ex. après le café" /></div>

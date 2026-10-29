@@ -1,7 +1,23 @@
 /** Calendar file for the daily study appointment: the cue that turns the plan into a habit. */
 
 const pad = (n: number) => String(n).padStart(2, '0');
-const escape = (text: string) => text.replace(/\\/g, '\\\\').replace(/\n/g, '\\n').replace(/,/g, '\\,').replace(/;/g, '\;');
+const escape = (text: string) => text.replace(/\\/g, '\\\\').replace(/\n/g, '\\n').replace(/,/g, '\\,').replace(/;/g, '\\;');
+
+/** RFC 5545: lines longer than 75 octets continue on the next line after a space. */
+function fold(line: string): string {
+  const bytes = (s: string) => new TextEncoder().encode(s).length;
+  const parts: string[] = [];
+  let current = '';
+  for (const ch of line) {
+    if (bytes(current + ch) > (parts.length ? 74 : 75)) {
+      parts.push(current);
+      current = '';
+    }
+    current += ch;
+  }
+  parts.push(current);
+  return parts.join('\r\n ');
+}
 
 function stamp(d: Date, utc: boolean): string {
   return utc
@@ -35,5 +51,5 @@ export function dailyEventIcs(opts: { time: string; cue: string; now: number; ui
     'END:VEVENT',
     'END:VCALENDAR',
   ];
-  return lines.join('\r\n') + '\r\n';
+  return lines.map(fold).join('\r\n') + '\r\n';
 }

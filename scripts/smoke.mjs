@@ -371,6 +371,7 @@ if ((await fresh13.locator('.ring').getAttribute('aria-label')) !== 'Objectif du
 if ((await fresh13.locator('.week-card .wd.today').count()) !== 1) fail('fresh week strip should mark today');
 await fresh13.screenshot({ path: `${OUT}/home-fresh.png`, fullPage: true });
 await app.goto(`${URL}#accueil`);
+await app.getByRole('button', { name: 'Fixer un rendez-vous' }).click();
 await app.getByLabel('Heure').fill('07:30');
 await app.getByLabel('Moment').fill('après le café');
 await app.getByRole('button', { name: 'Fixer le rendez-vous' }).click();

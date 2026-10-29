@@ -1,9 +1,20 @@
 import type { Prefs } from '../app/prefs';
 
 /** Short sounds and vibrations tied to the verdict: brief, informative, and off when the preferences say so. */
-export function createFeedback(getPrefs: () => Prefs) {
-  let ctx: AudioContext | null = null;
+// One context for the whole app: browsers limit how many can be open at once.
+let ctx: AudioContext | null = null;
 
+/** Creates or resumes audio inside a user gesture, so iOS lets the next sound play. */
+export function primeAudio(): void {
+  try {
+    ctx ??= new AudioContext();
+    if (ctx.state === 'suspended') ctx.resume().catch(() => {});
+  } catch {
+    // No audio on this device.
+  }
+}
+
+export function createFeedback(getPrefs: () => Prefs) {
   function tone(freq: number, start: number, length: number, type: OscillatorType, gain: number) {
     if (!ctx) return;
     const osc = ctx.createOscillator();
@@ -22,8 +33,7 @@ export function createFeedback(getPrefs: () => Prefs) {
   function play(notes: [number, number, number][], type: OscillatorType, gain: number) {
     if (!getPrefs().sound) return;
     try {
-      ctx ??= new AudioContext();
-      if (ctx.state === 'suspended') void ctx.resume();
+      primeAudio();
       for (const [freq, start, length] of notes) tone(freq, start, length, type, gain);
     } catch {
       // No audio on this device: the visual feedback is enough.

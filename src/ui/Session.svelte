@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { untrack } from 'svelte';
+  import { tick, untrack } from 'svelte';
   import type { Services } from '../app/services';
   import { buildExercise, expectedText, isCorrect, makeRng, type Answer, type Exercise } from '../core/exercise';
   import type { Mode, ReviewEntry } from '../core/model';
@@ -9,7 +9,7 @@
   import { MODE_LABEL, RATING_LABEL, inHowLong } from './format';
   import type { Progress, RoundOutcome } from '../app/services';
   import { REPAIR_ROUNDS } from '../core/progress';
-  import { createFeedback } from './feedback';
+  import { createFeedback, primeAudio } from './feedback';
   import Icon from './Icon.svelte';
   import { motionOn, prefs, updatePrefs } from './prefs.svelte';
   import WeekStrip from './WeekStrip.svelte';
@@ -36,6 +36,9 @@
   /** The round end shows the summary first, then the streak. */
   let endStep = $state<'summary' | 'streak'>('summary');
   let combo = $state(0);
+  /** Count before the last verdict, so a correction can recount it. */
+  let comboBefore = 0;
+  let bestBefore = 0;
   let bestCombo = $state(0);
   const feedback = createFeedback(() => prefs);
   let xpShown = $state(0);
@@ -111,6 +114,8 @@
 
   /** Answers in a row and the sound or vibration that goes with the verdict. */
   function react(correct: boolean) {
+    comboBefore = combo;
+    bestBefore = bestCombo;
     combo = correct ? combo + 1 : 0;
     bestCombo = Math.max(bestCombo, combo);
     if (correct) feedback.correct(combo);
@@ -141,6 +146,8 @@
     const state = await services.engine.correctLast(result.entry.id, flipped, Date.now());
     const log = await services.repo.listReviews(result.entry.cardId);
     result = { correct: flipped, entry: log[log.length - 1], state, corrected: true };
+    combo = flipped ? comboBefore + 1 : 0;
+    bestCombo = Math.max(bestBefore, combo);
   });
 
   const proceed = once(async () => {
@@ -160,7 +167,16 @@
   });
 
   const showStreakStep = $derived(!!roundResult && !!after && prefs.showStreak);
-  const missed = $derived(round.answered - round.correct);
+  // Counted per card on its first pass: a card missed then retried is one miss, not two answers.
+  const cards = $derived(round.total - round.retried.length);
+  const missed = $derived(round.retried.length);
+
+  // The footer button is replaced between steps: keep keyboard focus on it.
+  $effect(() => {
+    if (!ended) return;
+    void endStep;
+    tick().then(() => document.querySelector<HTMLButtonElement>('.s-foot .btn')?.focus());
+  });
 
   function finish() {
     if (endStep === 'summary' && showStreakStep) endStep = 'streak';
@@ -190,13 +206,13 @@
   next().catch((e) => (error = String(e)));
 </script>
 
-<svelte:window onkeydown={onkey} />
+<svelte:window onkeydown={(e) => { primeAudio(); onkey(e); }} onpointerdown={primeAudio} />
 
 <div class="session" role="dialog" aria-modal="true" aria-label="Séance de révision">
   <div class="s-head">
     <button class="icon-btn" aria-label="Quitter la séance" onclick={exit}>✕</button>
-    <div class="s-progress" class:hot={combo >= 3} role="progressbar" aria-valuenow={Math.round(progress)} aria-valuemin="0" aria-valuemax="100"><i style="width:{progress}%"></i></div>
-    <button class="icon-btn" aria-label={prefs.sound ? 'Couper le son' : 'Activer le son'} aria-pressed={!prefs.sound} onclick={() => updatePrefs({ sound: !prefs.sound })}>
+    <div class="s-progress" class:hot={combo >= 3} role="progressbar" aria-label="Progression de la manche" aria-valuenow={Math.round(progress)} aria-valuemin="0" aria-valuemax="100"><i style="width:{progress}%"></i></div>
+    <button class="icon-btn" aria-label="Son" aria-pressed={prefs.sound} onclick={() => updatePrefs({ sound: !prefs.sound })}>
       <svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
         <path d="M4 9h4l5-4v14l-5-4H4z" fill="currentColor" />
         {#if prefs.sound}<path d="M16.5 8.5a5 5 0 0 1 0 7M19 6a8.5 8.5 0 0 1 0 12" />{:else}<path d="m17 9 5 6m0-6-5 6" />{/if}
@@ -204,6 +220,7 @@
     </button>
   </div>
 
+  <p class="sr" aria-live="polite">{combo >= 3 ? `${combo} bonnes réponses d’affilée` : ''}</p>
   <div class="s-stage">
     {#if error}
       <div class="s-inner"><p>Une erreur est survenue : {error}</p></div>
@@ -219,8 +236,8 @@
           <p class="end-note">{roundResult.milestone >= 30 ? 'Une vraie habitude : elle tient sans effort de volonté.' : 'Une semaine entière. Une habitude met environ deux mois à s’installer : tu es sur la bonne voie.'}</p>
         {:else if roundResult.repaired}
           <p class="end-note"><b>Série récupérée.</b> Le jour manqué ne compte plus contre toi.</p>
-        {:else if after.repair}
-          <p class="end-note">Encore {REPAIR_ROUNDS - after.repair.rounds} manche{REPAIR_ROUNDS - after.repair.rounds > 1 ? 's' : ''} aujourd’hui pour récupérer ta série de {after.repair.lost} jours.</p>
+        {:else if after.repair && hasMore}
+          <p class="end-note">Encore {REPAIR_ROUNDS - after.repair.rounds} manche{REPAIR_ROUNDS - after.repair.rounds > 1 ? 's' : ''} aujourd’hui pour récupérer ta série de {after.repair.lost} jour{after.repair.lost > 1 ? 's' : ''}.</p>
         {:else if roundResult.firstGoalToday}
           <p class="end-note">Journée validée. Reviens demain pour faire grandir ta série.</p>
         {/if}
@@ -233,13 +250,13 @@
         {#if roundResult?.comeback}<p class="badge">Bon retour : +20 XP</p>{/if}
         <div class="tiles three">
           <div class="stat-tile" style="--c:var(--sun);--h-ink:var(--on-sun)"><div class="h">XP gagnée</div><div class="v" aria-label="{roundResult?.xp ?? 0} XP">+{xpShown}</div></div>
-          <div class="stat-tile" style="--c:var(--ok);--h-ink:var(--on-ok)"><div class="h">Justes</div><div class="v">{round.correct}/{round.answered}</div></div>
+          <div class="stat-tile" style="--c:var(--ok);--h-ink:var(--on-ok)"><div class="h">Justes</div><div class="v">{cards - missed}/{cards}</div></div>
           <div class="stat-tile" style="--c:var(--petrol);--h-ink:var(--on-petrol)"><div class="h">Durée</div><div class="v">{Math.max(1, Math.round((Date.now() - roundStartedAt) / 60_000))} min</div></div>
         </div>
-        {#if bestCombo >= 3}<p class="combo"><Icon name="flame" />Meilleure série : {bestCombo} d’affilée</p>{/if}
+        {#if bestCombo >= 3}<p class="combo"><Icon name="flame" />Meilleure série : {bestCombo} d’affilée</p>{/if}
         {#if missed > 0}
-          <p class="muted end-note">{missed} carte{missed > 1 ? 's' : ''} reviendr{missed > 1 ? 'ont' : 'a'} bientôt : c’est en {missed > 1 ? 'les' : 'la'} retrouvant que tu {missed > 1 ? 'les ' : 'l’'}ancres.</p>
-        {:else if round.answered > 0}
+          <p class="muted end-note">{missed} carte{missed > 1 ? 's' : ''} reviendr{missed > 1 ? 'ont' : 'a'} bientôt : c’est en {missed > 1 ? 'les' : 'la'} retrouvant que tu {missed > 1 ? 'les ' : 'l’'}ancres.</p>
+        {:else if cards > 0}
           <p class="muted end-note">Sans faute. Les prochaines révisions s’espacent.</p>
         {/if}
         <p class="muted">{hasMore ? 'Il reste des cartes pour aujourd’hui.' : 'Tout est fait pour aujourd’hui.'}</p>
@@ -248,7 +265,7 @@
       {#key shown.cardId + ':' + round.done}
         <div class="s-inner">
           <div class="kicker">
-            {#if combo >= 3}<span class="combo" aria-live="polite"><Icon name="flame" />{combo} d’affilée</span>{/if}
+            {#if combo >= 3}<span class="combo" aria-hidden="true"><Icon name="flame" />{combo} d’affilée</span>{/if}
             {#if shown.retry}<span class="pill retry">À revoir</span>{:else if shown.isNew}<span class="pill new">Nouvelle carte</span>{/if}
             <span class="pill">{shown.themeName}</span>
           </div>
@@ -288,7 +305,7 @@
         <button class="btn" class:ok={result.correct} class:bad={!result.correct} onclick={proceed}>Continuer</button>
       {:else if shown?.ex.kind === 'reveal'}
         {#if revealed}
-          <p style="font-weight:700;flex:1 1 200px">Compare avec ta réponse. Tu savais ?</p>
+          <p style="font-weight:700;flex:1 1 200px">Compare avec ta réponse. Tu savais ?</p>
           <div class="self">
             <button class="btn bad" aria-keyshortcuts="1" onclick={() => record(false, 1)}>Raté</button>
             <button class="btn sun" aria-keyshortcuts="2" onclick={() => record(true, 2)}>Difficile</button>

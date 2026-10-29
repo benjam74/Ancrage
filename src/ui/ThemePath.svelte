@@ -1,18 +1,11 @@
 <script lang="ts">
   import type { ThemeProgress } from '../app/services';
-  import { LEVEL_COLORS } from './levels';
+  import { LEVEL_COLORS, activeTheme, nextText } from './levels';
 
   let { themes, onstart }: { themes: ThemeProgress[]; onstart: () => void } = $props();
   const R = 35;
   const C = 2 * Math.PI * R;
-  // Active node: the theme closest to its next level, themes already started first.
-  const activeId = $derived(
-    [...themes]
-      .filter((t) => t.cards > 0 && t.next)
-      .sort((a, b) => Number(a.level === 'Nouveau') - Number(b.level === 'Nouveau') || a.next!.remaining - b.next!.remaining)[0]?.theme.id,
-  );
-  const nextText = (t: ThemeProgress) =>
-    !t.next ? '' : t.level === 'Nouveau' ? 'Commence pour découvrir' : `Plus que ${t.next.remaining} carte${t.next.remaining > 1 ? 's' : ''} pour ${t.next.level}`;
+  const activeId = $derived(activeTheme(themes)?.theme.id);
   let open = $state<string | null>(null);
   const selected = $derived(themes.find((t) => t.theme.id === (open ?? activeId)));
 </script>
@@ -38,7 +31,7 @@
         </span>
         <span class="name">{t.theme.name}</span>
         <span class="lvl-label">{t.level} · {t.mastery} %</span>
-        {#if t.theme.id === activeId && nextText(t)}<span class="lvl-label next">{nextText(t)}</span>{/if}
+        {#if t.level !== 'Nouveau' || t.theme.id === activeId}{#if nextText(t)}<span class="lvl-label next">{nextText(t)}</span>{/if}{/if}
       </button>
     </div>
   {/each}

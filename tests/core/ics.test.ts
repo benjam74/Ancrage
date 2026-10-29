@@ -18,9 +18,16 @@ describe('dailyEventIcs', () => {
   });
 
   test('escapes text and uses CRLF line endings', () => {
-    expect(ics).toContain('DESCRIPTION:après le café\\, puis \; thé');
+    expect(ics).toContain('DESCRIPTION:après le café\\, puis \\; thé');
     expect(ics.split('\r\n').length).toBeGreaterThan(10);
     expect(ics.replace(/\r\n/g, '')).not.toContain('\n');
+  });
+
+  test('long lines are folded at 75 octets', () => {
+    const long = dailyEventIcs({ time: '08:00', cue: 'é'.repeat(80), now: NOW, uid: 'u3' });
+    const lines = long.split('\r\n');
+    expect(lines.every((l) => new TextEncoder().encode(l).length <= 75)).toBe(true);
+    expect(long.replace(/\r\n /g, '')).toContain(`DESCRIPTION:${'é'.repeat(80)}`);
   });
 
   test('no cue gives no description', () => {
