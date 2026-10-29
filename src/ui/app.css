@@ -439,3 +439,9 @@ p.error { font-weight: 700; color: var(--bad); }
 .verdict-a_revoir { color: var(--bad); }
 .self.has-suggestion .btn:not(.suggested) { opacity: .55; }
 .self .btn.suggested { outline: 3px solid var(--ink); outline-offset: 2px; }
+.memory-line { font-size: 15px; }
+.works { display: grid; gap: 14px; }
+.works-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
+.works-tile { display: grid; gap: 2px; padding: 12px 14px; border-radius: 12px; background: var(--bg); }
+.works-tile .v { font-size: 26px; font-weight: 800; }
+.works h4 { margin: 0 0 8px; }

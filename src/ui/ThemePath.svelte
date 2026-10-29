@@ -43,6 +43,8 @@
   const activeId = $derived(activeTheme(themes)?.theme.id);
   let open = $state<string | null>(null);
   const selected = $derived(themes.find((t) => t.theme.id === (open ?? activeId)));
+  /** Chance of remembering, as a whole percentage. */
+  const pct = (p: number) => `${Math.round(p * 100)} %`;
 </script>
 
 <div class="path">
@@ -84,6 +86,9 @@
     <p class="muted">{selected.mastery} % maîtrisé · {selected.cards} carte{selected.cards > 1 ? 's' : ''} · {selected.due} à réviser aujourd’hui</p>
     {#if selected.next && selected.level !== 'Nouveau'}
       <p><b>{nextText(selected)}.</b> Une carte compte comme maîtrisée quand elle tient au moins 3 semaines.</p>
+    {/if}
+    {#if selected.memory}
+      <p class="memory-line">Mémoire actuelle : <b>{pct(selected.memory.now)}</b> · dans 30 jours sans réviser : <b>{pct(selected.memory.in30)}</b></p>
     {/if}
     {#if selected.cards === 0}
       <a class="btn ghost" href="#creer">Créer les premières cartes</a>
