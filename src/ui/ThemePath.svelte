@@ -11,12 +11,15 @@
     onstart,
     onpick,
     look = null,
+    map = false,
   }: {
     themes: ThemeProgress[];
     onstart: () => void;
     onpick: (themeId: string) => void;
     /** The learner's character, standing on the current chapter. */
     look?: { character: CharacterId; outfit: Partial<Record<Slot, string>>; name: string } | null;
+    /** Mixed domain: a progress map of its themes, with no path to walk and no character moving along it. */
+    map?: boolean;
   } = $props();
   let walker = $state<HTMLElement | null>(null);
   let pose = $state<'idle' | 'walk' | 'jump'>('idle');
@@ -40,14 +43,15 @@
   });
   const R = 35;
   const C = 2 * Math.PI * R;
-  const activeId = $derived(activeTheme(themes)?.theme.id);
+  const activeId = $derived(map ? undefined : activeTheme(themes)?.theme.id);
   let open = $state<string | null>(null);
   const selected = $derived(themes.find((t) => t.theme.id === (open ?? activeId)));
   /** Chance of remembering, as a whole percentage. */
   const pct = (p: number) => `${Math.round(p * 100)} %`;
 </script>
 
-<div class="path">
+{#if map}<p class="muted map-note">Ici, tout se mélange : chaque séance pioche dans tous les thèmes. Touche un thème pour voir sa mémoire ou le réviser seul.</p>{/if}
+<div class="path" class:map>
   {#each themes as t (t.theme.id)}
     {@const [c, cd, ci] = LEVEL_COLORS[t.level]}
     <div class="node-row">

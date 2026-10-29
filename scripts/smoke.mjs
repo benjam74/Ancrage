@@ -400,8 +400,17 @@ await fresh13.getByRole('heading', { name: 'Choisir quoi réviser' }).waitFor();
 if ((await fresh13.locator('.pick input:checked').count()) !== 1) fail('« Réviser ce thème » should preselect that theme only');
 
 // --- v1.5: character, shop, character on the path ---
+// v1.9: a mixed domain (the default for coaching) shows a map of its themes; chapter by chapter brings the path back.
+await fresh13.goto(`${URL}#accueil`);
+await fresh13.locator('.path.map').waitFor({ timeout: 3000 }).catch(() => fail('a mixed domain shows a progress map'));
+if (await fresh13.locator('.walker').count()) fail('no character walks on a mixed domain');
+await fresh13.getByRole('heading', { name: 'Tes thèmes' }).waitFor();
+await fresh13.goto(`${URL}#bibliotheque`);
+await fresh13.getByLabel(/Ordre des nouvelles cartes du domaine/).first().selectOption('chapter');
+await fresh13.getByText(/les nouvelles cartes viennent chapitre par chapitre/).waitFor();
 await fresh13.goto(`${URL}#accueil`);
 await fresh13.locator('.walker').waitFor({ timeout: 3000 }).catch(() => fail('the character should stand on the current chapter'));
+await fresh13.getByRole('heading', { name: 'Ton parcours' }).waitFor();
 await fresh13.getByRole('link', { name: 'Choisir mon personnage' }).click();
 await fresh13.getByRole('heading', { name: 'Choisis ton personnage' }).waitFor();
 await fresh13.screenshot({ path: `${OUT}/shop-pick.png`, fullPage: true });
@@ -744,6 +753,48 @@ await v18.getByLabel('Lire chaque carte automatiquement, puis sa réponse').chec
 await v18.reload();
 if (!(await v18.getByLabel('Lire chaque carte automatiquement, puis sa réponse').isChecked())) fail('the read aloud setting should persist');
 await v18.close();
+
+// --- v1.9: mix and situations ---
+const v19 = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+v19.on('pageerror', (e) => errors.push(`v1.9: ${e.message}`));
+await v19.goto(`${URL}#reviser`);
+await v19.getByRole('heading', { name: 'Choisir quoi réviser' }).waitFor();
+await v19.locator('label.mode', { hasText: 'Situations mêlées' }).click();
+const sitBtn = v19.getByRole('button', { name: /Commencer \(\d+ cartes?\)/ });
+const nSit = Number((await sitBtn.innerText()).match(/\d+/)[0]);
+if (nSit < 3) fail(`the coaching examples should give several situations, got ${nSit}`);
+await sitBtn.click();
+const kinds = [];
+for (let i = 0; i < 4; i++) {
+  const reveal = v19.getByRole('button', { name: 'Afficher la réponse' });
+  const opt = v19.locator('.opts .opt:not([disabled])').first();
+  const end = v19.getByText('Manche terminée');
+  await reveal.or(opt).or(end).first().waitFor();
+  if (await end.isVisible()) break;
+  kinds.push(await v19.locator('.s-inner h2.ex-title').first().innerText());
+  if (await reveal.isVisible()) {
+    await v19.getByRole('button', { name: 'Afficher la réponse' }).click();
+    await v19.getByRole('button', { name: 'Su' }).click();
+  } else {
+    await v19.locator('.opts .opt').first().click();
+    await v19.getByRole('button', { name: 'Vérifier' }).click();
+  }
+  await v19.getByRole('button', { name: 'Continuer' }).click();
+}
+if (!kinds.every((k) => /client|catégorie/i.test(k))) fail(`situations should only be scenarios and classifications: ${kinds.join(' | ')}`);
+// Actions in flight (the next card loading) come first: wait for it, then leave.
+await v19.locator('.s-inner').first().waitFor();
+await v19.waitForTimeout(400);
+await v19.getByRole('button', { name: 'Quitter la séance' }).click();
+await v19.locator('.session').waitFor({ state: 'detached' });
+await v19.goto(`${URL}#reviser`);
+await v19.locator('label.mode', { hasText: 'Mélange' }).click();
+await v19.getByRole('button', { name: /Commencer \(\d+ cartes?\)/ }).waitFor();
+await v19.screenshot({ path: `${OUT}/custom-mix.png`, fullPage: true });
+await v19.goto(`${URL}#accueil`);
+await v19.locator('.path.map').waitFor();
+await v19.screenshot({ path: `${OUT}/home-map.png`, fullPage: true });
+await v19.close();
 
 const mobile = await browser.newPage({ viewport: { width: 390, height: 844 }, colorScheme: 'dark' });
 mobile.on('pageerror', (e) => errors.push(e.message));

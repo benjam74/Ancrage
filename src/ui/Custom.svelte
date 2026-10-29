@@ -30,7 +30,11 @@
     due: chosen.reduce((n, t) => n + t.due, 0),
     new: chosen.reduce((n, t) => n + t.fresh, 0),
     practice: chosen.reduce((n, t) => n + t.cards - t.fresh - t.due, 0),
+    mix: chosen.reduce((n, t) => n + t.cards, 0),
+    situations: chosen.reduce((n, t) => n + t.situations, 0),
   });
+  /** « Situations mêlées » only exists for themes that have scenarios or classifications. */
+  const hasSituations = $derived(withCards.some((t) => t.situations > 0));
   // Until the learner picks a mode, suggest the most useful one that has cards.
   $effect(() => {
     if (touchedMode) return;
@@ -42,6 +46,8 @@
   const MODES: { id: CustomMode; title: string; text: string }[] = [
     { id: 'due', title: 'À réviser', text: 'Les cartes arrivées à échéance dans ces thèmes.' },
     { id: 'new', title: 'Nouvelles cartes', text: 'Apprendre plus aujourd’hui, autant que tu veux. Elles comptent dans ta limite quotidienne : fais d’abord ta séance du jour. Chaque nouvelle carte revient plusieurs fois les semaines suivantes.' },
+    { id: 'mix', title: 'Mélange', text: 'Un peu de tout, en alternance : des cartes à réviser, des nouvelles et les plus fragiles, de tous les thèmes choisis. Le mélange oblige à retrouver la bonne notion parmi toutes, comme dans la vraie vie.' },
+    { id: 'situations', title: 'Situations mêlées', text: 'Les mises en situation et les classements de tous les thèmes choisis, mélangés : à chaque carte, trouver l’outil adapté. Celles à réviser d’abord, puis les plus fragiles, puis les nouvelles.' },
     { id: 'practice', title: 'Entraînement libre', text: 'Les cartes déjà vues qui ne sont pas encore à réviser, les plus fragiles d’abord. Utile avant un contrôle, un examen ou une présentation ; ne rapporte pas d’XP et consolide moins que la révision au bon moment.' },
   ];
   const LIMITS = [10, 20, 50, Infinity];
@@ -89,7 +95,7 @@
     <section class="panel" aria-labelledby="c-mode">
       <h2 id="c-mode">Quoi</h2>
       <div class="modes" role="radiogroup" aria-labelledby="c-mode">
-        {#each MODES as m (m.id)}
+        {#each MODES.filter((m) => m.id !== 'situations' || hasSituations) as m (m.id)}
           <label class="mode" class:on={mode === m.id}>
             <input type="radio" name="mode" value={m.id} checked={mode === m.id} onchange={() => { mode = m.id; touchedMode = true; }} />
             <span class="mode-title">{m.title} <span class="pill">{counts[m.id]}</span></span>

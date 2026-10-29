@@ -12,7 +12,7 @@
   import ThemePath from './ThemePath.svelte';
   import WeekStrip from './WeekStrip.svelte';
   import { currentProfile, profileCount } from '../app/current';
-  import { domainOf } from '../core/domains';
+  import { domainOf, newOrderOf } from '../core/domains';
   import { FACE, forgetChoice } from './faces';
   import { updatePrefs } from './prefs.svelte';
 
@@ -180,14 +180,15 @@
     </div>
 
     <section aria-labelledby="path-title">
-      <h2 id="path-title" style="margin-bottom:8px">Ton parcours</h2>
+      <h2 id="path-title" style="margin-bottom:8px">{tab && (tab.id === '__loose' || newOrderOf(progress.domains.find((d) => d.id === tab.id)) === 'mixed') ? 'Tes thèmes' : 'Ton parcours'}</h2>
       {#if tabs.length > 1}
         <div class="domain-tabs" role="group" aria-label="Domaine">
           {#each tabs as t (t.id)}<button aria-pressed={t.id === tab?.id} onclick={() => updatePrefs({ domain: t.id })}>{t.name}</button>{/each}
         </div>
       {/if}
       {#if tab && tab.themes.length}
-        {#key tab.id}<ThemePath themes={tab.themes} {onstart} {onpick} look={{ character: shop.avatar.character, outfit: shop.outfit, name: shop.avatar.name }} />{/key}
+        {@const mapMode = tab.id !== '__loose' ? newOrderOf(progress.domains.find((d) => d.id === tab.id)) === 'mixed' : true}
+        {#key tab.id + mapMode}<ThemePath themes={tab.themes} {onstart} {onpick} map={mapMode} look={{ character: shop.avatar.character, outfit: shop.outfit, name: shop.avatar.name }} />{/key}
       {:else if tab}
         <p class="muted">Aucun thème dans « {tab.name} » pour l’instant. Crée-en un depuis « Créer » ou la bibliothèque.</p>
       {:else}
