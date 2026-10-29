@@ -205,3 +205,21 @@ describe('custom sessions', () => {
     expect(new Set(practice)).toEqual(new Set(seen));
   });
 });
+
+describe('memory and effectiveness', () => {
+  test('a theme shows its memory once studied; insights count due reviews', async () => {
+    const t = await services.createTheme('Recadrage');
+    await services.saveNote({ themeId: t.id, fields: { type: 'basic', front: 'Q', back: 'R', reverse: false }, tags: [] }, NOW - 20 * DAY);
+    let p = await services.progress(NOW);
+    expect(p.themes[0].memory).toBeNull();
+    expect(p.loadPerNew).toBeGreaterThanOrEqual(1);
+    expect(p.hard).toBe(0);
+    const [id] = (await services.today(NOW - 20 * DAY)).queue;
+    await services.engine.answer(id, 'recognition', ok, NOW - 20 * DAY);
+    await services.engine.answer(id, 'production', ok, NOW - 10 * DAY);
+    p = await services.progress(NOW);
+    expect(p.themes[0].memory!.now).toBeGreaterThan(p.themes[0].memory!.in30);
+    expect(p.insights.windows[0]).toMatchObject({ days: 30, activeDays: 2 });
+    expect(p.insights.byType.map((r) => r.key)).toEqual(p.insights.windows[0].count ? ['basic'] : []);
+  });
+});

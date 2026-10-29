@@ -69,7 +69,7 @@ const CHECKS: Record<'themes' | 'notes' | 'cards' | 'reviews' | 'events', (r: Re
     (r.updatedAt === undefined || isNum(r.updatedAt)),
   notes: (r) =>
     isStr(r.id) && isStr(r.themeId) && fieldsOk(r.fields) && isStrList(r.tags) &&
-    (r.source === undefined || isStr(r.source)) && isNum(r.createdAt) && isNum(r.updatedAt),
+    (r.source === undefined || isStr(r.source)) && (r.suspended === undefined || typeof r.suspended === 'boolean') && isNum(r.createdAt) && isNum(r.updatedAt),
   cards: (r) => isStr(r.id) && isStr(r.noteId) && isStr(r.variant) && (r.orphan === undefined || typeof r.orphan === 'boolean'),
   reviews: (r) =>
     isStr(r.id) && isStr(r.cardId) && isNum(r.ts) && [1, 2, 3, 4].includes(r.rating as number) &&

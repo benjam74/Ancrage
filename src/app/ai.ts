@@ -1,6 +1,7 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { OUTPUT_SCHEMA, buildPrompt, checkRequest, toProposals, type GenerationRequest, type Proposal } from '../core/generate';
 import type { KeyValue } from './cloud';
+import { EVAL_SCHEMA, buildEvalPrompt, checkEvalInput, toEvaluation, type EvalInput, type Evaluation } from '../core/evaluate';
 
 export const AI_MODEL = 'claude-opus-5-5';
 const KEY = 'ancrage.ai.key';
@@ -69,4 +70,37 @@ export async function generateProposals(client: AiClient, request: GenerationReq
     return { ok: false, error: 'Réponse illisible. Réessaie.' };
   }
   return { ok: true, ...toProposals(raw, request.types) };
+}
+
+export type EvaluationResult = { ok: true; evaluation: Evaluation } | { ok: false; error: string };
+
+/** Feedback on a scenario answer; quick and cheap (low effort), and never required to grade the card. */
+export async function evaluateAnswer(client: AiClient, input: EvalInput): Promise<EvaluationResult> {
+  const invalid = checkEvalInput(input);
+  if (invalid) return { ok: false, error: invalid };
+  const { system, user } = buildEvalPrompt(input);
+  let response: Anthropic.Beta.Messages.BetaMessage;
+  try {
+    response = await client.beta.messages.create({
+      model: AI_MODEL,
+      max_tokens: 3000,
+      betas: ['server-side-fallback-2026-07-01'],
+      fallbacks: 'default',
+      output_config: { effort: 'low', format: { type: 'json_schema', schema: EVAL_SCHEMA } },
+      system,
+      messages: [{ role: 'user', content: user }],
+    });
+  } catch (e) {
+    return { ok: false, error: errorMessage(e).replace('La génération a échoué', 'L’évaluation a échoué') };
+  }
+  if (response.stop_reason === 'refusal') return { ok: false, error: 'Claude n’a pas pu évaluer cette réponse. Compare-la toi-même à la réponse modèle.' };
+  if (response.stop_reason === 'max_tokens') return { ok: false, error: 'Le retour a été coupé. Réessaie.' };
+  let raw: unknown;
+  try {
+    raw = JSON.parse(response.content.flatMap((b) => (b.type === 'text' ? [b.text] : [])).join(''));
+  } catch {
+    return { ok: false, error: 'Retour illisible. Réessaie.' };
+  }
+  const evaluation = toEvaluation(raw, input.keyPoints);
+  return evaluation ? { ok: true, evaluation } : { ok: false, error: 'Retour incomplet. Réessaie.' };
 }

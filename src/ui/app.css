@@ -412,3 +412,37 @@ p.error { font-weight: 700; color: var(--bad); }
 .domain-block > summary::-webkit-details-marker { display: none; }
 .domain-block > summary h2::before { content: "▸ "; color: var(--ink-soft); }
 .domain-block[open] > summary h2::before { content: "▾ "; }
+
+/* v1.7: document import, hard cards */
+.file-btn { position: relative; justify-self: start; cursor: pointer; }
+.file-btn input { position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; }
+.file-btn:focus-within { outline: 3px solid var(--sun); outline-offset: 2px; }
+.file-btn.disabled { opacity: .6; cursor: progress; }
+.sections { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.section-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 18em); gap: 8px 12px; align-items: center; padding: 10px 12px; border-radius: 12px; background: var(--bg); }
+.section-row .check { align-items: flex-start; overflow-wrap: anywhere; }
+.section-row select { width: 100%; }
+.group-title { margin-top: 18px; overflow-wrap: anywhere; }
+.hard-meta { color: var(--bad); font-weight: 700; }
+@media (max-width: 640px) { .section-row { grid-template-columns: minmax(0, 1fr); } }
+
+/* v1.7: AI feedback on scenarios */
+.small-note { font-size: 14px; }
+.ask-ai { justify-self: start; }
+.ai-eval { display: grid; gap: 10px; padding: 16px 18px; border-radius: var(--r-md); background: var(--surface); border: 2px dashed var(--petrol); }
+.eval-points { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.eval-points li { display: grid; grid-template-columns: 1.4em minmax(0, 1fr); gap: 6px; overflow-wrap: anywhere; }
+.eval-points .mark { font-weight: 800; color: var(--bad); }
+.eval-points li.covered .mark { color: var(--ok); }
+.ai-eval .pill { margin-left: 6px; }
+.pill.verdict-reussi { background: var(--ok); color: var(--on-ok); }
+.pill.verdict-partiel { background: var(--sun); color: var(--on-sun); }
+.pill.verdict-a_revoir { background: var(--bad-bg); color: var(--bad); }
+.self .btn.suggested { outline: 3px solid var(--ink); outline-offset: 3px; }
+.self .btn .sugg { display: block; font-size: 11px; letter-spacing: .04em; opacity: .9; }
+.memory-line { font-size: 15px; }
+.works { display: grid; gap: 14px; }
+.works-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
+.works-tile { display: grid; gap: 2px; padding: 12px 14px; border-radius: 12px; background: var(--bg); }
+.works-tile .v { font-size: 26px; font-weight: 800; }
+.works h4 { margin: 0 0 8px; }

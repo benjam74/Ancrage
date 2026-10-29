@@ -16,6 +16,8 @@ export interface GenerationRequest {
   audience?: string;
   types: NoteType[];
   count: number;
+  /** An extra instruction, e.g. to reword a card the learner keeps missing. */
+  instruction?: string;
 }
 
 export interface Proposal {
@@ -56,6 +58,7 @@ export function buildPrompt(r: GenerationRequest): { system: string; user: strin
     `Crée au plus ${r.count} cartes, uniquement de ces types :`,
     ...r.types.map((t) => `- ${TYPE_GUIDE[t]}`),
     'Choisis pour chaque idée le type qui la teste le mieux. Si le texte ne justifie pas autant de cartes, crée-en moins.',
+    r.instruction?.trim() ? `Consigne : ${r.instruction.trim()}` : '',
     '',
     '<source>',
     // A pasted closing tag must not end the source early.
@@ -128,3 +131,18 @@ export function toProposals(raw: unknown, allowed: NoteType[]): { proposals: Pro
   }
   return { proposals, rejected };
 }
+
+/** A note as plain text, the source for rewording it. */
+export function describeNote(f: NoteFields): string {
+  switch (f.type) {
+    case 'basic': return `Question : ${f.front}\nRéponse : ${f.back}`;
+    case 'cloze': return `Phrase à trous : ${f.text.replace(/\{\{(.*?)\}\}/g, '[$1]')}`;
+    case 'ordering': return `${f.title}\nÉtapes dans l’ordre :\n${f.steps.map((s, i) => `${i + 1}. ${s}`).join('\n')}`;
+    case 'classify': return `Énoncé : ${f.statement}\nCatégories : ${f.categories.join(', ')}\nBonne catégorie : ${f.answer}`;
+    case 'mcq': return `Question : ${f.question}\nBonne réponse : ${f.answer}\nMauvaises réponses : ${f.distractors.join(' ; ')}`;
+    case 'scenario': return `Le client dit : ${f.situation}\nRéponse modèle : ${f.model}\nPoints clés : ${f.keyPoints.join(' ; ')}`;
+  }
+}
+
+export const REWORD_INSTRUCTION =
+  'Cette carte est souvent oubliée. Propose 1 à 3 cartes qui testent la même connaissance plus facilement : scinde-la si elle contient plusieurs idées, rends la question plus précise, ajoute un exemple concret si cela aide. Ne change pas le contenu à retenir.';

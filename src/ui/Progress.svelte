@@ -1,8 +1,16 @@
 <script lang="ts">
   import type { Progress } from '../app/services';
   import { prefs } from './prefs.svelte';
+  import { TYPE_LABEL } from './format';
+  import type { NoteType } from '../core/model';
 
   let { progress }: { progress: Progress } = $props();
+
+  const pct = (r: number | null) => (r === null ? '—' : `${Math.round(r * 100)} %`);
+  const ins = $derived(progress.insights);
+  const seconds = $derived(ins.medianMs === null ? null : Math.max(1, Math.round(ins.medianMs / 1000)));
+  /** A rate on fewer answers than this says little: shown, but flagged. */
+  const FEW = 10;
 
   const level = (n: number) => (n === 0 ? 0 : n < 5 ? 1 : n < 10 ? 2 : n < 20 ? 3 : 4);
   const total = $derived(Object.values(progress.breakdown).reduce((a, b) => a + b, 0));
@@ -33,8 +41,8 @@
   <div class="kpis">
     <div class="panel kpi">
       <span class="eyebrow">Rétention réelle</span>
-      <span class="v">{progress.retention === null ? '—' : `${Math.round(progress.retention * 1000) / 10} %`.replace('.', ',')}</span>
-      <span class="muted">{progress.retention === null ? 'Disponible après tes premières révisions dues.' : 'Réussite sur les cartes dues, 30 derniers jours. Objectif FSRS : 90 %.'}</span>
+      <span class="v">{ins.windows[0].rate === null ? '—' : `${Math.round(ins.windows[0].rate * 1000) / 10} %`.replace('.', ',')}</span>
+      <span class="muted">{ins.windows[0].rate === null ? 'Disponible après tes premières révisions dues.' : 'Réussite sur les cartes dues, 30 derniers jours. Objectif FSRS : 90 %.'}</span>
     </div>
     <div class="panel kpi">
       <span class="eyebrow">Cartes ancrées</span>
@@ -55,6 +63,50 @@
       </div>
     {/if}
   </div>
+
+  <section class="panel works" aria-labelledby="works-title">
+    <h3 id="works-title">Est-ce que ça marche ?</h3>
+    <p class="muted">La vraie mesure : la part des cartes que tu retrouves quand elles reviennent à leur date. Entre 80 et 95 %, la répétition espacée fait son travail.</p>
+    <div class="works-grid">
+      {#each ins.windows as w (w.days)}
+        <div class="works-tile">
+          <span class="eyebrow">{w.days} derniers jours</span>
+          <span class="v">{pct(w.rate)}</span>
+          <span class="muted">{w.count ? `réussite sur ${w.count} révision${w.count > 1 ? 's dues' : ' due'}` : 'Pas encore de révision due.'}</span>
+          <span class="muted">{w.activeDays} jour{w.activeDays > 1 ? 's' : ''} actif{w.activeDays > 1 ? 's' : ''} sur {w.days}</span>
+        </div>
+      {/each}
+      <div class="works-tile">
+        <span class="eyebrow">Temps par carte</span>
+        <span class="v">{seconds === null ? '—' : `${seconds} s`}</span>
+        <span class="muted">Médiane sur 90 jours.</span>
+      </div>
+      <div class="works-tile">
+        <span class="eyebrow">Cartes difficiles</span>
+        <span class="v">{progress.hard}</span>
+        <span class="muted">{progress.hard ? 'À reformuler depuis la bibliothèque.' : 'Aucune pour l’instant.'}</span>
+      </div>
+    </div>
+    {#if ins.byType.length || ins.byDomain.length}
+      <div class="two">
+        {#each [{ title: 'Par type d’exercice', list: ins.byType.map((r) => ({ ...r, label: TYPE_LABEL[r.key as NoteType] ?? r.key })) }, { title: 'Par domaine', list: ins.byDomain.map((r) => ({ ...r, label: r.key })) }] as block (block.title)}
+          {#if block.list.length}
+            <div>
+              <h4>{block.title}, 90 jours</h4>
+              {#each block.list as r (r.key)}
+                <div class="state-row">
+                  <span>{r.label}</span>
+                  <div class="bar" style="--c:var({r.rate >= 0.8 ? '--ok' : r.rate >= 0.6 ? '--sun' : '--coral'})"><i style="width:{r.rate * 100}%"></i></div>
+                  <span title="{r.count} révisions">{pct(r.rate)}{r.count < FEW ? '*' : ''}</span>
+                </div>
+              {/each}
+            </div>
+          {/if}
+        {/each}
+      </div>
+      {#if [...ins.byType, ...ins.byDomain].some((r) => r.count < FEW)}<p class="muted">* Moins de {FEW} révisions : chiffre encore peu fiable.</p>{/if}
+    {/if}
+  </section>
 
   <section class="panel">
     <h3>Comment ça marche</h3>

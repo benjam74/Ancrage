@@ -11,6 +11,8 @@ import { CHARACTER_NAMES, NAME_MAX, avatarOf, outfit, owned, resale, wallet } fr
 import { capNewXp, classifyEntries, comebackRounds, goalDays, makeRestDayCheck, nextStudyDay, roundsPerDay, streakState, weekStart, weekStrip, xpBetween, type StripDay } from '../core/progress';
 import { dailyCounts, forecast, mastery, nextLevel, retention, stateBreakdown, type Level } from '../core/stats';
 import type { CardState } from '../core/scheduler';
+import { isHard } from '../core/hard';
+import { effectiveness, memoryOf, reviewLoad, type Effectiveness } from '../core/insights';
 import { buildCustomQueue, buildDailyQueue, countNewIntroduced, nextDue, studyDayStart, type CustomChoice, type QueueCandidate } from '../core/queue';
 import { makeScheduler } from '../core/scheduler';
 import { STARTER_THEMES, starterNotes } from '../data/starter';
@@ -53,6 +55,8 @@ export interface ThemeProgress {
   fresh: number;
   /** Next level and the mastered cards still needed; null once anchored or empty. */
   next: { level: Level; remaining: number } | null;
+  /** Mean recall of the studied cards, now and in 30 days without review; null before any study. */
+  memory: { now: number; in30: number } | null;
 }
 
 export interface ShopState {
@@ -113,6 +117,12 @@ export interface Progress {
   xpPrevBest: number | null;
   /** A lapsed learner back on a Monday or on the 1st of the month. */
   freshStart: 'week' | 'month' | null;
+  /** « Est-ce que ça marche ? » */
+  insights: Effectiveness;
+  /** Notes with a hard card. */
+  hard: number;
+  /** Reviews one new card brings over the next 30 days. */
+  loadPerNew: number;
 }
 
 export interface Services {
@@ -140,6 +150,10 @@ export interface Services {
   removeExamples(): Promise<{ notes: number; themes: number }>;
   examplesCount(): Promise<number>;
   library(): Promise<LibraryTheme[]>;
+  /** Puts a note aside (out of every queue, history kept) or brings it back. */
+  setSuspended(noteId: string, on: boolean, now: number): Promise<void>;
+  /** Notes with a card forgotten HARD_LAPSES times and not yet answered right HARD_CLEAR times in a row. */
+  hardNotes(now: number): Promise<{ note: Note; theme: Theme; lapses: number }[]>;
   newSlotsLeft(now: number): Promise<number>;
   progress(now: number): Promise<Progress>;
   updateSettings(input: { desiredRetention: string | number; newPerDay: string | number }): Promise<ReturnType<typeof validateSettings>>;
@@ -200,7 +214,7 @@ export function createServices(repo: Repo, deviceId: string): Services {
     ]);
     const scheduler = makeScheduler(settings);
     const noteById = new Map(notes.map((n) => [n.id, n]));
-    const active = cards.filter((c) => !c.orphan && noteById.has(c.noteId));
+    const active = cards.filter((c) => !c.orphan && noteById.has(c.noteId) && !noteById.get(c.noteId)!.suspended);
     const logByCard = new Map<string, ReviewEntry[]>();
     for (const e of reviews) {
       const list = logByCard.get(e.cardId);
@@ -219,18 +233,41 @@ export function createServices(repo: Repo, deviceId: string): Services {
       reviews,
     );
     const roundEnds = events.filter((e) => e.type === 'round_completed').map((e) => e.ts);
+    // Past rest days must not change when a note is put aside or resumed: every card with a note counts.
     const isRestDay = makeRestDayCheck(
-      active.map((c) => ({ cardId: c.id, createdAt: noteById.get(c.noteId)!.createdAt })),
+      cards.filter((c) => !c.orphan && noteById.has(c.noteId)).map((c) => ({ cardId: c.id, createdAt: noteById.get(c.noteId)!.createdAt })),
       reviews,
       scheduler,
       settings.newPerDay,
     );
-    return { themes, notes, active, reviews, events, roundEnds, scheduler, states, kinds, noteById, isRestDay };
+    return { themes, notes, cards, active, reviews, events, roundEnds, scheduler, states, kinds, noteById, isRestDay };
   }
 
   function streakOf(snap: Awaited<ReturnType<typeof snapshot>>, roundEnds: number[], todayStart: number) {
     const perDay = roundsPerDay(roundEnds);
     return streakState(goalDays(roundEnds), todayStart, snap.isRestDay, (d) => perDay.get(d) ?? 0);
+  }
+
+  /** Notes with a card forgotten HARD_LAPSES times and not yet answered right HARD_CLEAR times in a row. */
+  function hardOf(snap: Awaited<ReturnType<typeof snapshot>>) {
+    const logByCard = new Map<string, ReviewEntry[]>();
+    for (const e of snap.reviews) {
+      const list = logByCard.get(e.cardId);
+      if (list) list.push(e);
+      else logByCard.set(e.cardId, [e]);
+    }
+    const worst = new Map<string, number>();
+    for (const card of snap.active) {
+      const lapses = snap.states.get(card.id)!.lapses;
+      if (isHard(lapses, logByCard.get(card.id) ?? [])) worst.set(card.noteId, Math.max(lapses, worst.get(card.noteId) ?? 0));
+    }
+    const themeById = new Map(snap.themes.map((t) => [t.id, t]));
+    return [...worst]
+      .map(([id, lapses]) => {
+        const note = snap.noteById.get(id)!;
+        return { note, theme: themeById.get(note.themeId) ?? { id: note.themeId, name: 'Sans thème', order: 0 }, lapses };
+      })
+      .sort((a, b) => b.lapses - a.lapses || a.note.createdAt - b.note.createdAt);
   }
 
   /** Every active card with its replayed state, for building queues. */
@@ -257,7 +294,7 @@ export function createServices(repo: Repo, deviceId: string): Services {
 
     const candidates: QueueCandidate[] = cards.flatMap((card) => {
       const note = noteById.get(card.noteId);
-      if (!note || card.orphan) return [];
+      if (!note || card.orphan || note.suspended) return [];
       return [{
         cardId: card.id,
         themeId: note.themeId,
@@ -320,6 +357,7 @@ export function createServices(repo: Repo, deviceId: string): Services {
         fields: input.fields,
         tags: [...new Set(input.tags.map((t) => t.trim()).filter(Boolean))],
         ...(input.source?.trim() ? { source: input.source.trim() } : {}),
+        ...(existing?.suspended ? { suspended: true } : {}),
         createdAt: existing?.createdAt ?? now,
         // A device whose clock is behind must still produce the newest version.
         updatedAt: Math.max(now, (existing?.updatedAt ?? 0) + 1),
@@ -426,6 +464,17 @@ export function createServices(repo: Repo, deviceId: string): Services {
         }));
     },
 
+    async setSuspended(noteId, on, now) {
+      const note = await repo.getNote(noteId);
+      if (!note || !!note.suspended === on) return;
+      const { suspended: _, ...rest } = note;
+      await repo.putNote({ ...rest, ...(on ? { suspended: true } : {}), updatedAt: Math.max(now, note.updatedAt + 1) });
+    },
+
+    async hardNotes() {
+      return hardOf(await snapshot());
+    },
+
     async progress(now) {
       const snap = await snapshot();
       const todayStart = studyDayStart(now);
@@ -451,6 +500,9 @@ export function createServices(repo: Repo, deviceId: string): Services {
         else byTheme.set(t, [snap.states.get(card.id)!]);
       }
       const allStates = [...snap.states.values()];
+      const cardOf = new Map(snap.cards.map((c) => [c.id, c.noteId]));
+      const themeById = new Map(snap.themes.map((t) => [t.id, t]));
+      const domainIds = new Set(snap.themes.filter(isDomain).map((t) => t.id));
       return {
         streak: streak.current,
         freezes: streak.freezes,
@@ -466,7 +518,7 @@ export function createServices(repo: Repo, deviceId: string): Services {
             const due = states.filter((c) => c.state !== State.New && c.due.getTime() <= now).length;
             const next = nextLevel(m.cards, m.mastered, m.level !== 'Nouveau');
             const fresh = states.filter((c) => c.state === State.New).length;
-            return { theme, cards: m.cards, due, fresh, mastery: m.pct, level: m.level, next };
+            return { theme, cards: m.cards, due, fresh, mastery: m.pct, level: m.level, next, memory: memoryOf(states, now, snap.scheduler) };
           }),
         heatmap: dailyCounts(snap.reviews, todayStart, HEATMAP_DAYS),
         forecast: forecast(allStates, now, FORECAST_DAYS),
@@ -483,6 +535,19 @@ export function createServices(repo: Repo, deviceId: string): Services {
         xpPrevAvg: prevWeeks.length ? Math.round(prevWeeks.reduce((a, b) => a + b, 0) / prevWeeks.length) : null,
         xpPrevBest: prevWeeks.length ? Math.max(...prevWeeks) : null,
         freshStart: !lapsed ? null : date.getDate() === 1 ? 'month' : date.getDay() === 1 ? 'week' : null,
+        insights: effectiveness(
+          snap.reviews,
+          snap.kinds,
+          (cardId) => snap.noteById.get(cardOf.get(cardId) ?? '')?.fields.type,
+          (cardId) => {
+            const note = snap.noteById.get(cardOf.get(cardId) ?? '');
+            const theme = note && themeById.get(note.themeId);
+            return theme ? (themeById.get(domainOf(theme, domainIds) ?? '')?.name ?? 'Sans domaine') : undefined;
+          },
+          now,
+        ),
+        hard: hardOf(snap).length,
+        loadPerNew: reviewLoad(snap.scheduler, now),
       };
     },
 

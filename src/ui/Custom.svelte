@@ -110,6 +110,9 @@
     <button class="btn sun wide" disabled={size === 0} onclick={() => onstart({ themeIds: picked, mode, limit })}>
       {size === 0 ? 'Aucune carte dans cette sélection' : `Commencer (${size} carte${size > 1 ? 's' : ''})`}
     </button>
+    {#if mode === 'new' && size > 0 && progress.loadPerNew > 0}
+      <p class="muted">Environ {Math.round(size * progress.loadPerNew)} révisions de plus dans les 30 prochains jours, si tu les réussis à chaque fois.</p>
+    {/if}
     {#if size === 0 && picked.length > 0}
       <p class="muted">{mode === 'due' ? 'Rien n’est à réviser dans ces thèmes pour l’instant : essaie l’entraînement libre ou de nouvelles cartes.' : mode === 'new' ? 'Toutes les cartes de ces thèmes ont déjà été vues.' : 'Aucune carte vue de ces thèmes n’est disponible pour l’entraînement : celles qui sont dues sont dans « À réviser ».'}</p>
     {/if}
