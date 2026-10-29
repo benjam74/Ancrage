@@ -97,3 +97,36 @@ describe('API key storage', () => {
     expect(getApiKey(store)).toBeNull();
   });
 });
+
+describe('evaluateAnswer', async () => {
+  const { evaluateAnswer } = await import('../../src/app/ai');
+  const { EVAL_SCHEMA } = await import('../../src/core/evaluate');
+  const input = { situation: 'Je bloque.', model: 'Qu’est-ce qui bloque ?', keyPoints: ['Ouverte'], answer: 'Qu’est-ce qui te bloque ?' };
+  const good = { verdict: 'reussi', points: [{ covered: true, comment: 'Oui.' }], feedback: 'Bien.', improved: 'Qu’est-ce qui te bloque, là ?' };
+
+  test('sends a short, low-effort structured request', async () => {
+    const { client, calls } = fakeClient(() => message(JSON.stringify(good)));
+    const res = await evaluateAnswer(client, input);
+    expect(res).toMatchObject({ ok: true, evaluation: { verdict: 'reussi', points: [{ point: 'Ouverte', covered: true }] } });
+    expect(calls[0]).toMatchObject({
+      model: 'claude-opus-5-5',
+      betas: ['server-side-fallback-2026-07-01'],
+      fallbacks: 'default',
+      output_config: { effort: 'low', format: { type: 'json_schema', schema: EVAL_SCHEMA } },
+    });
+    expect(calls[0].max_tokens).toBeLessThanOrEqual(4000);
+  });
+  test('no answer: no call', async () => {
+    const { client, calls } = fakeClient(() => message('{}'));
+    expect(await evaluateAnswer(client, { ...input, answer: '' })).toMatchObject({ ok: false });
+    expect(calls).toHaveLength(0);
+  });
+  test('an unreadable or incomplete answer, a refusal or a network error give a message', async () => {
+    for (const reply of [message('pas du json'), message(JSON.stringify({ ...good, verdict: '?' })), message('', 'refusal'), new Anthropic.APIConnectionError({ message: 'down' })]) {
+      const { client } = fakeClient(() => reply);
+      const res = await evaluateAnswer(client, input);
+      expect(res.ok).toBe(false);
+      if (!res.ok) expect(res.error.length).toBeGreaterThan(5);
+    }
+  });
+});

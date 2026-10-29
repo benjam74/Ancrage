@@ -425,3 +425,17 @@ p.error { font-weight: 700; color: var(--bad); }
 .group-title { margin-top: 18px; overflow-wrap: anywhere; }
 .hard-meta { color: var(--bad); font-weight: 700; }
 @media (max-width: 640px) { .section-row { grid-template-columns: minmax(0, 1fr); } }
+
+/* v1.7: AI feedback on scenarios */
+.small-note { font-size: 14px; }
+.ask-ai { justify-self: start; }
+.ai-eval { display: grid; gap: 10px; padding: 16px 18px; border-radius: var(--r-md); background: var(--surface); border: 2px dashed var(--petrol); }
+.eval-points { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.eval-points li { display: grid; grid-template-columns: 1.4em minmax(0, 1fr); gap: 6px; overflow-wrap: anywhere; }
+.eval-points .mark { font-weight: 800; color: var(--bad); }
+.eval-points li.covered .mark { color: var(--ok); }
+.verdict-reussi { color: var(--ok); }
+.verdict-partiel { color: var(--sun-deep); }
+.verdict-a_revoir { color: var(--bad); }
+.self.has-suggestion .btn:not(.suggested) { opacity: .55; }
+.self .btn.suggested { outline: 3px solid var(--ink); outline-offset: 2px; }

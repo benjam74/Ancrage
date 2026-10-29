@@ -10,6 +10,7 @@
   import type { Progress, RoundOutcome } from '../app/services';
   import { REPAIR_ROUNDS } from '../core/progress';
   import { HARD_LAPSES } from '../core/hard';
+  import type { Verdict } from '../core/evaluate';
   import { createFeedback, primeAudio } from './feedback';
   import Icon from './Icon.svelte';
   import { motionOn, prefs, updatePrefs } from './prefs.svelte';
@@ -49,6 +50,9 @@
   let shown = $state<Shown | null>(null);
   let answer = $state<Answer | null>(null);
   let revealed = $state(false);
+  /** Claude's verdict on a written scenario answer: highlights the matching grade. */
+  let verdict = $state<Verdict | null>(null);
+  const SUGGESTED: Record<Verdict, 1 | 2 | 3> = { a_revoir: 1, partiel: 2, reussi: 3 };
   let result = $state<Result | null>(null);
   let ended = $state(false);
   let hasMore = $state(false);
@@ -90,6 +94,7 @@
     const ex = buildExercise(ctx.note, ctx.card, scheduled, ctx.pool, makeRng(`${cardId}:${state.reps}:${round.done}`));
     answer = null;
     revealed = false;
+    verdict = null;
     result = null;
     played.add(cardId);
     shown = {
@@ -307,7 +312,7 @@
           {:else if shown.ex.kind === 'order'}
             <Order ex={shown.ex} bind:answer checked={!!result} />
           {:else}
-            <Reveal ex={shown.ex} {revealed} />
+            <Reveal ex={shown.ex} {revealed} bind:verdict />
           {/if}
         </div>
       {/key}
@@ -337,11 +342,11 @@
         <button class="btn" class:ok={result.correct} class:bad={!result.correct} onclick={proceed}>Continuer</button>
       {:else if shown?.ex.kind === 'reveal'}
         {#if revealed}
-          <p style="font-weight:700;flex:1 1 200px">Compare avec ta réponse. Tu savais ?</p>
-          <div class="self">
-            <button class="btn bad" aria-keyshortcuts="1" onclick={() => record(false, 1)}>Raté</button>
-            <button class="btn sun" aria-keyshortcuts="2" onclick={() => record(true, 2)}>Difficile</button>
-            <button class="btn ok" aria-keyshortcuts="3" onclick={() => record(true, 3)}>Su</button>
+          <p style="font-weight:700;flex:1 1 200px">{verdict ? 'Claude suggère une note ; c’est toi qui décides.' : 'Compare avec ta réponse. Tu savais ?'}</p>
+          <div class="self" class:has-suggestion={!!verdict}>
+            <button class="btn bad" class:suggested={verdict && SUGGESTED[verdict] === 1} aria-keyshortcuts="1" onclick={() => record(false, 1)}>Raté</button>
+            <button class="btn sun" class:suggested={verdict && SUGGESTED[verdict] === 2} aria-keyshortcuts="2" onclick={() => record(true, 2)}>Difficile</button>
+            <button class="btn ok" class:suggested={verdict && SUGGESTED[verdict] === 3} aria-keyshortcuts="3" onclick={() => record(true, 3)}>Su</button>
           </div>
         {:else}
           <span></span><button class="btn ok" onclick={() => (revealed = true)}>Afficher la réponse</button>

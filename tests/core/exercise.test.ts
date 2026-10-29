@@ -129,7 +129,7 @@ describe('basic and scenario', () => {
 
   test('scenario reveals the model answer and key points', () => {
     const nt = note({ type: 'scenario', situation: 'Je dois réussir.', model: 'Que se passerait-il sinon ?', keyPoints: ['Modal de nécessité'] });
-    expect(only(build(nt, 'main', 'self'), 'reveal')).toMatchObject({ quote: 'Je dois réussir.', back: 'Que se passerait-il sinon ?', keyPoints: ['Modal de nécessité'] });
+    expect(only(build(nt, 'main', 'self'), 'reveal')).toMatchObject({ quote: 'Je dois réussir.', back: 'Que se passerait-il sinon ?', keyPoints: ['Modal de nécessité'], coaching: true });
   });
 });
 

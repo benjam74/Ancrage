@@ -6,7 +6,7 @@ export type Exercise =
   | { kind: 'choice'; prompt: string; quote?: string; options: string[]; answerIndex: number; explain?: string }
   | { kind: 'typed'; prompt: string; before: string; after: string; expected: string }
   | { kind: 'order'; prompt: string; steps: string[]; shuffled: number[]; given: number }
-  | { kind: 'reveal'; prompt: string; quote?: string; front: string; back: string; keyPoints: string[] };
+  | { kind: 'reveal'; prompt: string; quote?: string; front: string; back: string; keyPoints: string[]; /** A coaching scenario, whose written answer the AI can assess. */ coaching?: true };
 
 export type Answer = { kind: 'choice'; index: number } | { kind: 'typed'; text: string } | { kind: 'order'; order: number[] };
 
@@ -120,7 +120,7 @@ export function buildExercise(note: Note, card: Card, mode: Mode, pool: Note[], 
       return { kind: 'reveal', prompt: 'Rappelle-toi la réponse', front, back, keyPoints: [] };
     }
     case 'scenario':
-      return { kind: 'reveal', prompt: 'Ton client te dit :', quote: f.situation, front: 'Quelle question poses-tu ?', back: f.model, keyPoints: f.keyPoints };
+      return { kind: 'reveal', prompt: 'Ton client te dit :', quote: f.situation, front: 'Quelle question poses-tu ?', back: f.model, keyPoints: f.keyPoints, coaching: true };
   }
 }
 

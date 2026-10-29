@@ -1,8 +1,36 @@
 <script lang="ts">
   import type { Exercise } from '../../core/exercise';
+  import type { Evaluation, Verdict } from '../../core/evaluate';
+  import { currentProfile, profileStore } from '../../app/current';
 
-  let { ex, revealed }: { ex: Extract<Exercise, { kind: 'reveal' }>; revealed: boolean } = $props();
+  let { ex, revealed, verdict = $bindable(null) }: { ex: Extract<Exercise, { kind: 'reveal' }>; revealed: boolean; verdict?: Verdict | null } = $props();
   let draft = $state('');
+  let evaluation = $state<Evaluation | null>(null);
+  let asking = $state(false);
+  let evalError = $state('');
+
+  const apiKey = profileStore().get('ancrage.ai.key')?.trim() ?? '';
+  const canAsk = $derived(!!ex.coaching && !!apiKey && !!draft.trim() && !evaluation);
+  const VERDICT_LABEL: Record<Verdict, string> = { reussi: 'Réussi', partiel: 'Partiel', a_revoir: 'À revoir' };
+
+  async function ask() {
+    if (asking) return;
+    asking = true;
+    evalError = '';
+    try {
+      // Loaded on demand, like generation: the SDK is only needed once someone asks.
+      const { createAiClient, evaluateAnswer } = await import('../../app/ai');
+      const res = await evaluateAnswer(createAiClient(apiKey), { situation: ex.quote ?? '', model: ex.back, keyPoints: ex.keyPoints, answer: draft, audience: currentProfile.audience });
+      if (res.ok) {
+        evaluation = res.evaluation;
+        verdict = res.evaluation.verdict;
+      } else evalError = res.error;
+    } catch {
+      evalError = 'L’évaluation a échoué. Compare toi-même avec la réponse modèle.';
+    } finally {
+      asking = false;
+    }
+  }
 </script>
 
 <h2 class="ex-title">{ex.prompt}</h2>
@@ -13,6 +41,7 @@
   </div>
   <label class="eyebrow" for="draft">{ex.front}</label>
   <textarea id="draft" class="ta" bind:value={draft} readonly={revealed} placeholder="Écris ta réponse, comme en séance…"></textarea>
+  {#if ex.coaching && !revealed && !apiKey}<p class="muted small-note">Avec une clé API Anthropic (onglet Générer), Claude peut commenter ta réponse.</p>{/if}
 {:else}
   <div class="flash">{ex.front}</div>
 {/if}
@@ -20,8 +49,26 @@
   <div class="reveal">
     <p class="eyebrow">Réponse modèle</p>
     <p class="model">{ex.back}</p>
-    {#if ex.keyPoints.length}
+    {#if ex.keyPoints.length && !evaluation}
       <ul class="keys">{#each ex.keyPoints as point, i (i)}<li>{point}</li>{/each}</ul>
     {/if}
   </div>
+  {#if canAsk}
+    <button class="btn small ghost ask-ai" disabled={asking} onclick={ask}>{asking ? 'Claude lit ta réponse…' : 'Retour de Claude sur ma réponse'}</button>
+  {/if}
+  {#if evalError}<p class="error" role="alert">{evalError}</p>{/if}
+  {#if evaluation}
+    <div class="ai-eval" aria-live="polite">
+      <p class="eyebrow">Retour de Claude · <span class="verdict-{evaluation.verdict}">{VERDICT_LABEL[evaluation.verdict]}</span></p>
+      {#if evaluation.points.length}
+        <ul class="eval-points">
+          {#each evaluation.points as p, i (i)}
+            <li class:covered={p.covered}><span class="mark" aria-label={p.covered ? 'Couvert' : 'Manquant'}>{p.covered ? '✓' : '✗'}</span><span><b>{p.point}</b> — {p.comment}</span></li>
+          {/each}
+        </ul>
+      {/if}
+      <p>{evaluation.feedback}</p>
+      {#if evaluation.improved}<p class="muted"><b>Formulation proposée :</b> {evaluation.improved}</p>{/if}
+    </div>
+  {/if}
 {/if}
