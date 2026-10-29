@@ -97,3 +97,34 @@ describe('reading language', () => {
     expect((await s.repo.listThemes()).find((x) => x.id === t.id)!.lang).toBeUndefined();
   });
 });
+
+describe('order of new cards', () => {
+  test('mixed by default, chapter by chapter for school subjects; the setting is stored on the domain', async () => {
+    const { createServices, seedIfEmpty } = await import('../../src/app/services');
+    const { createDexieRepo } = await import('../../src/storage/dexie-repo');
+    const { newId } = await import('../../src/core/ids');
+    const { newOrderOf } = await import('../../src/core/domains');
+    const repo = createDexieRepo(`order-${newId()}`);
+    const s = createServices(repo, 'd');
+    const dom = await s.createDomain('Coaching');
+    const [a, b] = [await s.createTheme('A', dom.id), await s.createTheme('B', dom.id)];
+    for (const [t, q, at] of [[a, 'a1', 1], [a, 'a2', 2], [b, 'b1', 3]] as const) {
+      await s.saveNote({ themeId: t.id, fields: { type: 'basic', front: q, back: 'r', reverse: false }, tags: [] }, at);
+    }
+    const fronts = async () => {
+      const notes = await repo.listNotes();
+      const cards = await repo.listCards();
+      return (await s.today(10)).queue.map((id) => notes.find((n) => n.id === cards.find((c) => c.id === id)!.noteId)!.fields).map((f) => (f.type === 'basic' ? f.front : ''));
+    };
+    await s.updateSettings({ desiredRetention: 0.9, newPerDay: 3 });
+    expect(await fronts()).toEqual(['a1', 'b1', 'a2']);
+    await s.setNewOrder(dom.id, 'chapter');
+    expect(await fronts()).toEqual(['a1', 'a2', 'b1']);
+    expect((await repo.listThemes()).find((t) => t.id === dom.id)!.newOrder).toBe('chapter');
+    expect(newOrderOf({ id: 'c5-maths', name: 'Maths', order: 0, kind: 'domain' })).toBe('chapter');
+    expect(newOrderOf({ id: 'x', name: 'X', order: 0, kind: 'domain' })).toBe('mixed');
+    const repo5 = createDexieRepo(`order5-${newId()}`);
+    await seedIfEmpty(repo5, 0, 'college5');
+    expect((await createServices(repo5, 'd').progress(10)).themes.length).toBeGreaterThan(0);
+  });
+});

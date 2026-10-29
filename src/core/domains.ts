@@ -1,4 +1,4 @@
-import type { Theme } from './model';
+import type { Theme, NewOrder } from './model';
 
 /** Two levels: domains (« Mathématiques », « Coaching et PNL ») group themes (chapters). */
 
@@ -6,6 +6,11 @@ export const DEFAULT_DOMAIN_ID = 'dom-principal';
 export const DEFAULT_DOMAIN_NAME = 'Coaching et PNL';
 
 export const isDomain = (t: Theme) => t.kind === 'domain';
+
+/** How a domain introduces new cards: school subjects follow the lessons, everything else is mixed. */
+export function newOrderOf(domain: Theme | undefined): NewOrder {
+  return domain?.newOrder ?? (domain?.id.startsWith('c5-') ? 'chapter' : 'mixed');
+}
 
 export interface DomainGroup {
   /** `null` gathers the themes that belong to no domain. */

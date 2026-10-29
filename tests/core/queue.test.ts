@@ -133,3 +133,34 @@ describe('buildCustomQueue', () => {
     expect(buildCustomQueue(pool, NOW, { themeIds: [], mode: 'due', limit: 10 }, r)).toEqual([]);
   });
 });
+
+describe('v1.9: mixed new cards and mixed sessions', async () => {
+  const { buildDailyQueue, buildCustomQueue } = await import('../../src/core/queue');
+  const { createEmptyCard, State: S } = await import('ts-fsrs');
+  const NOW2 = new Date(2026, 9, 28, 10, 0).getTime();
+  const fresh = (cardId: string, themeId: string, themeOrder: number, createdAt: number, mixNew: boolean, noteType: 'basic' | 'scenario' | 'classify' = 'basic') =>
+    ({ cardId, themeId, themeOrder, noteCreatedAt: createdAt, state: createEmptyCard(new Date(0)), mixNew, noteType });
+  const due = (cardId: string, themeId: string, themeOrder: number, dueAt: number, noteType: 'basic' | 'scenario' | 'classify' = 'basic') =>
+    ({ cardId, themeId, themeOrder, noteCreatedAt: 0, state: { ...createEmptyCard(new Date(0)), state: S.Review, due: new Date(dueAt), stability: 3 }, mixNew: true, noteType });
+
+  test('in a mixed domain, new cards alternate between its themes', () => {
+    const c = [fresh('a1', 'A', 0, 1, true), fresh('a2', 'A', 0, 2, true), fresh('a3', 'A', 0, 3, true), fresh('b1', 'B', 1, 4, true), fresh('c1', 'C', 2, 5, true)];
+    expect(buildDailyQueue(c, NOW2, 5)).toEqual(['a1', 'b1', 'c1', 'a2', 'a3']);
+    expect(buildDailyQueue(c, NOW2, 2)).toEqual(['a1', 'b1']);
+  });
+  test('a chapter-by-chapter domain keeps its order, and domains keep theirs', () => {
+    const c = [fresh('x2', 'X', 10_000, 2, false), fresh('x1', 'X', 10_000, 1, false), fresh('y1', 'Y', 10_001, 3, false), fresh('a1', 'A', 0, 9, true), fresh('b1', 'B', 1, 9, true)];
+    expect(buildDailyQueue(c, NOW2, 10)).toEqual(['a1', 'b1', 'x1', 'x2', 'y1']);
+  });
+  test('mix: due, new and fragile cards in turn, within the limit', () => {
+    const c = [due('d1', 'A', 0, NOW2 - 1000), due('d2', 'B', 1, NOW2 - 500), fresh('n1', 'A', 0, 1, true), due('w1', 'A', 0, NOW2 + 10 * 86_400_000)];
+    const r = () => 0.5;
+    expect(buildCustomQueue(c, NOW2, { themeIds: ['A', 'B'], mode: 'mix', limit: Infinity }, r)).toEqual(['d1', 'n1', 'w1', 'd2']);
+    expect(buildCustomQueue(c, NOW2, { themeIds: ['A', 'B'], mode: 'mix', limit: 2 }, r)).toEqual(['d1', 'n1']);
+  });
+  test('situations: scenarios and classifications only, due first, then fragile, then new', () => {
+    const c = [due('s-due', 'A', 0, NOW2 - 1000, 'scenario'), due('b-due', 'A', 0, NOW2 - 1000, 'basic'), fresh('k-new', 'B', 1, 1, true, 'classify'), due('s-weak', 'B', 1, NOW2 + 86_400_000, 'scenario'), due('s-solid', 'A', 0, NOW2 + 86_400_000, 'scenario')];
+    const r = (x: { cardId: string }) => (x.cardId === 's-weak' ? 0.3 : 0.9);
+    expect(buildCustomQueue(c, NOW2, { themeIds: ['A', 'B'], mode: 'situations', limit: Infinity }, r)).toEqual(['s-due', 's-weak', 's-solid', 'k-new']);
+  });
+});

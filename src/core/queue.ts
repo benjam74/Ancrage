@@ -1,5 +1,5 @@
 import { State } from 'ts-fsrs';
-import type { ReviewEntry } from './model';
+import type { NoteType, ReviewEntry } from './model';
 import type { CardState } from './scheduler';
 
 export interface QueueCandidate {
@@ -8,6 +8,38 @@ export interface QueueCandidate {
   themeOrder: number;
   noteCreatedAt: number;
   state: CardState;
+  /** The theme's domain shows its new cards alternating between themes (else chapter by chapter). */
+  mixNew?: boolean;
+  noteType?: NoteType;
+}
+
+/** Domain rank inside `themeOrder` (domain order × 10 000 + theme order). */
+const domainRank = (c: QueueCandidate) => Math.floor(c.themeOrder / 10_000);
+
+function groupBy<K>(list: QueueCandidate[], key: (c: QueueCandidate) => K): Map<K, QueueCandidate[]> {
+  const out = new Map<K, QueueCandidate[]>();
+  for (const c of list) {
+    const lane = out.get(key(c));
+    if (lane) lane.push(c);
+    else out.set(key(c), [c]);
+  }
+  return out;
+}
+
+/** Takes one card from each lane in turn until all are empty. */
+function roundRobin<T>(lanes: T[][]): T[] {
+  const out: T[] = [];
+  for (let i = 0; lanes.some((lane) => i < lane.length); i++) for (const lane of lanes) if (i < lane.length) out.push(lane[i]);
+  return out;
+}
+
+/**
+ * New cards in learning order: domains in their order; inside a mixed domain, one card of each theme in turn;
+ * otherwise theme after theme. Inside a theme, oldest note first.
+ */
+export function orderNew(candidates: QueueCandidate[]): QueueCandidate[] {
+  const sorted = [...candidates].sort((a, b) => a.themeOrder - b.themeOrder || a.noteCreatedAt - b.noteCreatedAt || a.cardId.localeCompare(b.cardId));
+  return [...groupBy(sorted, domainRank).values()].flatMap((list) => (list.some((c) => c.mixNew) ? roundRobin([...groupBy(list, (c) => c.themeId).values()]) : list));
 }
 
 export function studyDayStart(now: number, rolloverHour = 4): number {
@@ -33,14 +65,9 @@ export function buildDailyQueue(candidates: QueueCandidate[], now: number, newLi
     byTheme.set(c.themeId, [...(byTheme.get(c.themeId) ?? []), c]);
   }
   const lanes = [...byTheme.values()].sort((a, b) => a[0].themeOrder - b[0].themeOrder);
-  const reviews: string[] = [];
-  for (let i = 0; lanes.some((lane) => i < lane.length); i++) {
-    for (const lane of lanes) if (i < lane.length) reviews.push(lane[i].cardId);
-  }
+  const reviews = roundRobin(lanes).map((c) => c.cardId);
 
-  const fresh = candidates
-    .filter(isNew)
-    .sort((a, b) => a.themeOrder - b.themeOrder || a.noteCreatedAt - b.noteCreatedAt || a.cardId.localeCompare(b.cardId))
+  const fresh = orderNew(candidates.filter(isNew))
     .slice(0, Math.max(0, newLimit))
     .map((c) => c.cardId);
 
@@ -52,7 +79,9 @@ export function nextDue(candidates: QueueCandidate[], now: number): number | nul
   return future.length ? Math.min(...future) : null;
 }
 
-export type CustomMode = 'due' | 'new' | 'practice';
+export type CustomMode = 'due' | 'new' | 'practice' | 'mix' | 'situations';
+/** Note types that train choosing the right tool for a situation. */
+export const SITUATION_TYPES: NoteType[] = ['scenario', 'classify'];
 export interface CustomChoice {
   themeIds: string[];
   mode: CustomMode;
@@ -73,13 +102,24 @@ export function buildCustomQueue(
   const themes = new Set(choice.themeIds);
   const chosen = candidates.filter((c) => themes.has(c.themeId));
   // Due cards: same order as the daily queue, without new cards.
-  if (choice.mode === 'due') return buildDailyQueue(chosen, now, 0).slice(0, choice.limit);
-  let picked: QueueCandidate[];
-  if (choice.mode === 'new') {
-    picked = chosen.filter(isNew).sort((a, b) => a.themeOrder - b.themeOrder || a.noteCreatedAt - b.noteCreatedAt || a.cardId.localeCompare(b.cardId));
-  } else {
-    const r = new Map(chosen.map((c) => [c.cardId, retrievability(c)]));
-    picked = chosen.filter((c) => !isNew(c) && dueAt(c) > now).sort((a, b) => r.get(a.cardId)! - r.get(b.cardId)! || dueAt(a) - dueAt(b) || a.cardId.localeCompare(b.cardId));
+  const dueOf = (list: QueueCandidate[]) => buildDailyQueue(list, now, 0);
+  const newOf = (list: QueueCandidate[]) => orderNew(list.filter(isNew)).map((c) => c.cardId);
+  const fragileOf = (list: QueueCandidate[]) => {
+    const r = new Map(list.map((c) => [c.cardId, retrievability(c)]));
+    return list
+      .filter((c) => !isNew(c) && dueAt(c) > now)
+      .sort((a, b) => r.get(a.cardId)! - r.get(b.cardId)! || dueAt(a) - dueAt(b) || a.cardId.localeCompare(b.cardId))
+      .map((c) => c.cardId);
+  };
+  let picked: string[];
+  if (choice.mode === 'due') picked = dueOf(chosen);
+  else if (choice.mode === 'new') picked = newOf(chosen);
+  else if (choice.mode === 'practice') picked = fragileOf(chosen);
+  // Everything in turn: what is due, something new, something fragile.
+  else if (choice.mode === 'mix') picked = roundRobin([dueOf(chosen), newOf(chosen), fragileOf(chosen)]);
+  else {
+    const situations = chosen.filter((c) => c.noteType && SITUATION_TYPES.includes(c.noteType));
+    picked = [...dueOf(situations), ...fragileOf(situations), ...newOf(situations)];
   }
-  return picked.slice(0, choice.limit).map((c) => c.cardId);
+  return picked.slice(0, choice.limit);
 }
