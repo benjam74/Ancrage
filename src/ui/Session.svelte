@@ -9,6 +9,7 @@
   import { MODE_LABEL, RATING_LABEL, inHowLong } from './format';
   import type { Progress, RoundOutcome } from '../app/services';
   import { REPAIR_ROUNDS } from '../core/progress';
+  import { HARD_LAPSES } from '../core/hard';
   import { createFeedback, primeAudio } from './feedback';
   import Icon from './Icon.svelte';
   import { motionOn, prefs, updatePrefs } from './prefs.svelte';
@@ -40,7 +41,7 @@
   } = $props();
   const played = new Set<string>();
 
-  type Shown = { cardId: string; ex: Exercise; mode: Mode; themeName: string; isNew: boolean; retry: boolean; shownAt: number };
+  type Shown = { cardId: string; ex: Exercise; mode: Mode; themeName: string; isNew: boolean; retry: boolean; shownAt: number; lapses: number };
   type Result = { correct: boolean; entry: ReviewEntry | null; state: CardState | null; corrected: boolean };
 
   let round = $state<Round>(untrack(() => startRound(queue)));
@@ -99,6 +100,7 @@
       isNew: state.state === State.New,
       retry: isRetry(round, cardId),
       shownAt: Date.now(),
+      lapses: state.lapses,
     };
   }
 
@@ -187,6 +189,8 @@
     await next();
   });
 
+  /** This answer made the card a hard one. */
+  const becameHard = $derived(!!shown && !!result?.state && result.state.lapses >= HARD_LAPSES && shown.lapses < HARD_LAPSES);
   const showStreakStep = $derived(!!roundResult && !!after && prefs.showStreak);
   // Counted per card on its first pass: a card missed then retried is one miss, not two answers.
   const cards = $derived(round.total - round.retried.length);
@@ -325,6 +329,7 @@
           {:else}
             <p class="engine">Second passage, non enregistré.</p>
           {/if}
+          {#if becameHard}<p class="engine">Cette carte te résiste : tu pourras la reformuler depuis la bibliothèque.</p>{/if}
           {#if result.entry && shown.mode !== 'self' && !result.corrected}
             <button class="link" onclick={correct}>{result.correct ? 'En fait, je ne savais pas' : 'J’avais bon'}</button>
           {/if}

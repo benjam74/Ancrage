@@ -131,3 +131,18 @@ export function toProposals(raw: unknown, allowed: NoteType[]): { proposals: Pro
   }
   return { proposals, rejected };
 }
+
+/** A note as plain text, the source for rewording it. */
+export function describeNote(f: NoteFields): string {
+  switch (f.type) {
+    case 'basic': return `Question : ${f.front}\nRéponse : ${f.back}`;
+    case 'cloze': return `Phrase à trous : ${f.text.replace(/\{\{(.*?)\}\}/g, '[$1]')}`;
+    case 'ordering': return `${f.title}\nÉtapes dans l’ordre :\n${f.steps.map((s, i) => `${i + 1}. ${s}`).join('\n')}`;
+    case 'classify': return `Énoncé : ${f.statement}\nCatégories : ${f.categories.join(', ')}\nBonne catégorie : ${f.answer}`;
+    case 'mcq': return `Question : ${f.question}\nBonne réponse : ${f.answer}\nMauvaises réponses : ${f.distractors.join(' ; ')}`;
+    case 'scenario': return `Le client dit : ${f.situation}\nRéponse modèle : ${f.model}\nPoints clés : ${f.keyPoints.join(' ; ')}`;
+  }
+}
+
+export const REWORD_INSTRUCTION =
+  'Cette carte est souvent oubliée. Propose 1 à 3 cartes qui testent la même connaissance plus facilement : scinde-la si elle contient plusieurs idées, rends la question plus précise, ajoute un exemple concret si cela aide. Ne change pas le contenu à retenir.';

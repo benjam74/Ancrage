@@ -412,3 +412,16 @@ p.error { font-weight: 700; color: var(--bad); }
 .domain-block > summary::-webkit-details-marker { display: none; }
 .domain-block > summary h2::before { content: "▸ "; color: var(--ink-soft); }
 .domain-block[open] > summary h2::before { content: "▾ "; }
+
+/* v1.7: document import, hard cards */
+.file-btn { position: relative; justify-self: start; cursor: pointer; }
+.file-btn input { position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; }
+.file-btn:focus-within { outline: 3px solid var(--sun); outline-offset: 2px; }
+.file-btn.disabled { opacity: .6; cursor: progress; }
+.sections { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.section-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 18em); gap: 8px 12px; align-items: center; padding: 10px 12px; border-radius: 12px; background: var(--bg); }
+.section-row .check { align-items: flex-start; overflow-wrap: anywhere; }
+.section-row select { width: 100%; }
+.group-title { margin-top: 18px; overflow-wrap: anywhere; }
+.hard-meta { color: var(--bad); font-weight: 700; }
+@media (max-width: 640px) { .section-row { grid-template-columns: minmax(0, 1fr); } }

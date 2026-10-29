@@ -1,11 +1,13 @@
 <script lang="ts">
   import type { LibraryTheme, Services } from '../app/services';
-  import type { Note, NoteFields } from '../core/model';
+  import type { Note, NoteFields, Theme } from '../core/model';
+  import { REWORD_INSTRUCTION, describeNote } from '../core/generate';
+  import type { Rewrite } from './Generate.svelte';
   import { TYPE_LABEL } from './format';
   import { groupByDomain, isDomain } from '../core/domains';
   import { EXAMPLES } from '../app/current';
 
-  let { services, onedit, onchange }: { services: Services; onedit: (note: Note) => void; onchange: () => void } = $props();
+  let { services, onedit, onchange, onreword }: { services: Services; onedit: (note: Note) => void; onchange: () => void; onreword: (r: Rewrite) => void } = $props();
 
   let lib = $state<LibraryTheme[]>([]);
   let confirmNote = $state<string | null>(null);
@@ -20,6 +22,8 @@
   let warning = $state('');
 
   let examples = $state(0);
+  let hard = $state<{ note: Note; theme: Theme; lapses: number }[]>([]);
+  const aside = $derived(lib.flatMap((t) => t.notes.filter((n) => n.note.suspended).map((n) => ({ ...n, theme: t.theme }))));
   const totalNotes = $derived(lib.reduce((sum, t) => sum + t.notes.length, 0));
   const byId = $derived(new Map(lib.map((t) => [t.theme.id, t])));
   const groups = $derived(groupByDomain(lib.map((t) => t.theme)));
@@ -33,7 +37,7 @@
   });
 
   async function load() {
-    [lib, examples] = await Promise.all([services.library(), services.examplesCount()]);
+    [lib, examples, hard] = await Promise.all([services.library(), services.examplesCount(), services.hardNotes(Date.now())]);
   }
 
   const plural = (n: number, word: string) => `${n} ${word}${n > 1 ? 's' : ''}`;
@@ -60,6 +64,15 @@
     await services.deleteNote(id);
     confirmNote = null;
     await done('Note supprimée.');
+  }
+
+  async function setAside(note: Note, on: boolean) {
+    await services.setSuspended(note.id, on, Date.now());
+    await done(on ? 'Note mise de côté : elle ne revient plus en révision.' : 'Note reprise : elle revient dans tes révisions.');
+  }
+
+  function reword(note: Note) {
+    onreword({ nonce: Date.now(), noteId: note.id, source: describeNote(note.fields), themeId: note.themeId, instruction: REWORD_INSTRUCTION, label: summary(note.fields).slice(0, 60) });
   }
 
   async function addTheme(e: SubmitEvent) {
@@ -150,6 +163,46 @@
     </section>
   {/if}
 
+  {#if hard.length}
+    <section class="panel" aria-labelledby="hard-title">
+      <h2 id="hard-title">Cartes difficiles</h2>
+      <p class="muted">Oubliées au moins 4 fois. Une carte qui résiste est souvent trop chargée ou ambiguë : reformule-la, scinde-la, ou mets-la de côté.</p>
+      <ul class="note-list">
+        {#each hard as { note, theme, lapses } (note.id)}
+          <li class="note-item">
+            <div>
+              <p class="summary">{summary(note.fields)}</p>
+              <p class="meta"><span class="hard-meta">Oubliée {lapses} fois</span> · {theme.name} · {TYPE_LABEL[note.fields.type]}</p>
+            </div>
+            <div class="actions">
+              <button class="btn small ghost" onclick={() => onedit(note)}>Modifier</button>
+              <button class="btn small ghost" onclick={() => reword(note)}>Reformuler avec l’IA</button>
+              <button class="btn small ghost" onclick={() => setAside(note, true)}>Mettre de côté</button>
+            </div>
+          </li>
+        {/each}
+      </ul>
+    </section>
+  {/if}
+
+  {#if aside.length}
+    <section class="panel" aria-labelledby="aside-title">
+      <h2 id="aside-title">Mises de côté</h2>
+      <p class="muted">Elles ne reviennent plus en révision et gardent leur historique.</p>
+      <ul class="note-list">
+        {#each aside as { note, theme } (note.id)}
+          <li class="note-item">
+            <div>
+              <p class="summary">{summary(note.fields)}</p>
+              <p class="meta">{theme.name} · {TYPE_LABEL[note.fields.type]}</p>
+            </div>
+            <div class="actions"><button class="btn small ghost" onclick={() => setAside(note, false)}>Reprendre</button></div>
+          </li>
+        {/each}
+      </ul>
+    </section>
+  {/if}
+
   {#if lib.length === 0}
     <section class="panel"><p>Aucun thème. Crée un thème, puis ajoute tes premières notes depuis « Créer ».</p></section>
   {/if}
@@ -208,7 +261,7 @@
             <li class="note-item">
               <div>
                 <p class="summary">{summary(note.fields)}</p>
-                <p class="meta">{TYPE_LABEL[note.fields.type]} · {cards} carte{cards > 1 ? 's' : ''}{note.tags.length ? ` · ${note.tags.join(', ')}` : ''}</p>
+                <p class="meta">{TYPE_LABEL[note.fields.type]} · {cards} carte{cards > 1 ? 's' : ''}{note.tags.length ? ` · ${note.tags.join(', ')}` : ''}{note.suspended ? ' · mise de côté' : ''}</p>
               </div>
               {#if confirmNote === note.id}
                 <span class="confirm">Supprimer avec son historique ?

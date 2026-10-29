@@ -116,3 +116,13 @@ describe('instruction', () => {
     expect(buildPrompt(req()).user).not.toContain('Consigne');
   });
 });
+
+describe('describeNote', () => {
+  test('renders every type as plain text', async () => {
+    const { describeNote } = await import('../../src/core/generate');
+    expect(describeNote({ type: 'basic', front: 'Q', back: 'R', reverse: false })).toBe('Question : Q\nRéponse : R');
+    expect(describeNote({ type: 'cloze', text: 'Le {{VAKOG}} décrit' })).toBe('Phrase à trous : Le [VAKOG] décrit');
+    expect(describeNote({ type: 'ordering', title: 'GROW', steps: ['G', 'R'] })).toContain('1. G\n2. R');
+    expect(describeNote({ type: 'scenario', situation: 'S', model: 'M', keyPoints: ['a', 'b'] })).toContain('Points clés : a ; b');
+  });
+});

@@ -6,7 +6,7 @@
   import WhoReviews from './ui/WhoReviews.svelte';
   import type { Note } from './core/model';
   import Editor from './ui/Editor.svelte';
-  import Generate from './ui/Generate.svelte';
+  import Generate, { type Rewrite } from './ui/Generate.svelte';
   import Home from './ui/Home.svelte';
   import Library from './ui/Library.svelte';
   import Nav from './ui/Nav.svelte';
@@ -39,6 +39,7 @@
   type SessionSpec = { queue: string[]; more: (played: Set<string>) => Promise<string[]>; kind: 'daily' | 'custom' | 'practice' };
   let spec = $state.raw<SessionSpec | null>(null);
   let preselect = $state<string | null>(null);
+  let rewrite = $state.raw<Rewrite | null>(null);
   let customEmpty = $state('');
 
   function startDaily() {
@@ -150,7 +151,7 @@
         {:else if view === 'reglages'}
           {#if cloud}<Settings {services} {cloud} onchange={refresh} />{/if}
         {:else if view === 'bibliotheque'}
-          <Library {services} onedit={edit} onchange={refresh} />
+          <Library {services} onedit={edit} onchange={refresh} onreword={(r) => { rewrite = r; createMode = 'generate'; generateOpened = true; editing = null; go('creer'); }} />
         {:else}
           {#if !editing}
             <div class="tabs" role="group" aria-label="Façon de créer">
@@ -166,7 +167,7 @@
         {/if}
         {#if generateOpened}
           <div hidden={view !== 'creer' || createMode !== 'generate' || !!editing}>
-            <Generate {services} onchange={refresh} />
+            <Generate {services} onchange={refresh} {rewrite} />
           </div>
         {/if}
       </div>
