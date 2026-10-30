@@ -69,6 +69,9 @@ alter table public.ancrage_items enable row level security;
 grant select, insert, update on public.ancrage_items to authenticated;
 grant usage on sequence public.ancrage_items_seq to authenticated;
 
+drop policy if exists "Chacun lit ses éléments" on public.ancrage_items;
+drop policy if exists "Chacun crée ses éléments" on public.ancrage_items;
+drop policy if exists "Chacun met à jour ses éléments" on public.ancrage_items;
 create policy "Chacun lit ses éléments" on public.ancrage_items
   for select to authenticated using (user_id = auth.uid());
 create policy "Chacun crée ses éléments" on public.ancrage_items

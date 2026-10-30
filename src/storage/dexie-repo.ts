@@ -19,6 +19,7 @@ class AncrageDb extends Dexie {
   settings!: EntityTable<SettingsRow, 'key'>;
   events!: EntityTable<AppEvent, 'id'>;
   tombstones!: EntityTable<Tombstone, 'id'>;
+  meta!: EntityTable<{ key: string; value: string }, 'key'>;
 
   constructor(name: string) {
     super(name);
@@ -31,6 +32,7 @@ class AncrageDb extends Dexie {
     });
     this.version(2).stores({ events: 'id, ts' });
     this.version(3).stores({ tombstones: 'id' });
+    this.version(4).stores({ meta: 'key' });
   }
 }
 
@@ -156,6 +158,16 @@ export function createDexieRepo(name: string): Repo {
         return { changed, dump: next };
       }),
 
+    async getMeta(key) {
+      return (await db.meta.get(key))?.value ?? null;
+    },
+    async setMeta(key, value) {
+      if (value === null) await db.meta.delete(key);
+      else await db.meta.put({ key, value });
+    },
+    async clearMeta(prefix) {
+      await db.meta.where('key').startsWith(prefix).delete();
+    },
     getSettings: readSettings,
     async putSettings(settings, ts = Date.now()) {
       await db.settings.put({ key: 'main', desiredRetention: settings.desiredRetention, newPerDay: settings.newPerDay, updatedAt: ts });

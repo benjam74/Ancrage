@@ -135,7 +135,7 @@ function restClient(config: SyncConfig, getSession: () => AuthSession | null, sa
         throw new Error('Session expirée : reconnecte-toi.');
       }
     }
-    if (res.status === 404 && table === ITEMS_TABLE) throw new ItemsMissing();
+    if (res.status === 404 && table === ITEMS_TABLE && /PGRST205|ancrage_items/.test(JSON.stringify(res.body))) throw new ItemsMissing();
     if (res.status === 404 && /PGRST205|ancrage_snapshots/.test(JSON.stringify(res.body))) {
       throw new Error('La table ancrage_snapshots est absente du projet : exécute le script SQL du guide de synchronisation.');
     }

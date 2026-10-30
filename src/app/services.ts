@@ -627,7 +627,11 @@ export function createServices(repo: Repo, deviceId: string): Services {
       return { fileName: backupFileName(now), text: serializeBackup(await repo.dumpAll(), now) };
     },
 
-    importBackup: (dump) => repo.restoreAll(dump),
+    async importBackup(dump) {
+      await repo.restoreAll(dump);
+      // The data no longer matches what the sync state says the device has: start the next sync from scratch.
+      await repo.clearMeta('sync:');
+    },
 
     async mergeBackup(dump) {
       await mergeIntoLocal(repo, dump);

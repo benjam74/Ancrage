@@ -70,3 +70,25 @@ describe('merge properties with field times', () => {
     expect(mergeRecord(m1, m1, NOTE_FIELDS)).toEqual(m1);
   });
 });
+
+describe('fields from a later app version', () => {
+  test('a field this version does not know survives its edits and merges', () => {
+    const later = stampFields(base, { ...base, mood: 'calme', updatedAt: 20 } as Note, NOTE_FIELDS);
+    // This version edits the note without knowing `mood`: its record still carries it (spread), then a merge.
+    const edited = stampFields(later, { ...later, tags: ['x'], updatedAt: 30 }, NOTE_FIELDS);
+    const m = mergeRecord(later, edited, NOTE_FIELDS) as Note & { mood?: string };
+    expect(m.mood).toBe('calme');
+    // A version rebuilt without the field (no time for it) does not delete it.
+    const rebuilt: Note = { ...base, tags: ['y'], updatedAt: 40 };
+    expect((mergeRecord(later, rebuilt, NOTE_FIELDS) as Note & { mood?: string }).mood).toBe('calme');
+  });
+});
+
+describe('rebuilt records', () => {
+  test('saving a note rebuilt without a later field keeps that field', () => {
+    const later = { ...base, mood: 'calme', updatedAt: 20 } as Note;
+    const saved = stampFields(later, { ...base, tags: ['z'], updatedAt: 30 }, NOTE_FIELDS) as Note & { mood?: string };
+    expect(saved.mood).toBe('calme');
+    expect(saved.tags).toEqual(['z']);
+  });
+});

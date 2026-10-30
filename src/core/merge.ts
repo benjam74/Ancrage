@@ -37,6 +37,16 @@ export const THEME_FIELDS = ['name', 'parentId', 'order', 'kind', 'lang', 'newOr
 
 type Stamped = { updatedAt?: number; fieldTimes?: Record<string, number> };
 
+/** Keys that describe the record rather than its content. */
+const META = new Set(['id', 'createdAt', 'updatedAt', 'fieldTimes']);
+/** The declared fields plus any other content key either version has (a field from a later app version included). */
+function contentKeys(fields: readonly string[], ...recs: (object | undefined)[]): string[] {
+  const keys = new Set(fields);
+  for (const r of recs) if (r) for (const k of Object.keys(r)) if (!META.has(k)) keys.add(k);
+  for (const r of recs) for (const k of Object.keys((r as Stamped | undefined)?.fieldTimes ?? {})) keys.add(k);
+  return [...keys].sort();
+}
+
 /** Records when each field of `next` changed compared with `prev` (a removed field counts as a change). */
 export function stampFields<T extends Stamped>(prev: T | undefined, next: T, fields: readonly string[]): T {
   if (!prev) return next;
@@ -44,12 +54,18 @@ export function stampFields<T extends Stamped>(prev: T | undefined, next: T, fie
   const at = next.updatedAt ?? 0;
   const p = prev as Record<string, unknown>;
   const n = next as Record<string, unknown>;
-  for (const f of fields) {
-    if (canonical(p[f] ?? null) !== canonical(n[f] ?? null)) times[f] = at;
+  const all = contentKeys(fields, prev, next);
+  const out: Record<string, unknown> = { ...next };
+  for (const f of all) {
+    // A field this version does not know is carried over as it was, never dropped by a rebuilt record.
+    if (!fields.includes(f) && n[f] === undefined && p[f] !== undefined) {
+      out[f] = p[f];
+      times[f] = prev.fieldTimes?.[f] ?? prev.updatedAt ?? 0;
+    } else if (canonical(p[f] ?? null) !== canonical(n[f] ?? null)) times[f] = at;
     // An unchanged field keeps the time it really changed, not this write's.
     else if (p[f] !== undefined) times[f] = prev.fieldTimes?.[f] ?? prev.updatedAt ?? 0;
   }
-  return withTimes(next, times, fields);
+  return withTimes(out as T, times, all);
 }
 
 /** Field times equal to `updatedAt` on a present field are implied: leave them out, so equal records stay equal. */
@@ -79,7 +95,8 @@ export function mergeRecord<T extends Stamped & { id: string }>(x: T, y: T, fiel
   const ry = y as Record<string, unknown>;
   const timeOf = (r: Record<string, unknown>, rec: Stamped, f: string) =>
     r[f] !== undefined ? (rec.fieldTimes?.[f] ?? rec.updatedAt ?? 0) : (rec.fieldTimes?.[f] ?? -Infinity);
-  for (const f of fields) {
+  const all = contentKeys(fields, x, y);
+  for (const f of all) {
     const tx = timeOf(rx, x, f);
     const ty = timeOf(ry, y, f);
     const fromX = tx !== ty ? tx > ty : canonical(rx[f] ?? null) >= canonical(ry[f] ?? null);
@@ -92,7 +109,7 @@ export function mergeRecord<T extends Stamped & { id: string }>(x: T, y: T, fiel
   }
   out.updatedAt = Math.max(x.updatedAt ?? 0, y.updatedAt ?? 0);
   if (x.updatedAt === undefined && y.updatedAt === undefined) delete out.updatedAt;
-  return withTimes(out as T, times, fields);
+  return withTimes(out as T, times, all);
 }
 
 const same = <T extends object>(x: T, y: T) => (x === y || key(x) >= key(y) ? x : y);

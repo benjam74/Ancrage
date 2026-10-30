@@ -3,17 +3,16 @@ import { describe, expect, test } from 'vitest';
 import { createServices, seedIfEmpty } from '../../src/app/services';
 import { createDexieRepo } from '../../src/storage/dexie-repo';
 import { newId } from '../../src/core/ids';
-import { memoryStorage } from '../../src/app/cloud';
 import { createMemoryItems } from '../../src/sync/items-remote';
 import { createMemoryRemote } from '../../src/sync/memory-remote';
-import { syncItems, syncOnce } from '../../src/sync/sync';
+import { repoSyncState, syncItems, syncOnce } from '../../src/sync/sync';
 import { BACKUP_FORMAT, serializeBackup } from '../../src/core/backup';
 
 const NOW = new Date(2026, 9, 28, 10, 0).getTime();
 
 async function device() {
   const repo = createDexieRepo(`items-${newId()}`);
-  return { repo, services: createServices(repo, `dev-${newId()}`), state: memoryStorage() };
+  return { repo, services: createServices(repo, `dev-${newId()}`), state: repoSyncState(repo, 'test') };
 }
 
 describe('incremental sync', () => {
@@ -110,5 +109,90 @@ describe('incremental sync', () => {
 
   test('serializeBackup is still readable by the incremental sync helper', () => {
     expect(JSON.parse(serializeBackup({ themes: [], notes: [], cards: [], reviews: [], events: [], settings: { desiredRetention: 0.9, newPerDay: 5 }, flags: [], tombstones: [], settingsUpdatedAt: 0 }, NOW)).version).toBe(5);
+  });
+});
+
+describe('nothing stays missing', () => {
+  const DAY = 86_400_000;
+  test('after « Remplacer mes données » with an older backup, the newer server items come back', async () => {
+    const server = createMemoryItems();
+    const a = await device();
+    await seedIfEmpty(a.repo, NOW);
+    const old = await a.services.exportBackup(NOW);
+    const [card] = (await a.services.today(NOW)).queue;
+    await a.services.engine.answer(card, 'self', { kind: 'self', grade: 3 }, NOW + 1);
+    await syncItems(a.repo, server.remote, a.state);
+    const { parseBackup } = await import('../../src/core/backup');
+    const parsed = parseBackup(old.text);
+    if (!parsed.ok) throw new Error(parsed.error);
+    await a.services.importBackup(parsed.dump);
+    expect(await a.repo.listReviews()).toHaveLength(0);
+    await syncItems(a.repo, server.remote, a.state);
+    expect(await a.repo.listReviews()).toHaveLength(1);
+  });
+
+  test('a note deleted here and edited elsewhere comes back with its cards and history', async () => {
+    const server = createMemoryItems();
+    const a = await device();
+    await seedIfEmpty(a.repo, NOW);
+    const card = (await a.repo.listCards()).find((c) => c.noteId === 'ex-01')!;
+    await a.services.engine.answer(card.id, 'self', { kind: 'self', grade: 3 }, NOW + 1);
+    await syncItems(a.repo, server.remote, a.state, undefined, () => NOW);
+    const b = await device();
+    await syncItems(b.repo, server.remote, b.state, undefined, () => NOW);
+    await a.services.deleteNote('ex-01');
+    await syncItems(a.repo, server.remote, a.state, undefined, () => NOW + 10);
+    const note = (await b.repo.getNote('ex-01'))!;
+    await b.services.saveNote({ id: 'ex-01', themeId: note.themeId, fields: note.fields, tags: ['revenue'] }, Date.now() + DAY);
+    await syncItems(b.repo, server.remote, b.state, undefined, () => NOW + 20);
+    await syncItems(a.repo, server.remote, a.state, undefined, () => NOW + 30);
+    await syncItems(a.repo, server.remote, a.state, undefined, () => NOW + 40);
+    await syncItems(b.repo, server.remote, b.state, undefined, () => NOW + 50);
+    const cardsA = (await a.repo.listCards()).filter((c) => c.noteId === 'ex-01').map((c) => c.id);
+    const cardsB = (await b.repo.listCards()).filter((c) => c.noteId === 'ex-01').map((c) => c.id);
+    expect(cardsA).toEqual(cardsB);
+    expect((await a.repo.listReviews(cardsA[0])).length).toBe(1);
+  });
+
+  test('an item missed by the listing (late commit) is caught by the daily full listing', async () => {
+    const server = createMemoryItems();
+    const a = await device();
+    await seedIfEmpty(a.repo, NOW);
+    await syncItems(a.repo, server.remote, a.state, undefined, () => NOW);
+    const b = await device();
+    await syncItems(b.repo, server.remote, b.state, undefined, () => NOW);
+    await a.services.setExplanation('ex-05', 'Arrivée tard.', NOW + 1);
+    await syncItems(a.repo, server.remote, a.state, undefined, () => NOW + 1);
+    // B lists after the write but believes it is past it (as if the row had committed late).
+    const st = JSON.parse((await b.state.get())!);
+    st.seq += 10_000;
+    await b.state.set(JSON.stringify(st));
+    await syncItems(b.repo, server.remote, b.state, undefined, () => NOW + 2);
+    expect((await b.repo.getNote('ex-05'))!.explanation).toBeUndefined();
+    await syncItems(b.repo, server.remote, b.state, undefined, () => NOW + 2 + DAY);
+    expect((await b.repo.getNote('ex-05'))!.explanation).toBe('Arrivée tard.');
+  });
+
+  test('takeover: when an older app rewrites the whole copy meanwhile, it is merged again until marked', async () => {
+    const server = createMemoryItems();
+    const snapshot = createMemoryRemote();
+    const old = await device();
+    await seedIfEmpty(old.repo, NOW);
+    await syncOnce(old.repo, snapshot);
+    const fresh = await device();
+    // The older app writes during the takeover: the marker write conflicts.
+    const racing = { ...snapshot, async put(data: unknown, expected: number | null) {
+      if ((data as { movedTo?: string }).movedTo) {
+        await old.services.setExplanation('ex-04', 'Écrit par l’ancienne version.', NOW + 5);
+        await syncOnce(old.repo, snapshot);
+      }
+      return snapshot.put(data, expected);
+    } };
+    await syncItems(fresh.repo, server.remote, fresh.state, racing);
+    expect(JSON.parse((await fresh.state.get())!).takeover).toBe(true);
+    await syncItems(fresh.repo, server.remote, fresh.state, snapshot);
+    expect((await fresh.repo.getNote('ex-04'))!.explanation).toBe('Écrit par l’ancienne version.');
+    expect(((await snapshot.get())!.data as { movedTo?: string }).movedTo).toBe('ancrage_items');
+    expect(JSON.parse((await fresh.state.get())!).takeover).toBe(false);
   });
 });

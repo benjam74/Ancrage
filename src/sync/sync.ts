@@ -1,7 +1,6 @@
 import { BACKUP_FORMAT, BACKUP_VERSION, parseBackup, serializeBackup, type Dump } from '../core/backup';
 import { changedItems, checkItem, dumpToItems, itemHash, itemKey, itemsToDump, type Item } from '../core/items';
 import type { ItemsRemote } from './items-remote';
-import type { KeyValue } from '../app/cloud';
 import { canonical } from '../core/canonical';
 import { cardVariants } from '../core/cards';
 import { mergeDumps } from '../core/merge';
@@ -57,42 +56,69 @@ export async function syncOnce(repo: Repo, remote: RemoteStore, now: () => numbe
   throw new Error('Synchronisation impossible : conflit persistant avec le serveur. Réessaie dans un instant.');
 }
 
-const ITEMS_STATE = 'ancrage.sync.items';
-/** Positions re-listed at each sync: a write still committing when we last listed is not missed. */
+const ITEMS_STATE = 'sync:items';
+/** Positions re-listed at each sync: a write still committing when we last listed is usually not missed. */
 const OVERLAP = 500;
+/** A full listing at least this often catches anything missed (late commits, restored or revived data). */
+const FULL_EVERY = 24 * 3_600_000;
 
 interface ItemsState {
   /** Last server position seen. */
   seq: number;
-  /** Fingerprint of each item as the server holds it. */
+  /** Fingerprint of each item as the server holds it and this device has it. */
   known: Record<string, string>;
-  /** Position of our own last write of each item: listing it again needs no download. */
-  mine: Record<string, number>;
+  /** Server position of the version of each item this device has (written or downloaded): listing it again needs no download. */
+  seen: Record<string, number>;
+  /** Last full listing. */
+  lastFull: number;
+  /** The former whole copy is not marked as moved yet: re-read and merged at every sync until it is. */
+  takeover: boolean;
 }
 
-function loadState(store: KeyValue): ItemsState {
+/** Where the sync state lives: the device database, so it survives quotas and is reset by a restore. */
+export interface SyncStateStore {
+  get(): Promise<string | null>;
+  set(value: string): Promise<void>;
+}
+
+export const repoSyncState = (repo: Repo, space: string): SyncStateStore => ({
+  get: () => repo.getMeta(`${ITEMS_STATE}:${space}`),
+  set: (v) => repo.setMeta(`${ITEMS_STATE}:${space}`, v),
+});
+
+async function loadState(store: SyncStateStore): Promise<ItemsState> {
   try {
-    const s = JSON.parse(store.get(ITEMS_STATE) ?? 'null');
-    if (s && typeof s.seq === 'number' && s.known && s.mine) return s as ItemsState;
+    const s = JSON.parse((await store.get()) ?? 'null');
+    if (s && typeof s.seq === 'number' && s.known && s.seen) return { lastFull: 0, takeover: false, ...s } as ItemsState;
   } catch {
-    // A damaged state only costs a full resend.
+    // A damaged state only costs a full listing.
   }
-  return { seq: 0, known: {}, mine: {} };
+  return { seq: 0, known: {}, seen: {}, lastFull: 0, takeover: false };
 }
 
-/** The whole-copy row once a device moved to items: older apps read version 6 and ask to be updated. */
+/** The whole-copy row once a device moved to items: older apps read a newer version and ask to be updated. */
 const isMarker = (data: unknown) => !!data && typeof data === 'object' && (data as { movedTo?: unknown }).movedTo === 'ancrage_items';
 
 /**
  * Incremental sync: download the items written since last time (contents only for those we did not write
- * ourselves), merge them into local data, then send the items whose content differs from the server's.
- * The first time on a device, the former whole copy (if any) is merged too, then marked as moved.
+ * ourselves, or that this device lacks on a full listing), merge them into local data, then send the items
+ * whose content differs from the server's. The former whole copy is merged until it is marked as moved.
  */
-export async function syncItems(repo: Repo, remote: ItemsRemote, state: KeyValue, snapshot?: RemoteStore, now: () => number = Date.now): Promise<{ pulled: boolean; pushed: number }> {
-  const st = loadState(state);
+export async function syncItems(repo: Repo, remote: ItemsRemote, store: SyncStateStore, snapshot?: RemoteStore, now: () => number = Date.now): Promise<{ pulled: boolean; pushed: number }> {
+  const st = await loadState(store);
   const firstTime = st.seq === 0;
-  const listed = await remote.list(Math.max(0, st.seq - OVERLAP));
-  const wanted = listed.filter((l) => st.mine[itemKey(l)] !== l.seq);
+  const full = firstTime || now() - st.lastFull > FULL_EVERY;
+  const before = await repo.dumpAll();
+  const localKeys = new Set(dumpToItems(before).map(itemKey));
+  const deleted = new Set(before.tombstones.map((t) => `${t.kind}:${t.id}`));
+
+  const listed = await remote.list(full ? 0 : Math.max(0, st.seq - OVERLAP));
+  const wanted = listed.filter((l) => {
+    const key = itemKey(l);
+    // A version this device has not seen yet, or (full listing) an item it lacks, except a note or theme deleted here.
+    return st.seen[key] !== l.seq || (full && !localKeys.has(key) && !deleted.has(key));
+  });
+  const seqOf = new Map(listed.map((l) => [itemKey(l), l.seq]));
   const fetched = wanted.length ? await remote.fetch(wanted) : [];
   const valid: Item[] = [];
   for (const it of fetched) {
@@ -100,33 +126,48 @@ export async function syncItems(repo: Repo, remote: ItemsRemote, state: KeyValue
     if (ok === false) throw new Error('Copie du serveur refusée : un élément est abîmé ou vient d’une version plus récente d’Ancrage. Mets l’application à jour.');
     if (ok) valid.push({ kind: it.kind as Item['kind'], id: it.id, data: it.data });
   }
+
   let pulled = false;
-  let moved: { version: number } | null = null;
-  if (firstTime && snapshot) {
+  let takeoverVersion: number | null = null;
+  if ((firstTime || st.takeover) && snapshot) {
     const current = await snapshot.get();
     if (current && !isMarker(current.data)) {
       pulled = (await mergeIntoLocal(repo, readRemote(current.data))) || pulled;
-      moved = { version: current.version };
-    }
+      takeoverVersion = current.version;
+      st.takeover = true;
+    } else st.takeover = false;
   }
   if (valid.length) pulled = (await mergeIntoLocal(repo, itemsToDump(valid))) || pulled;
-  for (const it of valid) st.known[itemKey(it)] = itemHash(it.data);
 
-  const changed = changedItems(dumpToItems(await repo.dumpAll()), st.known);
+  const local = dumpToItems(await repo.dumpAll());
+  const after = new Map(local.map((i) => [itemKey(i), i]));
+  for (const it of fetched) st.seen[itemKey(it)] = seqOf.get(itemKey(it)) ?? it.seq;
+  for (const it of valid) {
+    const key = itemKey(it);
+    // An item dropped by the merge (a review whose card is still unknown) is not here: the next full listing fetches it again.
+    if (after.has(key)) st.known[key] = itemHash(it.data);
+    else delete st.known[key];
+  }
+  // A note or theme that came back after a deletion here: its cards and history are older items, fetched by a full listing next time.
+  const revived = valid.some((i) => (i.kind === 'note' || i.kind === 'theme') && deleted.has(itemKey(i)) && after.has(itemKey(i)));
+
+  const changed = changedItems(local, st.known);
   const written = changed.length ? await remote.push(changed) : [];
   const byKey = new Map(changed.map((i) => [itemKey(i), i]));
   for (const w of written) {
     const key = itemKey(w);
-    st.mine[key] = w.seq;
+    st.seen[key] = w.seq;
     const item = byKey.get(key);
     if (item) st.known[key] = itemHash(item.data);
   }
   st.seq = Math.max(st.seq, ...listed.map((l) => l.seq));
-  for (const [key, seq] of Object.entries(st.mine)) if (seq < st.seq - OVERLAP) delete st.mine[key];
-  state.set(ITEMS_STATE, JSON.stringify(st));
-  if (moved && snapshot) {
-    // Best effort: another device may have marked it meanwhile.
-    await snapshot.put({ format: BACKUP_FORMAT, version: BACKUP_VERSION + 1, exportedAt: now(), movedTo: 'ancrage_items' }, moved.version).catch(() => {});
+  if (full) st.lastFull = now();
+  if (revived) st.lastFull = 0;
+  if (takeoverVersion !== null && snapshot) {
+    // Everything is on the items now: mark the whole copy. On a conflict (an older app wrote it meanwhile), try again next sync.
+    const res = await snapshot.put({ format: BACKUP_FORMAT, version: BACKUP_VERSION + 1, exportedAt: now(), movedTo: 'ancrage_items' }, takeoverVersion).catch(() => ({ ok: false as const }));
+    st.takeover = !res.ok;
   }
+  await store.set(JSON.stringify(st));
   return { pulled, pushed: written.length };
 }
