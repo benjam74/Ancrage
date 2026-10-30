@@ -252,7 +252,7 @@
 
   async function save(index: number): Promise<boolean> {
     const item = items[index];
-    const res = await services.saveNote({ themeId: await targetOf(item), fields: item.proposal.fields, tags: ['ia'], source: sourceOf(item) }, Date.now());
+    const res = await services.saveNote({ themeId: await targetOf(item), fields: item.proposal.fields, tags: ['ia'], source: sourceOf(item), explanation: item.proposal.explanation }, Date.now());
     if (!res.ok) {
       error = res.errors.themeId ?? 'Impossible d’ajouter cette carte.';
       return false;
@@ -328,7 +328,7 @@
   <Editor
     {services}
     editing={null}
-    prefill={{ fields: item.proposal.fields, themeId: editTheme, tags: ['ia'], source: sourceOf(item) }}
+    prefill={{ fields: item.proposal.fields, themeId: editTheme, tags: ['ia'], source: sourceOf(item), explanation: item.proposal.explanation }}
     onsaved={() => { mark(editingIndex!, 'added'); editingIndex = null; editCreated = null; onchange(); }}
     oncancel={cancelEdit}
   />
@@ -470,6 +470,7 @@
                   <div style="display:grid;gap:8px">
                     <span class="pill" style="justify-self:start">{TYPE_LABEL[item.proposal.fields.type]}</span>
                     {#if item.proposal.rationale}<p class="muted">{item.proposal.rationale}</p>{/if}
+                    {#if item.proposal.explanation}<p class="why-inline"><b>Pourquoi :</b> {item.proposal.explanation}</p>{/if}
                     {#if item.status === 'added'}
                       <p class="notice">Ajoutée.</p>
                     {:else}

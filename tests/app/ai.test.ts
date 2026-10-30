@@ -130,3 +130,25 @@ describe('evaluateAnswer', async () => {
     }
   });
 });
+
+describe('explainNotes', async () => {
+  const { explainNotes } = await import('../../src/app/ai');
+  const { EXPLAIN_SCHEMA } = await import('../../src/core/explain');
+  const items = [{ id: 'a', text: 'Question : Q\nRéponse : R' }, { id: 'b', text: 'Question : Q2\nRéponse : R2' }];
+  test('one low-effort structured request for several cards; explanations by id', async () => {
+    const { client, calls } = fakeClient(() => message(JSON.stringify({ items: [{ id: 'a', explanation: 'Parce que.' }, { id: 'b', explanation: 'Car.' }] })));
+    const res = await explainNotes(client, items, 'élève');
+    expect(res.ok && [...res.explanations]).toEqual([['a', 'Parce que.'], ['b', 'Car.']]);
+    expect(calls).toHaveLength(1);
+    expect(calls[0]).toMatchObject({ model: 'claude-opus-5-5', output_config: { effort: 'low', format: { type: 'json_schema', schema: EXPLAIN_SCHEMA } } });
+  });
+  test('no card: no call; errors give a message', async () => {
+    const { client, calls } = fakeClient(() => message('{}'));
+    expect(await explainNotes(client, [])).toMatchObject({ ok: true });
+    expect(calls).toHaveLength(0);
+    for (const reply of [message('nope'), message(JSON.stringify({ items: [] })), message('', 'refusal'), new Anthropic.APIConnectionError({ message: 'x' })]) {
+      const res = await explainNotes(fakeClient(() => reply).client, items);
+      expect(res.ok).toBe(false);
+    }
+  });
+});

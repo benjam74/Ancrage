@@ -1,6 +1,7 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { OUTPUT_SCHEMA, buildPrompt, checkRequest, toProposals, type GenerationRequest, type Proposal } from '../core/generate';
 import type { KeyValue } from './cloud';
+import { EXPLAIN_SCHEMA, buildExplainPrompt, toExplanations, type ExplainItem } from '../core/explain';
 import { EVAL_SCHEMA, buildEvalPrompt, checkEvalInput, toEvaluation, type EvalInput, type Evaluation } from '../core/evaluate';
 
 export const AI_MODEL = 'claude-opus-5-5';
@@ -103,4 +104,36 @@ export async function evaluateAnswer(client: AiClient, input: EvalInput): Promis
   }
   const evaluation = toEvaluation(raw, input.keyPoints);
   return evaluation ? { ok: true, evaluation } : { ok: false, error: 'Retour incomplet. Réessaie.' };
+}
+
+export type ExplainResult = { ok: true; explanations: Map<string, string> } | { ok: false; error: string };
+
+/** One or two sentences per card on why its answer is right; the learner reviews them before they are saved. */
+export async function explainNotes(client: AiClient, items: ExplainItem[], audience?: string): Promise<ExplainResult> {
+  if (!items.length) return { ok: true, explanations: new Map() };
+  const { system, user } = buildExplainPrompt(items, audience);
+  let response: Anthropic.Beta.Messages.BetaMessage;
+  try {
+    response = await client.beta.messages.create({
+      model: AI_MODEL,
+      max_tokens: 1000 + 250 * items.length,
+      betas: ['server-side-fallback-2026-07-01'],
+      fallbacks: 'default',
+      output_config: { effort: 'low', format: { type: 'json_schema', schema: EXPLAIN_SCHEMA } },
+      system,
+      messages: [{ role: 'user', content: user }],
+    });
+  } catch (e) {
+    return { ok: false, error: errorMessage(e).replace('La génération a échoué', 'L’explication a échoué') };
+  }
+  if (response.stop_reason === 'refusal') return { ok: false, error: 'Claude n’a pas pu expliquer cette carte.' };
+  if (response.stop_reason === 'max_tokens') return { ok: false, error: 'La réponse a été coupée. Réessaie avec moins de cartes.' };
+  let raw: unknown;
+  try {
+    raw = JSON.parse(response.content.flatMap((b) => (b.type === 'text' ? [b.text] : [])).join(''));
+  } catch {
+    return { ok: false, error: 'Réponse illisible. Réessaie.' };
+  }
+  const explanations = toExplanations(raw, items.map((i) => i.id));
+  return explanations.size ? { ok: true, explanations } : { ok: false, error: 'Aucune explication exploitable. Réessaie.' };
 }
