@@ -205,10 +205,10 @@
         {/if}
       {/each}
 
-      <div class="field" class:invalid={!!saveErrors.explanation || explanation.length > MAX_EXPLANATION}>
+      <div class="field" class:invalid={!!saveErrors.explanation || explanation.trim().replace(/\s+/g, ' ').length > MAX_EXPLANATION}>
         <label for="f-why">Pourquoi ? <span class="muted">(facultatif)</span></label>
         <textarea id="f-why" bind:value={explanation} style="min-height:72px" aria-describedby="f-why-msg" placeholder="En une ou deux phrases : pourquoi c’est la bonne réponse."></textarea>
-        <span id="f-why-msg" class={saveErrors.explanation || explanation.length > MAX_EXPLANATION ? 'error' : 'hint'}>{saveErrors.explanation ?? `Affiché après la réponse, ouvert d’office en cas d’erreur. ${explanation.length} / ${MAX_EXPLANATION}`}</span>
+        <span id="f-why-msg" class={saveErrors.explanation || explanation.trim().replace(/\s+/g, ' ').length > MAX_EXPLANATION ? 'error' : 'hint'}>{saveErrors.explanation ?? `Affiché après la réponse, ouvert d’office en cas d’erreur. ${explanation.trim().replace(/\s+/g, ' ').length} / ${MAX_EXPLANATION}`}</span>
       </div>
       <div class="field">
         <label for="f-tags">Tags</label>

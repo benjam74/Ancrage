@@ -80,3 +80,6 @@ const WHY = [
 
 /** Explanations of the starter notes, by note id. */
 export const STARTER_WHY: Record<string, string> = Object.fromEntries(WHY.map((why, i) => [`ex-${String(i + 1).padStart(2, '0')}`, why]));
+
+/** Fields of each example as shipped, by note id: an example keeps its explanation while its content is unchanged. */
+export const STARTER_FIELDS: Record<string, NoteFields> = Object.fromEntries(CONTENT.map(([, fields], i) => [`ex-${String(i + 1).padStart(2, '0')}`, fields]));

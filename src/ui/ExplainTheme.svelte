@@ -3,7 +3,8 @@
   import { whyOf } from '../app/services';
   import { currentProfile, profileStore } from '../app/current';
   import { describeNote } from '../core/generate';
-  import { EXPLAIN_BATCH } from '../core/explain';
+  import { EXPLAIN_BATCH, MAX_EXPLANATION } from '../core/explain';
+  import { onDestroy } from 'svelte';
   import type { Note, Theme } from '../core/model';
 
   /** Completes the missing explanations of a theme with Claude; nothing is saved before the learner checks them. */
@@ -16,6 +17,9 @@
   let busy = $state(false);
   let progress = $state('');
   let error = $state('');
+  // Leaving the library stops the remaining requests.
+  let gone = false;
+  onDestroy(() => (gone = true));
 
   async function run() {
     if (busy) return;
@@ -27,11 +31,12 @@
       const client = createAiClient(apiKey);
       const found: Row[] = [];
       for (let i = 0; i < missing.length; i += EXPLAIN_BATCH) {
+        if (gone) return;
         const batch = missing.slice(i, i + EXPLAIN_BATCH);
         progress = missing.length > EXPLAIN_BATCH ? `Cartes ${i + 1} à ${i + batch.length} sur ${missing.length}…` : '';
         const res = await explainNotes(client, batch.map((n) => ({ id: n.id, text: describeNote(n.fields) })), currentProfile.audience);
         if (!res.ok) {
-          error = res.error;
+          error = found.length ? `Cartes ${i + 1} à ${missing.length} non traitées : ${res.error}` : res.error;
           break;
         }
         for (const n of batch) {
@@ -73,16 +78,17 @@
 {/if}
 {#if rows.length}
   <div class="explain-review" role="group" aria-label="Explications proposées pour « {theme.name} »">
+    {#if error}<p class="error" role="alert">{error}</p>{/if}
     <p class="muted">Relis chaque explication : Claude n’a que la carte sous les yeux et peut se tromper. Décoche celles à ne pas garder.</p>
     {#each rows as r, i (r.note.id)}
       <div class="explain-row">
         <label class="check"><input type="checkbox" bind:checked={rows[i].keep} /><span class="summary">{label(r.note)}</span></label>
-        <textarea class="ta" aria-label="Explication de « {label(r.note)} »" bind:value={rows[i].text} disabled={!r.keep}></textarea>
+        <textarea class="ta" aria-label="Explication de « {label(r.note)} »" bind:value={rows[i].text} disabled={!r.keep} maxlength={MAX_EXPLANATION}></textarea>
       </div>
     {/each}
     <div class="actions">
       <button class="btn small" disabled={busy} onclick={save}>Enregistrer les explications cochées ({rows.filter((r) => r.keep && r.text.trim()).length})</button>
-      <button class="btn small ghost" onclick={() => (rows = [])}>Annuler</button>
+      <button class="btn small ghost" disabled={busy} onclick={() => { rows = []; error = ''; }}>Annuler</button>
     </div>
   </div>
 {/if}

@@ -45,8 +45,9 @@ export function capExplanation(text: string): string {
   const t = text.trim().replace(/\s+/g, ' ');
   if (t.length <= MAX_EXPLANATION) return t;
   const cut = t.slice(0, MAX_EXPLANATION);
-  const end = Math.max(cut.lastIndexOf('. '), cut.lastIndexOf(' ; '));
-  return end > MAX_EXPLANATION / 2 ? cut.slice(0, end + 1) : `${cut.slice(0, MAX_EXPLANATION - 1).trimEnd()}…`;
+  const sentence = cut.lastIndexOf('. ');
+  if (sentence > MAX_EXPLANATION / 2) return cut.slice(0, sentence + 1);
+  return `${cut.slice(0, MAX_EXPLANATION - 1).trimEnd().replace(/[\s;,:]+$/, '')}…`;
 }
 
 /** Explanations by card id; unknown ids and empty texts are dropped. */

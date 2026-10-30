@@ -250,6 +250,7 @@
     if (e.key === 'Escape') return void exit();
     // A focused control handles its own Enter and Space; global shortcuts must not override it.
     if (e.target instanceof HTMLButtonElement || e.target instanceof HTMLTextAreaElement) return;
+    if (e.target instanceof HTMLElement && e.target.closest('summary, input, select, [contenteditable]')) return;
     if (shown?.ex.kind === 'reveal' && revealed && !result && ['1', '2', '3'].includes(e.key)) {
       const grade = Number(e.key) as 1 | 2 | 3;
       return void record(grade > 1, grade);

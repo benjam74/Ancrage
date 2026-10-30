@@ -13,8 +13,9 @@ import { dailyCounts, forecast, mastery, nextLevel, retention, stateBreakdown, t
 import type { CardState } from '../core/scheduler';
 import { isHard } from '../core/hard';
 import { MAX_EXPLANATION, capExplanation } from '../core/explain';
-import { STARTER_WHY } from '../data/starter';
-import { COLLEGE5_WHY } from '../data/college5';
+import { STARTER_FIELDS, STARTER_WHY } from '../data/starter';
+import { COLLEGE5_FIELDS, COLLEGE5_WHY } from '../data/college5';
+import { canonical } from '../core/canonical';
 import { effectiveness, memoryOf, reviewLoad, type Effectiveness } from '../core/insights';
 import { SITUATION_TYPES, buildCustomQueue, buildDailyQueue, countNewIntroduced, nextDue, studyDayStart, type CustomChoice, type QueueCandidate } from '../core/queue';
 import { makeScheduler } from '../core/scheduler';
@@ -184,9 +185,11 @@ export interface Services {
 /** Total size of the images of a profile, as data URL characters (about 10 MB). */
 export const MAX_IMAGES_CHARS = 14_000_000;
 
-/** A note's explanation; example cards have a built-in one until they are edited. */
+/** A note's explanation; an example card has a built-in one while its content is the one shipped. */
 export function whyOf(note: Note): string | null {
-  return note.explanation ?? (note.updatedAt === 0 ? (STARTER_WHY[note.id] ?? COLLEGE5_WHY[note.id] ?? null) : null);
+  if (note.explanation) return note.explanation;
+  const shipped = STARTER_FIELDS[note.id] ?? COLLEGE5_FIELDS[note.id];
+  return shipped && canonical(shipped) === canonical(note.fields) ? (STARTER_WHY[note.id] ?? COLLEGE5_WHY[note.id] ?? null) : null;
 }
 
 const HEATMAP_DAYS = 20 * 7;

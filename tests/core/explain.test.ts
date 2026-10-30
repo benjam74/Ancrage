@@ -37,3 +37,16 @@ describe('generated cards carry an explanation', () => {
     expect(proposals[0].explanation).toBe('Parce que.');
   });
 });
+
+describe('capExplanation', async () => {
+  const { capExplanation } = await import('../../src/core/explain');
+  test('cuts on a sentence end, else with an ellipsis and no dangling punctuation', () => {
+    const long = `${'a'.repeat(250)}. ${'b'.repeat(300)}`;
+    expect(capExplanation(long)).toBe(`${'a'.repeat(250)}.`);
+    const semi = `${'a '.repeat(150)}; ${'c'.repeat(200)}`;
+    const out = capExplanation(semi);
+    expect(out.length).toBeLessThanOrEqual(MAX_EXPLANATION);
+    expect(out).toMatch(/…$/);
+    expect(out).not.toMatch(/[ ;]…$/);
+  });
+});
