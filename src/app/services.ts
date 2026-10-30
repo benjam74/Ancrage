@@ -728,15 +728,20 @@ function deviceId(): string {
   }
 }
 
+/** Whether this profile's database was set up already (false on a new device, before the first opening). */
+export async function wasSeeded(profile: Profile): Promise<boolean> {
+  return createDexieRepo(dbName(profile.id)).getFlag(SEEDED);
+}
+
 /** Opens the local database, asks the browser to keep it, and seeds the starter deck on first launch. */
-export async function boot(profile: Profile): Promise<Services> {
+export async function boot(profile: Profile, starter: Starter = profile.starter): Promise<Services> {
   const repo = createDexieRepo(dbName(profile.id));
   try {
     await navigator.storage?.persist?.();
   } catch {
     // Persistence is best effort; the JSON backup (iteration 5) covers eviction.
   }
-  await seedIfEmpty(repo, Date.now(), profile.starter);
+  await seedIfEmpty(repo, Date.now(), starter);
   await ensureDomains(repo);
   return createServices(repo, deviceId());
 }

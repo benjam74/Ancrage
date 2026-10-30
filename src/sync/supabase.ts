@@ -17,6 +17,8 @@ export interface AuthSession {
   /** Epoch milliseconds. */
   expiresAt: number;
   email: string;
+  /** What the account was created with (first name, who it is for…): sets up a new device. */
+  meta?: Record<string, unknown>;
 }
 
 type Fetch = typeof fetch;
@@ -59,6 +61,7 @@ function toSession(body: any, now: Clock): AuthSession {
     refreshToken: body.refresh_token,
     expiresAt: now() + Number(body.expires_in ?? 3600) * 1000,
     email: body.user?.email ?? '',
+    ...(body.user?.user_metadata && typeof body.user.user_metadata === 'object' ? { meta: body.user.user_metadata as Record<string, unknown> } : {}),
   };
 }
 
@@ -94,8 +97,49 @@ async function auth(config: SyncConfig, path: string, payload: object, fetchFn: 
 export const signIn = (config: SyncConfig, email: string, password: string, fetchFn: Fetch = fetch, now: Clock = Date.now) =>
   auth(config, 'token?grant_type=password', { email, password }, fetchFn, now);
 
-export const signUp = (config: SyncConfig, email: string, password: string, fetchFn: Fetch = fetch, now: Clock = Date.now) =>
-  auth(config, 'signup', { email, password }, fetchFn, now);
+export const signUp = (config: SyncConfig, email: string, password: string, fetchFn: Fetch = fetch, now: Clock = Date.now, data: Record<string, unknown> = {}) =>
+  auth(config, 'signup', { email, password, data }, fetchFn, now);
+
+/** Sends the « reset your password » e-mail; the link opens the app's address (Site URL). */
+export async function recoverPassword(config: SyncConfig, email: string, fetchFn: Fetch = fetch): Promise<{ ok: true } | { ok: false; error: string }> {
+  try {
+    const { status } = await call(fetchFn, `${base(config)}/auth/v1/recover`, {
+      method: 'POST',
+      headers: { apikey: config.anonKey, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email }),
+    });
+    if (status >= 200 && status < 300) return { ok: true };
+    if (status === 429) return { ok: false, error: 'Trop de demandes : réessaie dans une minute.' };
+    return { ok: false, error: 'Le serveur a refusé la demande. Vérifie l’adresse e-mail.' };
+  } catch (e) {
+    return { ok: false, error: (e as Error).message };
+  }
+}
+
+/** The token of a « new password » link: the project sends the reader back to the app with it in the address. */
+export function recoveryToken(hash: string): string | null {
+  const params = new URLSearchParams(hash.replace(/^#/, ''));
+  return params.get('type') === 'recovery' ? params.get('access_token') : null;
+}
+
+/** Address fragments left by the project's links (confirmation, new password), not app pages. */
+export const isAuthFragment = (hash: string) => /(^|[#&])(access_token|error_description)=/.test(hash);
+
+export async function setPassword(config: SyncConfig, accessToken: string, password: string, fetchFn: Fetch = fetch): Promise<{ ok: true } | { ok: false; error: string }> {
+  try {
+    const { status, body } = await call(fetchFn, `${base(config)}/auth/v1/user`, {
+      method: 'PUT',
+      headers: { apikey: config.anonKey, Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password }),
+    });
+    if (status >= 200 && status < 300) return { ok: true };
+    if (status === 401 || status === 403) return { ok: false, error: 'Ce lien a expiré : redemande un e-mail depuis « Mot de passe oublié ».' };
+    if (status === 422) return { ok: false, error: String(body?.msg ?? '').toLowerCase().includes('different') ? 'Choisis un mot de passe différent de l’ancien.' : 'Mot de passe refusé : utilise au moins 6 caractères.' };
+    return { ok: false, error: 'Le serveur a refusé la demande. Réessaie plus tard.' };
+  } catch (e) {
+    return { ok: false, error: (e as Error).message };
+  }
+}
 
 /** Authenticated PostgREST calls on one table, refreshing the session when needed. */
 function restClient(config: SyncConfig, getSession: () => AuthSession | null, saveSession: (s: AuthSession | null) => void, fetchFn: Fetch, now: Clock) {

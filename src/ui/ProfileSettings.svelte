@@ -3,12 +3,15 @@
   import { COLORS, MAIN, checkPin, createProfile, dbName, loadRegistry, removeProfile, setCurrent, updateProfile, type Profile, type ProfileColor, type Starter } from '../app/profiles';
   import { forgetChoice, markChosen } from '../app/current';
   import { COLOR_LABEL, FACE } from './faces';
+  import { BUILTIN_SYNC } from '../app/builtin';
+  import AddAccount from './AddAccount.svelte';
 
   let { current }: { current: string } = $props();
   const store = browserStorage();
 
   let profiles = $state<Profile[]>(loadRegistry(store).profiles);
   let creating = $state(false);
+  let withAccount = $state(false);
   let editing = $state<string | null>(null);
   let deleting = $state<string | null>(null);
   /** Another profile's code must be given before opening, editing or deleting it. */
@@ -202,9 +205,12 @@
       </fieldset>
       <div class="actions"><button class="btn">Créer le profil</button><button type="button" class="btn ghost" onclick={() => (creating = false)}>Annuler</button></div>
     </form>
+  {:else if withAccount}
+    <AddAccount onback={() => (withAccount = false)} />
   {:else}
     <div class="actions">
       <button class="btn small" onclick={() => { creating = true; created = null; message = ''; name = audience = pin = ''; color = 'coral'; starter = 'college5'; error = ''; }}>Ajouter un profil</button>
+      {#if BUILTIN_SYNC}<button class="btn small ghost" onclick={() => (withAccount = true)}>Ajouter avec un compte</button>{/if}
       {#if profiles.length > 1}<button class="btn small ghost" onclick={() => { forgetChoice(); location.hash = 'accueil'; location.reload(); }}>Changer de profil</button>{/if}
     </div>
   {/if}

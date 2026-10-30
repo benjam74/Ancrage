@@ -1,9 +1,14 @@
 <script lang="ts">
-  import { boot, type Progress as ProgressData, type Services, type ShopState, type Today } from './app/services';
+  import { boot, wasSeeded, type Progress as ProgressData, type Services, type ShopState, type Today } from './app/services';
   import Shop from './ui/Shop.svelte';
   import { createCloudSync, type CloudSync } from './app/cloud';
   import { currentProfile, mustChoose, profileStore } from './app/current';
   import WhoReviews from './ui/WhoReviews.svelte';
+  import Welcome from './ui/Welcome.svelte';
+  import NewPassword from './ui/NewPassword.svelte';
+  import { isAuthFragment, recoveryToken } from './sync/supabase';
+  import { BUILTIN_SYNC } from './app/builtin';
+  import { seedFor, settled, welcomeNeeded } from './app/account';
   import type { Note } from './core/model';
   import Editor from './ui/Editor.svelte';
   import Generate, { type Rewrite } from './ui/Generate.svelte';
@@ -18,6 +23,11 @@
   import { primeSpeech } from './ui/voice';
   import Custom from './ui/Custom.svelte';
   import type { CustomChoice } from './core/queue';
+
+  // Links from the project's e-mails come back with tokens in the address: read once, then removed.
+  const linkToken = BUILTIN_SYNC ? recoveryToken(location.hash) : null;
+  let resetToken = $state(linkToken);
+  if (isAuthFragment(location.hash)) history.replaceState(null, '', location.pathname + location.search);
 
   const VIEWS = ['accueil', 'creer', 'progres', 'bibliotheque', 'boutique', 'reglages', 'reviser'] as const;
   type View = (typeof VIEWS)[number];
@@ -105,13 +115,22 @@
     if (!cloud || inSession) return;
     lastSync = Date.now();
     const res = await cloud.sync();
+    settled(profileStore(), res);
     if (res.state === 'ok' && !inSession) await refresh();
   }
 
   // With several profiles, the tab opens on « Qui révise ? » before loading anyone's data.
   let picking = $state(mustChoose);
-  const start = () =>
-  boot(currentProfile)
+  // A new device first offers to sign in, so an existing account's cards arrive before any example.
+  let welcome = $state(false);
+  const start = async () => {
+    try {
+      if (welcomeNeeded(profileStore(), BUILTIN_SYNC, await wasSeeded(currentProfile))) return void (welcome = true);
+    } catch {
+      // No local database at all: the opening below reports it.
+    }
+    welcome = false;
+    return boot(currentProfile, seedFor(profileStore(), currentProfile))
     .then(async (s) => {
       services = s;
       cloud = createCloudSync(s.repo, profileStore());
@@ -119,14 +138,19 @@
       void syncInBackground();
     })
     .catch((e) => (error = String(e)));
-  if (!mustChoose) start();
+  };
+  if (!mustChoose && !linkToken) void start();
 </script>
 
 <svelte:document onvisibilitychange={() => { if (document.visibilityState === 'visible' && Date.now() - lastSync > 60_000) void syncInBackground(); }} />
 <svelte:window onhashchange={() => { view = fromHash(); if (view !== 'creer') editing = null; if (view !== 'reviser') { preselect = null; customEmpty = ''; } window.scrollTo(0, 0); }} />
 
-{#if picking}
-  <WhoReviews current={currentProfile.id} onkeep={() => { picking = false; start(); }} />
+{#if resetToken}
+  <NewPassword token={resetToken} onclose={() => { resetToken = null; if (!picking) void start(); }} />
+{:else if picking}
+  <WhoReviews current={currentProfile.id} onkeep={() => { picking = false; void start(); }} />
+{:else if welcome}
+  <Welcome ondone={() => void start()} />
 {:else if error}
   <main class="page"><h1>Ancrage</h1><p>Impossible d’ouvrir la base locale : {error}</p></main>
 {:else if services && today && progress && shop}

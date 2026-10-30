@@ -2,6 +2,7 @@ import type { Repo } from '../storage/repo';
 import { createSupabaseItems, createSupabaseRemote, signIn, signUp, type AuthSession, type SyncConfig } from '../sync/supabase';
 import { repoSyncState, syncItems, syncOnce } from '../sync/sync';
 import { ItemsMissing } from '../sync/items-remote';
+import { BUILTIN_SYNC } from './builtin';
 
 export interface KeyValue {
   get(key: string): string | null;
@@ -23,7 +24,8 @@ export interface CloudSync {
   last(): SyncStatus;
   configure(config: SyncConfig): { ok: true } | { ok: false; error: string };
   signIn(email: string, password: string): Promise<{ ok: boolean; error?: string }>;
-  signUp(email: string, password: string): Promise<{ ok: boolean; error?: string }>;
+  /** `meta`: kept with the account (first name, who it is for), to set up the next devices. */
+  signUp(email: string, password: string, meta?: Record<string, unknown>): Promise<{ ok: boolean; error?: string }>;
   signOut(): void;
   /** Never throws: errors come back as a status, local data stays as it was. */
   sync(): Promise<SyncStatus>;
@@ -47,7 +49,7 @@ export function memoryStorage(): KeyValue {
   return { get: (k) => m.get(k) ?? null, set: (k, v) => void m.set(k, v), remove: (k) => void m.delete(k) };
 }
 
-export function createCloudSync(repo: Repo, store: KeyValue, fetchFn: typeof fetch = fetch, now: () => number = Date.now): CloudSync {
+export function createCloudSync(repo: Repo, store: KeyValue, fetchFn: typeof fetch = fetch, now: () => number = Date.now, builtin: SyncConfig | null = BUILTIN_SYNC): CloudSync {
   const read = <T>(key: string): T | null => {
     try {
       const raw = store.get(key);
@@ -65,7 +67,8 @@ export function createCloudSync(repo: Repo, store: KeyValue, fetchFn: typeof fet
   let running: Promise<SyncStatus> | null = null;
 
   const self: CloudSync = {
-    config: () => read<SyncConfig>(CONFIG_KEY),
+    // A project built into the app (see docs/sync-supabase.md) unless this device chose another one.
+    config: () => read<SyncConfig>(CONFIG_KEY) ?? builtin,
     email: () => session()?.email ?? null,
     last: () => read<SyncStatus>(STATUS_KEY) ?? { state: 'off' },
 
@@ -87,10 +90,10 @@ export function createCloudSync(repo: Repo, store: KeyValue, fetchFn: typeof fet
       return { ok: true };
     },
 
-    async signUp(email, password) {
+    async signUp(email, password, meta = {}) {
       const config = self.config();
       if (!config) return { ok: false, error: 'Renseigne d’abord l’adresse et la clé du projet.' };
-      const res = await signUp(config, email.trim(), password, fetchFn, now);
+      const res = await signUp(config, email.trim(), password, fetchFn, now, meta);
       if (!res.ok) return res;
       saveSession(res.session);
       return { ok: true };

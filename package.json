@@ -10,7 +10,7 @@
     "preview": "vite preview",
     "test": "vitest run",
     "typecheck": "svelte-check --tsconfig ./tsconfig.json",
-    "smoke": "node scripts/smoke.mjs"
+    "smoke": "node scripts/smoke.mjs && node scripts/smoke-accounts.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "0.134.0",
