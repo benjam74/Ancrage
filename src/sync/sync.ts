@@ -61,6 +61,8 @@ const ITEMS_STATE = 'sync:items';
 const OVERLAP = 500;
 /** A full listing at least this often catches anything missed (late commits, restored or revived data). */
 const FULL_EVERY = 24 * 3_600_000;
+/** Failed markings of the whole copy before the sync reports an error. */
+const MAX_TAKEOVER_FAILURES = 5;
 
 interface ItemsState {
   /** Last server position seen. */
@@ -73,6 +75,10 @@ interface ItemsState {
   lastFull: number;
   /** The former whole copy is not marked as moved yet: re-read and merged at every sync until it is. */
   takeover: boolean;
+  /** Failed attempts to mark the whole copy: reported after a few. */
+  takeoverFailures?: number;
+  /** Items downloaded but not kept by the merge (cards and history of deleted notes, merged duplicates), at that position: not downloaded again unless rewritten. */
+  dropped?: Record<string, number>;
 }
 
 /** Where the sync state lives: the device database, so it survives quotas and is reset by a restore. */
@@ -116,7 +122,7 @@ export async function syncItems(repo: Repo, remote: ItemsRemote, store: SyncStat
   const wanted = listed.filter((l) => {
     const key = itemKey(l);
     // A version this device has not seen yet, or (full listing) an item it lacks, except a note or theme deleted here.
-    return st.seen[key] !== l.seq || (full && !localKeys.has(key) && !deleted.has(key));
+    return st.seen[key] !== l.seq || (full && !localKeys.has(key) && !deleted.has(key) && st.dropped?.[key] !== l.seq);
   });
   const seqOf = new Map(listed.map((l) => [itemKey(l), l.seq]));
   const fetched = wanted.length ? await remote.fetch(wanted) : [];
@@ -142,14 +148,21 @@ export async function syncItems(repo: Repo, remote: ItemsRemote, store: SyncStat
   const local = dumpToItems(await repo.dumpAll());
   const after = new Map(local.map((i) => [itemKey(i), i]));
   for (const it of fetched) st.seen[itemKey(it)] = seqOf.get(itemKey(it)) ?? it.seq;
+  // A note or theme that came back after a deletion here: its cards and history are older items, fetched by a full listing next time.
+  const revived = valid.some((i) => (i.kind === 'note' || i.kind === 'theme') && deleted.has(itemKey(i)) && !localKeys.has(itemKey(i)) && after.has(itemKey(i)));
+  st.dropped ??= {};
+  if (revived) st.dropped = {};
   for (const it of valid) {
     const key = itemKey(it);
-    // An item dropped by the merge (a review whose card is still unknown) is not here: the next full listing fetches it again.
-    if (after.has(key)) st.known[key] = itemHash(it.data);
-    else delete st.known[key];
+    if (after.has(key)) {
+      st.known[key] = itemHash(it.data);
+      delete st.dropped[key];
+    } else {
+      // Not kept by the merge: remembered at this position so a full listing does not fetch it every day.
+      delete st.known[key];
+      st.dropped[key] = seqOf.get(key) ?? 0;
+    }
   }
-  // A note or theme that came back after a deletion here: its cards and history are older items, fetched by a full listing next time.
-  const revived = valid.some((i) => (i.kind === 'note' || i.kind === 'theme') && deleted.has(itemKey(i)) && after.has(itemKey(i)));
 
   const changed = changedItems(local, st.known);
   const written = changed.length ? await remote.push(changed) : [];
@@ -167,7 +180,11 @@ export async function syncItems(repo: Repo, remote: ItemsRemote, store: SyncStat
     // Everything is on the items now: mark the whole copy. On a conflict (an older app wrote it meanwhile), try again next sync.
     const res = await snapshot.put({ format: BACKUP_FORMAT, version: BACKUP_VERSION + 1, exportedAt: now(), movedTo: 'ancrage_items' }, takeoverVersion).catch(() => ({ ok: false as const }));
     st.takeover = !res.ok;
+    st.takeoverFailures = res.ok ? 0 : (st.takeoverFailures ?? 0) + 1;
   }
   await store.set(JSON.stringify(st));
+  if (st.takeover && (st.takeoverFailures ?? 0) >= MAX_TAKEOVER_FAILURES) {
+    throw new Error('Synchronisation rapide : impossible de marquer l’ancienne copie comme remplacée. Vérifie les droits de la table ancrage_snapshots (guide de synchronisation), puis réessaie.');
+  }
   return { pulled, pushed: written.length };
 }

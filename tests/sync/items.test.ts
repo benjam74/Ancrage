@@ -196,3 +196,23 @@ describe('nothing stays missing', () => {
     expect(JSON.parse((await fresh.state.get())!).takeover).toBe(false);
   });
 });
+
+describe('no endless downloads', () => {
+  test('cards and history of a deleted note are not downloaded again at each full listing', async () => {
+    const DAY = 86_400_000;
+    const server = createMemoryItems();
+    const a = await device();
+    await seedIfEmpty(a.repo, NOW);
+    const card = (await a.repo.listCards()).find((c) => c.noteId === 'ex-01')!;
+    await a.services.engine.answer(card.id, 'self', { kind: 'self', grade: 3 }, NOW + 1);
+    await syncItems(a.repo, server.remote, a.state, undefined, () => NOW);
+    await a.services.deleteNote('ex-01');
+    await syncItems(a.repo, server.remote, a.state, undefined, () => NOW + 1);
+    const fetchedKeys: string[] = [];
+    const spy = { ...server.remote, async fetch(keys: { kind: string; id: string }[]) { fetchedKeys.push(...keys.map((k) => `${k.kind}:${k.id}`)); return server.remote.fetch(keys); } };
+    await syncItems(a.repo, spy, a.state, undefined, () => NOW + 2 * DAY);
+    await syncItems(a.repo, spy, a.state, undefined, () => NOW + 4 * DAY);
+    const counts = fetchedKeys.reduce<Record<string, number>>((m, k) => ((m[k] = (m[k] ?? 0) + 1), m), {});
+    expect(Math.max(0, ...Object.values(counts))).toBeLessThanOrEqual(1);
+  });
+});
