@@ -240,6 +240,8 @@ const fakeSupabase = async (route) => {
   const issue = (email) => { const t = `t-${Math.random()}`; cloud.tokens.set(t, email); return { access_token: t, refresh_token: `r-${t}`, expires_in: 3600, user: { email } }; };
   if (url.pathname === '/auth/v1/signup') { cloud.users.set(body.email, body.password); return reply(200, issue(body.email)); }
   if (url.pathname === '/auth/v1/token') return cloud.users.get(body.email) === body.password ? reply(200, issue(body.email)) : reply(400, { error_description: 'Invalid login credentials' });
+  // A project created before v1.11: no items table, the app falls back to the whole copy.
+  if (url.pathname === '/rest/v1/ancrage_items') return reply(404, { code: 'PGRST205', message: "Could not find the table 'public.ancrage_items' in the schema cache" });
   const who = cloud.tokens.get((req.headers().authorization ?? '').replace('Bearer ', ''));
   if (!who) return reply(401, { message: 'JWT expired' });
   const row = cloud.rows.get(who);
@@ -285,6 +287,7 @@ await devB.locator('.hero').waitFor();
 await fillSync(devB);
 await devB.getByRole('button', { name: 'Se connecter' }).click();
 await devB.getByText('Synchronisé.').waitFor({ timeout: 5000 }).catch(async () => fail(`device B sync failed: ${(await devB.locator('main').innerText()).slice(-300)}`));
+await devB.getByText(/Synchronisation complète : toute ta base voyage/).waitFor({ timeout: 3000 }).catch(() => fail('without the items table, settings should suggest the fast sync script'));
 if ((await countReviews(devB)) !== reviewsA || reviewsA < 5) fail(`device B should have the ${reviewsA} reviews of A, has ${await countReviews(devB)}`);
 await devB.goto(`${URL}#accueil`);
 await devB.locator('.chip.streak').waitFor();
