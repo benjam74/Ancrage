@@ -1,3 +1,4 @@
+import { NOTE_FIELDS, THEME_FIELDS, stampFields } from '../core/merge';
 import Dexie, { type EntityTable } from 'dexie';
 import { cardVariants } from '../core/cards';
 import { newId } from '../core/ids';
@@ -78,14 +79,15 @@ export function createDexieRepo(name: string): Repo {
       });
 
   return {
-    async putTheme(theme) {
-      await db.themes.put(theme);
-    },
+    // Each write records which fields changed, so two devices' edits of different fields merge.
+    putTheme: (theme) => db.transaction('rw', db.themes, async () => {
+      await db.themes.put(stampFields(await db.themes.get(theme.id), theme, THEME_FIELDS));
+    }),
     listThemes: () => db.themes.orderBy('id').toArray(),
 
     putNote: (note) =>
       db.transaction('rw', db.notes, db.cards, db.reviews, async () => {
-        await db.notes.put(note);
+        await db.notes.put(stampFields(await db.notes.get(note.id), note, NOTE_FIELDS));
         const wanted = cardVariants(note.fields);
         const existing = await db.cards.where('noteId').equals(note.id).toArray();
         const active: Card[] = [];

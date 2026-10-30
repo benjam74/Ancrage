@@ -57,6 +57,8 @@ const fieldsOk = (f: unknown) =>
   isObj(f) && isStr(f.type) && !!FIELD_SHAPES[f.type as string] &&
   Object.entries(FIELD_SHAPES[f.type as string]).every(([key, ok]) => ok(f[key]));
 
+const fieldTimesOk = (v: unknown) => v === undefined || (isObj(v) && Object.values(v).every(isNum));
+
 const SLOT_IDS = ['haut', 'bas', 'chapeau', 'lunettes', 'cou', 'objet', 'compagnon', 'decor'];
 const CHARACTER_IDS = ['renard', 'loutre', 'ourson', 'lapin'];
 const EVENT_SHAPES: Record<string, (r: Record<string, unknown>) => boolean> = {
@@ -72,10 +74,10 @@ const knownEvent = (type: unknown) => isStr(type) && Object.hasOwn(EVENT_SHAPES,
 const CHECKS: Record<'themes' | 'notes' | 'cards' | 'reviews' | 'events', (r: Record<string, unknown>) => boolean> = {
   themes: (r) =>
     isStr(r.id) && isStr(r.name) && isNum(r.order) && (r.parentId === undefined || isStr(r.parentId)) && (r.kind === undefined || r.kind === 'domain') && (r.lang === undefined || (LANGS as readonly unknown[]).includes(r.lang)) && (r.newOrder === undefined || r.newOrder === 'mixed' || r.newOrder === 'chapter') &&
-    (r.updatedAt === undefined || isNum(r.updatedAt)),
+    (r.updatedAt === undefined || isNum(r.updatedAt)) && fieldTimesOk(r.fieldTimes),
   notes: (r) =>
     isStr(r.id) && isStr(r.themeId) && fieldsOk(r.fields) && isStrList(r.tags) &&
-    (r.source === undefined || isStr(r.source)) && (r.suspended === undefined || typeof r.suspended === 'boolean') && (r.explanation === undefined || isStr(r.explanation)) && isNum(r.createdAt) && isNum(r.updatedAt),
+    (r.source === undefined || isStr(r.source)) && (r.suspended === undefined || typeof r.suspended === 'boolean') && (r.explanation === undefined || isStr(r.explanation)) && fieldTimesOk(r.fieldTimes) && isNum(r.createdAt) && isNum(r.updatedAt),
   cards: (r) => isStr(r.id) && isStr(r.noteId) && isStr(r.variant) && (r.orphan === undefined || typeof r.orphan === 'boolean'),
   reviews: (r) =>
     isStr(r.id) && isStr(r.cardId) && isNum(r.ts) && [1, 2, 3, 4].includes(r.rating as number) &&

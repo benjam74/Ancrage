@@ -31,6 +31,59 @@ function unite<T extends { id: string }>(a: T[], b: T[], pick: (x: T, y: T) => T
   return [...out.values()].sort(byId);
 }
 
+/** Fields of a note and of a theme that merge one by one. */
+export const NOTE_FIELDS = ['themeId', 'fields', 'tags', 'source', 'explanation', 'suspended'] as const;
+export const THEME_FIELDS = ['name', 'parentId', 'order', 'kind', 'lang', 'newOrder'] as const;
+
+type Stamped = { updatedAt?: number; fieldTimes?: Record<string, number> };
+
+/** Records when each field of `next` changed compared with `prev` (a removed field counts as a change). */
+export function stampFields<T extends Stamped>(prev: T | undefined, next: T, fields: readonly string[]): T {
+  if (!prev) return next;
+  const times: Record<string, number> = { ...(prev.fieldTimes ?? {}), ...(next.fieldTimes ?? {}) };
+  const at = next.updatedAt ?? 0;
+  const p = prev as Record<string, unknown>;
+  const n = next as Record<string, unknown>;
+  for (const f of fields) {
+    if (canonical(p[f] ?? null) !== canonical(n[f] ?? null)) times[f] = at;
+    // An unchanged field keeps the time it really changed, not this write's.
+    else if (p[f] !== undefined) times[f] = prev.fieldTimes?.[f] ?? prev.updatedAt ?? 0;
+  }
+  return Object.keys(times).length ? { ...next, fieldTimes: times } : next;
+}
+
+/**
+ * Merges two versions of one record field by field: each field keeps its latest value. A field missing from a
+ * version without a time for it (an older app that does not know it) is no opinion, never a deletion.
+ * Commutative and idempotent.
+ */
+export function mergeRecord<T extends Stamped & { id: string }>(x: T, y: T, fields: readonly string[]): T {
+  if (x === y) return x;
+  const base = newer(x, y);
+  const out: Record<string, unknown> = { ...base };
+  const times: Record<string, number> = {};
+  const rx = x as Record<string, unknown>;
+  const ry = y as Record<string, unknown>;
+  const timeOf = (r: Record<string, unknown>, rec: Stamped, f: string) =>
+    r[f] !== undefined ? (rec.fieldTimes?.[f] ?? rec.updatedAt ?? 0) : (rec.fieldTimes?.[f] ?? -Infinity);
+  for (const f of fields) {
+    const tx = timeOf(rx, x, f);
+    const ty = timeOf(ry, y, f);
+    const fromX = tx !== ty ? tx > ty : canonical(rx[f] ?? null) >= canonical(ry[f] ?? null);
+    const value = fromX ? rx[f] : ry[f];
+    if (value === undefined) delete out[f];
+    else out[f] = value;
+    // The kept value carries its own time, so a third version later compares against the right one.
+    const kept = Math.max(tx, ty);
+    if (kept > -Infinity) times[f] = kept;
+  }
+  out.updatedAt = Math.max(x.updatedAt ?? 0, y.updatedAt ?? 0);
+  if (x.updatedAt === undefined && y.updatedAt === undefined) delete out.updatedAt;
+  if (Object.keys(times).length) out.fieldTimes = times;
+  else delete out.fieldTimes;
+  return out as T;
+}
+
 const same = <T extends object>(x: T, y: T) => (x === y || key(x) >= key(y) ? x : y);
 
 /**
@@ -74,10 +127,10 @@ export function mergeDumps(a: Dump, b: Dump): Dump {
   const tombIndex = new Map(tombstones.map((t) => [`${t.kind}:${t.id}`, t.ts]));
   const deletedAt = (kind: Tombstone['kind'], id: string) => tombIndex.get(`${kind}:${id}`) ?? -Infinity;
 
-  const notes = unite(a.notes, b.notes, newer).filter((n) => n.updatedAt > deletedAt('note', n.id));
+  const notes = unite(a.notes, b.notes, (x, y) => mergeRecord(x, y, NOTE_FIELDS)).filter((n) => n.updatedAt > deletedAt('note', n.id));
   const referenced = new Set(notes.map((n) => n.themeId));
   // A theme survives a deletion when it is newer, or when a surviving note still lives in it.
-  const themes = unite<Theme>(a.themes, b.themes, newer).filter(
+  const themes = unite<Theme>(a.themes, b.themes, (x, y) => mergeRecord(x, y, THEME_FIELDS)).filter(
     (t) => (t.updatedAt ?? 0) > deletedAt('theme', t.id) || referenced.has(t.id),
   );
 
