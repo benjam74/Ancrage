@@ -901,7 +901,7 @@ await v113.getByText(/Cartes de contraste pour «.Coaching et PNL.»/).waitFor({
 if (!(await v113.getByLabel('Thème des cartes').locator('option:checked').innerText()).includes('Contrastes')) fail('a « Contrastes » theme should be chosen');
 await v113.getByRole('button', { name: 'Générer les cartes' }).click();
 await v113.getByRole('heading', { name: '1 carte proposée' }).waitFor();
-if (!sent113[0].includes('Consigne : Les cartes ci-dessus existent déjà') || !sent113[0].includes('Méta-modèle') && !sent113[0].includes('généralisation')) fail('contrast generation sends the existing cards and the instruction');
+if (!sent113[0].includes('Consigne : Le texte source est la liste des cartes') || !sent113[0].includes('Méta-modèle') && !sent113[0].includes('généralisation')) fail('contrast generation sends the existing cards and the instruction');
 await v113.locator('.proposal').getByRole('button', { name: 'Ajouter' }).click();
 await v113.locator('.proposal').getByText('Ajoutée.').waitFor();
 await v113.screenshot({ path: `${OUT}/contrast.png`, fullPage: true });
