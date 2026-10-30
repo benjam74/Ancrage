@@ -487,3 +487,7 @@ p.error { font-weight: 700; color: var(--bad); }
 .explain-review { display: grid; gap: 10px; margin: 8px 0; }
 .explain-row { display: grid; gap: 6px; }
 .explain-row .ta { min-height: 64px; }
+
+/* v1.13: sure of the answer */
+.sure-btn[aria-pressed='true'] { background: var(--petrol); color: var(--on-petrol); border-color: var(--petrol); }
+.sure-note { font-weight: 700; color: var(--bad); }

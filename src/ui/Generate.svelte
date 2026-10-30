@@ -6,7 +6,7 @@
 <script lang="ts">
   import type { Services } from '../app/services';
   import { EXAMPLES, coachingProfile, currentProfile, profileStore } from '../app/current';
-  import { MAX_COUNT, MAX_SOURCE_CHARS, type Proposal } from '../core/generate';
+  import { CONTRAST_INSTRUCTION, MAX_COUNT, MAX_SOURCE_CHARS, buildContrastSource, type Proposal } from '../core/generate';
   import type { NoteType, Theme } from '../core/model';
   import Editor from './Editor.svelte';
   import { TYPE_LABEL } from './format';
@@ -40,6 +40,10 @@
   let instruction = $state('');
   let rewriting = $state<Rewrite | null>(null);
   let rewriteDone = $state(false);
+  /** Contrast cards: the domain whose existing cards are sent, and how many. */
+  let contrast = $state<{ domain: string; cards: number } | null>(null);
+  let contrastDomain = $state('');
+  let contrastBusy = $state(false);
 
   /** Imported files, one entry per section, each with its destination. */
   type Part = { section: DocSection; on: boolean; dest: string };
@@ -89,6 +93,7 @@
     handledNonce = rewrite.nonce;
     if (untrack(() => items.some((i) => i.status === 'pending')) && !confirm('Remplacer les propositions pas encore ajoutées par la reformulation ?')) return;
     rewriting = rewrite;
+    contrast = null;
     rewriteDone = false;
     parts = [];
     source = rewrite.source;
@@ -100,6 +105,45 @@
     error = '';
     notice = '';
   });
+
+  /** Prepares contrast cards for a domain: its cards as the source, a « Contrastes » theme as destination. */
+  async function prepareContrast() {
+    if (contrastBusy) return;
+    contrastBusy = true;
+    error = '';
+    try {
+      await loadThemes();
+      const domain = domains.find((d) => d.id === contrastDomain) ?? domains[0];
+      if (!domain) return void (error = 'Crée d’abord un domaine et quelques cartes.');
+      const ids = new Set(allThemes.filter(isDomain).map((d) => d.id));
+      const inDomain = new Set(allThemes.filter((t) => !isDomain(t) && domainOf(t, ids) === domain.id).map((t) => t.id));
+      const notes = (await services.repo.listNotes()).filter((n) => inDomain.has(n.themeId) && n.fields.type !== 'image' && !n.suspended);
+      if (notes.length < 4) return void (error = `Il faut au moins 4 cartes dans « ${domain.name} » pour trouver des notions proches.`);
+      const existing = allThemes.find((t) => !isDomain(t) && inDomain.has(t.id) && t.name.trim().toLowerCase() === 'contrastes');
+      themeId = existing?.id ?? (await services.createTheme('Contrastes', domain.id)).id;
+      await loadThemes();
+      parts = [];
+      rewriting = null;
+      source = buildContrastSource(notes);
+      sourceTitle = `Contrastes — ${domain.name}`;
+      instruction = CONTRAST_INSTRUCTION;
+      types = TYPES.filter((t) => (t === 'scenario' ? coachingProfile : t === 'classify' || t === 'mcq'));
+      count = 8;
+      items = [];
+      contrast = { domain: domain.name, cards: notes.length };
+      onchange();
+    } finally {
+      contrastBusy = false;
+    }
+  }
+
+  function cancelContrast() {
+    contrast = null;
+    instruction = '';
+    source = '';
+    sourceTitle = '';
+    count = 8;
+  }
 
   function toggle(t: NoteType) {
     types = types.includes(t) ? types.filter((x) => x !== t) : TYPES.filter((x) => x === t || types.includes(x));
@@ -155,6 +199,7 @@
     // Importing a file again (edited since) replaces its sections.
     const again = new Set(found.map((s) => s.file));
     const replaced = parts.some((p) => again.has(p.section.file));
+    contrast = null;
     parts = [...parts.filter((p) => !again.has(p.section.file)), ...splitLong(found).map((section) => ({ section, on: true, dest: NEW }))];
     if (replaced) importErrors = [...importErrors, 'Fichier déjà importé : ses sections ont été remplacées.'];
     rewriting = null;
@@ -339,7 +384,25 @@
       <h1>Générer depuis un texte</h1>
     </header>
 
+    {#if domains.length && !rewriting && !parts.length}
+      <section class="panel contrast" aria-labelledby="contrast-title">
+        <h2 id="contrast-title" class="eyebrow">Cartes de contraste</h2>
+        <p class="muted">Pour ne plus confondre les notions proches (recadrage ou reformulation, généralisation ou omission…) : Claude relit tes cartes d’un domaine et crée des cartes qui obligent à choisir entre elles.</p>
+        <div class="actions">
+          <select class="inline-input" style="width:auto" aria-label="Domaine des cartes de contraste" bind:value={contrastDomain}>
+            {#each domains as d (d.id)}<option value={d.id}>{d.name}</option>{/each}
+          </select>
+          <button type="button" class="btn small ghost" disabled={contrastBusy} onclick={prepareContrast}>Préparer</button>
+        </div>
+      </section>
+    {/if}
+
     <form class="panel form" onsubmit={generate} novalidate>
+      {#if contrast}
+        <p class="notice">Cartes de contraste pour « {contrast.domain} » : Claude lit tes {contrast.cards} cartes existantes et propose des cartes qui obligent à distinguer les notions proches. Elles iront dans le thème choisi ci-dessous.
+          <button type="button" class="link" onclick={cancelContrast}>Annuler</button>
+        </p>
+      {/if}
       {#if rewriting}
         <p class="notice">Reformulation de « {rewriting.label} ». Claude propose des cartes plus simples ; ajoute celles qui te conviennent puis mets l’ancienne de côté.
           <button type="button" class="link" onclick={() => { rewriting = null; instruction = ''; source = ''; sourceTitle = ''; count = 8; }}>Annuler</button>

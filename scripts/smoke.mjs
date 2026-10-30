@@ -878,6 +878,61 @@ if (explainCalls !== 2) fail(`expected 2 explanation calls, got ${explainCalls}`
 await v110.screenshot({ path: `${OUT}/why-library.png`, fullPage: true });
 await ctx110.close();
 
+// --- v1.13: contrast cards, sure of the answer ---
+const sent113 = [];
+const ctx113 = await browser.newContext({ serviceWorkers: 'block', viewport: { width: 1280, height: 900 } });
+await ctx113.addInitScript(() => localStorage.setItem('ancrage.ai.key', 'sk-ant-test'));
+await ctx113.route('https://api.anthropic.com/**', async (route) => {
+  const headers = { 'access-control-allow-origin': '*', 'access-control-allow-headers': '*', 'access-control-allow-methods': '*' };
+  if (route.request().method() === 'OPTIONS') return route.fulfill({ status: 204, headers });
+  const req = JSON.parse(route.request().postData() ?? '{}');
+  sent113.push(req.messages[0].content);
+  const notes = [{ ...blank('classify'), statement: '« Tu dis que tu n’y arrives jamais ? »', categories: ['Reformulation', 'Recadrage'], answer: 'Reformulation', rationale: 'Contraste.', explanation: 'On redit les mots du client sans en changer le sens : ce n’est pas un recadrage.' }];
+  const body = { id: 'm', type: 'message', role: 'assistant', model: 'claude-opus-5-5', stop_reason: 'end_turn', content: [{ type: 'text', text: JSON.stringify({ notes }) }], usage: { input_tokens: 1, output_tokens: 1 } };
+  return route.fulfill({ status: 200, contentType: 'application/json', headers, body: JSON.stringify(body) });
+});
+const v113 = await ctx113.newPage();
+v113.on('pageerror', (e) => errors.push(`v1.13: ${e.message}`));
+await v113.goto(`${URL}#creer`);
+await v113.getByRole('button', { name: 'Générer depuis un texte' }).click();
+await v113.getByRole('heading', { name: 'Cartes de contraste' }).waitFor();
+await v113.getByRole('button', { name: 'Préparer' }).click();
+await v113.getByText(/Cartes de contraste pour «.Coaching et PNL.»/).waitFor({ timeout: 5000 }).catch(() => fail('contrast cards should be prepared from the domain'));
+if ((await v113.getByLabel('Thème des cartes').locator('option:checked').innerText()) !== 'Contrastes') fail('a « Contrastes » theme should be chosen');
+await v113.getByRole('button', { name: 'Générer les cartes' }).click();
+await v113.getByRole('heading', { name: '1 carte proposée' }).waitFor();
+if (!sent113[0].includes('Consigne : Les cartes ci-dessus existent déjà') || !sent113[0].includes('Méta-modèle') && !sent113[0].includes('généralisation')) fail('contrast generation sends the existing cards and the instruction');
+await v113.locator('.proposal').getByRole('button', { name: 'Ajouter' }).click();
+await v113.locator('.proposal').getByText('Ajoutée.').waitFor();
+await v113.screenshot({ path: `${OUT}/contrast.png`, fullPage: true });
+
+// « Sûr de moi » on a wrong answer: flagged, explanation open, counted on Progrès.
+await v113.goto(`${URL}#reviser`);
+await v113.getByRole('button', { name: 'Aucun', exact: true }).click();
+await v113.locator('label.pick', { hasText: 'Méta-modèle' }).locator('input').check();
+await v113.locator('label.mode', { has: v113.locator('input[value=new]') }).click();
+await v113.getByRole('button', { name: /Commencer \(\d+ cartes?\)/ }).click();
+const typed113 = v113.locator('.cloze input');
+const opt113 = v113.locator('.opts .opt').first();
+await typed113.or(opt113).first().waitFor();
+if (await typed113.isVisible()) await typed113.fill('pas ça');
+else await opt113.click();
+await v113.getByRole('button', { name: 'Sûr de moi ?' }).click();
+await v113.getByRole('button', { name: '✓ Sûr de moi' }).waitFor();
+await v113.getByRole('button', { name: 'Vérifier' }).click();
+if ((await v113.locator('.verdict h3').innerText()).includes('Pas tout à fait')) {
+  await v113.getByText('Tu en étais sûr : c’est l’erreur à corriger en priorité.').waitFor({ timeout: 3000 }).catch(() => fail('a confident error is flagged'));
+}
+await v113.screenshot({ path: `${OUT}/sure.png`, fullPage: true });
+await v113.waitForTimeout(400);
+await v113.getByRole('button', { name: 'Quitter la séance' }).click();
+await v113.locator('.session').waitFor({ state: 'detached' });
+const sureSaved = await v113.evaluate(() => new Promise((res) => { const r = indexedDB.open('ancrage'); r.onsuccess = () => { const q = r.result.transaction('reviews').objectStore('reviews').getAll(); q.onsuccess = () => res(q.result.filter((e) => e.confident).length); }; }));
+if (sureSaved !== 1) fail(`one answer should be recorded as sure, got ${sureSaved}`);
+await v113.goto(`${URL}#progres`);
+if (!/Erreurs « sûr de moi »\s*\d \/ 1/i.test(await v113.locator('.works').innerText())) fail('Progrès counts the answers given while sure');
+await ctx113.close();
+
 const mobile = await browser.newPage({ viewport: { width: 390, height: 844 }, colorScheme: 'dark' });
 mobile.on('pageerror', (e) => errors.push(e.message));
 await mobile.goto(URL);

@@ -82,7 +82,7 @@ const CHECKS: Record<'themes' | 'notes' | 'cards' | 'reviews' | 'events', (r: Re
   reviews: (r) =>
     isStr(r.id) && isStr(r.cardId) && isNum(r.ts) && [1, 2, 3, 4].includes(r.rating as number) &&
     ['recognition', 'production', 'self'].includes(r.mode as string) && typeof r.correct === 'boolean' &&
-    isNum(r.durationMs) && typeof r.hintUsed === 'boolean' && isStr(r.deviceId),
+    isNum(r.durationMs) && typeof r.hintUsed === 'boolean' && isStr(r.deviceId) && (r.confident === undefined || r.confident === true),
   // Types from a later version are kept as they are (so syncing never deletes them) and ignored by readers.
   events: (r) => isStr(r.id) && isNum(r.ts) && isStr(r.type) && (!knownEvent(r.type) || EVENT_SHAPES[r.type as string](r)),
 };

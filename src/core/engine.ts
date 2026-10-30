@@ -66,6 +66,7 @@ export function createEngine(repo: Repo, deviceId: string): Engine {
         durationMs: outcome.kind === 'auto' ? outcome.durationMs : 0,
         hintUsed: outcome.kind === 'auto' ? outcome.hintUsed : false,
         deviceId,
+        ...(outcome.kind === 'auto' && outcome.confident ? { confident: true as const } : {}),
       };
       await repo.appendReview(entry);
       return { entry, state: await cardState(cardId) };

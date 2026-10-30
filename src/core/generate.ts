@@ -1,5 +1,5 @@
 import { FIELD_SPECS, uniqueEntries } from './draft';
-import type { NoteFields, NoteType } from './model';
+import type { Note, NoteFields, NoteType } from './model';
 import { validateFields } from './validate';
 import { capExplanation } from './explain';
 
@@ -152,3 +152,17 @@ export function describeNote(f: NoteFields): string {
 
 export const REWORD_INSTRUCTION =
   'Cette carte est souvent oubliée. Propose 1 à 3 cartes qui testent la même connaissance plus facilement : scinde-la si elle contient plusieurs idées, rends la question plus précise, ajoute un exemple concret si cela aide. Ne change pas le contenu à retenir.';
+
+export const CONTRAST_INSTRUCTION =
+  'Les cartes ci-dessus existent déjà. Repère les notions, outils ou techniques proches qu’on risque de confondre, et crée des cartes qui obligent à les distinguer : des situations où il faut choisir le bon outil, des énoncés à classer entre ces notions proches (elles servent de catégories), des QCM dont les mauvaises réponses sont ces notions proches. Ne recopie pas une carte existante. Dans explanation, dis ce qui distingue la bonne réponse de la notion voisine.';
+
+/** Existing cards as the source of contrast cards, within the source limit. */
+export function buildContrastSource(notes: Note[]): string {
+  let out = '';
+  for (const n of notes) {
+    const block = `${describeNote(n.fields)}\n\n`;
+    if (out.length + block.length > MAX_SOURCE_CHARS) break;
+    out += block;
+  }
+  return out.trim();
+}

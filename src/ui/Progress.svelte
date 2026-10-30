@@ -82,6 +82,11 @@
         <span class="muted">Médiane sur 90 jours.</span>
       </div>
       <div class="works-tile">
+        <span class="eyebrow">Erreurs « sûr de moi »</span>
+        <span class="v">{ins.confident.sure ? `${ins.confident.wrong} / ${ins.confident.sure}` : '—'}</span>
+        <span class="muted">{ins.confident.sure ? 'Réponses données en étant sûr, 30 jours : celles qui étaient fausses sont à corriger en priorité.' : 'Touche « Sûr de moi ? » avant de vérifier quand tu es certain.'}</span>
+      </div>
+      <div class="works-tile">
         <span class="eyebrow">Cartes difficiles</span>
         <span class="v">{progress.hard}</span>
         <span class="muted">{progress.hard ? 'À reformuler depuis la bibliothèque.' : 'Aucune pour l’instant.'}</span>
