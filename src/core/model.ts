@@ -32,6 +32,8 @@ export interface Theme {
   order: number;
   /** Last rename or creation, for last-writer-wins sync. */
   updatedAt?: number;
+  /** When each field last changed, for merging field by field (absent: `updatedAt`). */
+  fieldTimes?: Record<string, number>;
   /** A domain groups themes (its children have it as parent); it holds no notes itself. */
   kind?: 'domain';
   /** Language for reading aloud; a theme without one uses its domain's, then French. */
@@ -55,6 +57,8 @@ export interface Note {
   fields: NoteFields;
   tags: string[];
   source?: string;
+  /** When each field last changed, for merging field by field (absent: `updatedAt`). */
+  fieldTimes?: Record<string, number>;
   /** Why the answer is right, in one or two sentences; shown after answering. */
   explanation?: string;
   /** Put aside: out of every queue, history kept, can be resumed. */

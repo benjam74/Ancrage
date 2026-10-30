@@ -73,6 +73,11 @@
       {status.state === 'ok' ? `Dernière synchronisation ${ago(status.at)}.` : status.state === 'error' ? `Échec ${ago(status.at)} : ${status.message}` : 'Pas encore synchronisé.'}
       La synchronisation se fait à l’ouverture et après chaque manche.
     </p>
+    {#if status.state === 'ok' && status.mode === 'fast'}
+      <p class="muted">Synchronisation rapide : seuls les changements voyagent.</p>
+    {:else if status.state === 'ok' && status.mode === 'full'}
+      <p class="notice">Synchronisation complète : toute ta base voyage à chaque fois. Pour n’envoyer que les changements, exécute une fois le script « Synchronisation rapide » du <a href="https://github.com/benjam74/Ancrage/blob/main/docs/sync-supabase.md#synchronisation-rapide" target="_blank" rel="noopener">guide</a> dans ton projet Supabase.</p>
+    {/if}
     <div class="actions">
       <button class="btn" disabled={busy} onclick={() => run(syncNow)}>Synchroniser maintenant</button>
       <button class="btn ghost" disabled={busy} onclick={signOut}>Se déconnecter</button>

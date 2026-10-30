@@ -32,6 +32,11 @@ export interface Repo {
   restoreAll(dump: Dump): Promise<void>;
   /** Reads, transforms and rewrites the whole database in one transaction (no write can slip in between). */
   mergeIntoLocal(merge: (local: Dump) => Dump): Promise<{ changed: boolean; dump: Dump }>;
+  /** Device-side bookkeeping kept out of backups and sync (e.g. the sync state). */
+  getMeta(key: string): Promise<string | null>;
+  setMeta(key: string, value: string | null): Promise<void>;
+  /** Forgets every bookkeeping entry whose key starts with `prefix`. */
+  clearMeta(prefix: string): Promise<void>;
   getSettings(): Promise<Settings>;
   /** `ts` dates the change for last-writer-wins sync. */
   putSettings(settings: Settings, ts?: number): Promise<void>;

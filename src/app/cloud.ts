@@ -1,6 +1,7 @@
 import type { Repo } from '../storage/repo';
-import { createSupabaseRemote, signIn, signUp, type AuthSession, type SyncConfig } from '../sync/supabase';
-import { syncOnce } from '../sync/sync';
+import { createSupabaseItems, createSupabaseRemote, signIn, signUp, type AuthSession, type SyncConfig } from '../sync/supabase';
+import { repoSyncState, syncItems, syncOnce } from '../sync/sync';
+import { ItemsMissing } from '../sync/items-remote';
 
 export interface KeyValue {
   get(key: string): string | null;
@@ -12,6 +13,8 @@ export interface SyncStatus {
   state: 'off' | 'ok' | 'error';
   at?: number;
   message?: string;
+  /** `fast`: only changes travel (table ancrage_items) · `full`: the whole copy each time. */
+  mode?: 'fast' | 'full';
 }
 
 export interface CloudSync {
@@ -104,8 +107,16 @@ export function createCloudSync(repo: Repo, store: KeyValue, fetchFn: typeof fet
         const config = self.config();
         if (!config || !session()) return { state: 'off' } as SyncStatus;
         try {
-          await syncOnce(repo, createSupabaseRemote(config, session, saveSession, fetchFn, now));
-          return record({ state: 'ok', at: now() });
+          const snapshot = createSupabaseRemote(config, session, saveSession, fetchFn, now);
+          try {
+            // The sync state belongs to one account on one project.
+            await syncItems(repo, createSupabaseItems(config, session, saveSession, fetchFn, now), repoSyncState(repo, `${config.url}|${session()?.email ?? ''}`), snapshot, now);
+            return record({ state: 'ok', at: now(), mode: 'fast' });
+          } catch (e) {
+            if (!(e instanceof ItemsMissing)) throw e;
+          }
+          await syncOnce(repo, snapshot);
+          return record({ state: 'ok', at: now(), mode: 'full' });
         } catch (e) {
           return record({ state: 'error', at: now(), message: (e as Error).message });
         }

@@ -3,8 +3,8 @@ import type { AppEvent, Card, Note, ReviewEntry, Settings, Theme, Tombstone } fr
 import { validateSettings } from './settings';
 
 export const BACKUP_FORMAT = 'ancrage-backup';
-// Version 3 adds the shop events, version 4 image notes and theme languages; older apps then ask to be updated instead of calling the file damaged.
-export const BACKUP_VERSION = 4;
+// Version 3 adds the shop events, version 4 image notes and theme languages, version 5 field times and synced items; older apps then ask to be updated instead of calling the file damaged.
+export const BACKUP_VERSION = 5;
 
 /** A full snapshot of the local database. */
 export interface Dump {
@@ -57,6 +57,8 @@ const fieldsOk = (f: unknown) =>
   isObj(f) && isStr(f.type) && !!FIELD_SHAPES[f.type as string] &&
   Object.entries(FIELD_SHAPES[f.type as string]).every(([key, ok]) => ok(f[key]));
 
+const fieldTimesOk = (v: unknown) => v === undefined || (isObj(v) && Object.values(v).every(isNum));
+
 const SLOT_IDS = ['haut', 'bas', 'chapeau', 'lunettes', 'cou', 'objet', 'compagnon', 'decor'];
 const CHARACTER_IDS = ['renard', 'loutre', 'ourson', 'lapin'];
 const EVENT_SHAPES: Record<string, (r: Record<string, unknown>) => boolean> = {
@@ -72,10 +74,10 @@ const knownEvent = (type: unknown) => isStr(type) && Object.hasOwn(EVENT_SHAPES,
 const CHECKS: Record<'themes' | 'notes' | 'cards' | 'reviews' | 'events', (r: Record<string, unknown>) => boolean> = {
   themes: (r) =>
     isStr(r.id) && isStr(r.name) && isNum(r.order) && (r.parentId === undefined || isStr(r.parentId)) && (r.kind === undefined || r.kind === 'domain') && (r.lang === undefined || (LANGS as readonly unknown[]).includes(r.lang)) && (r.newOrder === undefined || r.newOrder === 'mixed' || r.newOrder === 'chapter') &&
-    (r.updatedAt === undefined || isNum(r.updatedAt)),
+    (r.updatedAt === undefined || isNum(r.updatedAt)) && fieldTimesOk(r.fieldTimes),
   notes: (r) =>
     isStr(r.id) && isStr(r.themeId) && fieldsOk(r.fields) && isStrList(r.tags) &&
-    (r.source === undefined || isStr(r.source)) && (r.suspended === undefined || typeof r.suspended === 'boolean') && (r.explanation === undefined || isStr(r.explanation)) && isNum(r.createdAt) && isNum(r.updatedAt),
+    (r.source === undefined || isStr(r.source)) && (r.suspended === undefined || typeof r.suspended === 'boolean') && (r.explanation === undefined || isStr(r.explanation)) && fieldTimesOk(r.fieldTimes) && isNum(r.createdAt) && isNum(r.updatedAt),
   cards: (r) => isStr(r.id) && isStr(r.noteId) && isStr(r.variant) && (r.orphan === undefined || typeof r.orphan === 'boolean'),
   reviews: (r) =>
     isStr(r.id) && isStr(r.cardId) && isNum(r.ts) && [1, 2, 3, 4].includes(r.rating as number) &&
@@ -84,6 +86,11 @@ const CHECKS: Record<'themes' | 'notes' | 'cards' | 'reviews' | 'events', (r: Re
   // Types from a later version are kept as they are (so syncing never deletes them) and ignored by readers.
   events: (r) => isStr(r.id) && isNum(r.ts) && isStr(r.type) && (!knownEvent(r.type) || EVENT_SHAPES[r.type as string](r)),
 };
+/** One record of a table, checked alone (no cross-references): for records synced one by one. */
+export function validRecord(table: keyof typeof CHECKS, r: unknown): boolean {
+  return isObj(r) && CHECKS[table](r);
+}
+
 const LABELS = { themes: 'thèmes', notes: 'notes', cards: 'cartes', reviews: 'révisions', events: 'manches' } as const;
 
 export function parseBackup(text: string): { ok: true; dump: Dump; exportedAt: number } | { ok: false; error: string } {

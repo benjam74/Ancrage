@@ -4,6 +4,11 @@ export function fakeSupabase(opts: { confirmEmail?: boolean; noTable?: boolean }
   const tokens = new Map<string, { userId: string; expiresAt: number }>();
   const refresh = new Map<string, string>();
   const rows = new Map<string, { data: unknown; version: number }>();
+  /** ancrage_items: one row per user, kind and id, with a global sequence. */
+  let items = false;
+  const itemRows = new Map<string, { user: string; kind: string; id: string; data: unknown; seq: number }>();
+  let seq = 0;
+  let writes = 0;
   let clock = 1_000_000;
   let offline = false;
   const calls: { method: string; path: string; headers: Record<string, string> }[] = [];
@@ -47,6 +52,37 @@ export function fakeSupabase(opts: { confirmEmail?: boolean; noTable?: boolean }
         return json(200, issue(userId, emailOf(userId)));
       }
     }
+    if (url.pathname === '/rest/v1/ancrage_items') {
+      if (!items) return json(404, { code: 'PGRST205', message: "Could not find the table 'public.ancrage_items' in the schema cache" });
+      const auth = tokens.get((headers.authorization ?? '').replace('Bearer ', ''));
+      if (!auth || auth.expiresAt <= clock) return json(401, { code: 'PGRST301', message: 'JWT expired' });
+      const method = init.method ?? 'GET';
+      const own = [...itemRows.values()].filter((r) => r.user === auth.userId);
+      if (method === 'GET') {
+        const after = url.searchParams.get('seq');
+        const kind = url.searchParams.get('kind');
+        const idIn = url.searchParams.get('id');
+        let list = own;
+        if (after) list = list.filter((r) => r.seq > Number(after.replace('gt.', '')));
+        if (kind) list = list.filter((r) => r.kind === kind.replace('eq.', ''));
+        if (idIn) {
+          const ids = JSON.parse(`[${idIn.replace(/^in\.\(/, '').replace(/\)$/, '')}]`);
+          list = list.filter((r) => ids.includes(r.id));
+        }
+        list = [...list].sort((a, b) => a.seq - b.seq).slice(0, Number(url.searchParams.get('limit') ?? 100000));
+        const select = (url.searchParams.get('select') ?? '').split(',');
+        return json(200, list.map((r) => Object.fromEntries(select.map((k) => [k, (r as Record<string, unknown>)[k]]))));
+      }
+      if (method === 'POST') {
+        writes += (body as unknown[]).length;
+        const out = (body as { kind: string; id: string; data: unknown }[]).map((b) => {
+          const row = { user: auth.userId, kind: b.kind, id: b.id, data: b.data, seq: ++seq };
+          itemRows.set(`${auth.userId}|${b.kind}|${b.id}`, row);
+          return { kind: b.kind, id: b.id, seq: row.seq };
+        });
+        return json(201, out);
+      }
+    }
     if (url.pathname === '/rest/v1/ancrage_snapshots' && opts.noTable) {
       return json(404, { code: 'PGRST205', message: "Could not find the table 'public.ancrage_snapshots' in the schema cache" });
     }
@@ -76,6 +112,8 @@ export function fakeSupabase(opts: { confirmEmail?: boolean; noTable?: boolean }
     calls,
     rows,
     setOffline: (v: boolean) => (offline = v),
+    enableItems: () => (items = true),
+    itemWrites: () => writes,
     advance: (seconds: number) => (clock += seconds),
     now: () => clock * 1000,
     confirm: (email: string) => (users.get(email)!.confirmed = true),

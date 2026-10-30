@@ -1,3 +1,4 @@
+import { NOTE_FIELDS, THEME_FIELDS, stampFields } from '../core/merge';
 import Dexie, { type EntityTable } from 'dexie';
 import { cardVariants } from '../core/cards';
 import { newId } from '../core/ids';
@@ -18,6 +19,7 @@ class AncrageDb extends Dexie {
   settings!: EntityTable<SettingsRow, 'key'>;
   events!: EntityTable<AppEvent, 'id'>;
   tombstones!: EntityTable<Tombstone, 'id'>;
+  meta!: EntityTable<{ key: string; value: string }, 'key'>;
 
   constructor(name: string) {
     super(name);
@@ -30,6 +32,7 @@ class AncrageDb extends Dexie {
     });
     this.version(2).stores({ events: 'id, ts' });
     this.version(3).stores({ tombstones: 'id' });
+    this.version(4).stores({ meta: 'key' });
   }
 }
 
@@ -78,14 +81,15 @@ export function createDexieRepo(name: string): Repo {
       });
 
   return {
-    async putTheme(theme) {
-      await db.themes.put(theme);
-    },
+    // Each write records which fields changed, so two devices' edits of different fields merge.
+    putTheme: (theme) => db.transaction('rw', db.themes, async () => {
+      await db.themes.put(stampFields(await db.themes.get(theme.id), theme, THEME_FIELDS));
+    }),
     listThemes: () => db.themes.orderBy('id').toArray(),
 
     putNote: (note) =>
       db.transaction('rw', db.notes, db.cards, db.reviews, async () => {
-        await db.notes.put(note);
+        await db.notes.put(stampFields(await db.notes.get(note.id), note, NOTE_FIELDS));
         const wanted = cardVariants(note.fields);
         const existing = await db.cards.where('noteId').equals(note.id).toArray();
         const active: Card[] = [];
@@ -154,6 +158,16 @@ export function createDexieRepo(name: string): Repo {
         return { changed, dump: next };
       }),
 
+    async getMeta(key) {
+      return (await db.meta.get(key))?.value ?? null;
+    },
+    async setMeta(key, value) {
+      if (value === null) await db.meta.delete(key);
+      else await db.meta.put({ key, value });
+    },
+    async clearMeta(prefix) {
+      await db.meta.where('key').startsWith(prefix).delete();
+    },
     getSettings: readSettings,
     async putSettings(settings, ts = Date.now()) {
       await db.settings.put({ key: 'main', desiredRetention: settings.desiredRetention, newPerDay: settings.newPerDay, updatedAt: ts });
