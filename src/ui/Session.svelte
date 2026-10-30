@@ -397,7 +397,7 @@
           <span></span><button class="btn ok" onclick={() => (revealed = true)}>Afficher la réponse</button>
         {/if}
       {:else}
-        <button class="btn small ghost sure-btn" aria-pressed={sure} onclick={() => (sure = !sure)} title="Dis-le avant de vérifier : une erreur commise en étant sûr se retient mieux une fois corrigée.">{sure ? '✓ Sûr de moi' : 'Sûr de moi ?'}</button>
+        <button class="btn small ghost sure-btn" aria-pressed={sure} onclick={() => (sure = !sure)} onkeydown={(e) => { if (e.key === 'Enter' && answer) { e.preventDefault(); void check(); } }} title="Dis-le avant de vérifier : une erreur commise en étant sûr se retient mieux une fois corrigée.">{sure ? '✓ Sûr de moi' : 'Sûr de moi ?'}</button>
         <button class="btn ok" disabled={!answer} onclick={check}>Vérifier</button>
       {/if}
     </div>

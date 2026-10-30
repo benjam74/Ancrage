@@ -41,7 +41,12 @@
   let rewriting = $state<Rewrite | null>(null);
   let rewriteDone = $state(false);
   /** Contrast cards: the domain whose existing cards are sent, and how many. */
-  let contrast = $state<{ domain: string; cards: number } | null>(null);
+  let contrast = $state<{ domain: string; domainId: string; cards: number; total: number } | null>(null);
+  /** Settings before preparing contrast cards, put back on « Annuler ». */
+  let beforeContrast: { types: NoteType[]; themeId: string; count: number } | null = null;
+  /** Destination value: the « Contrastes » theme, created on the first card added. */
+  const CONTRAST_THEME = '__contrast';
+  let contrastThemeId: Promise<string> | null = null;
   let contrastDomain = $state('');
   let contrastBusy = $state(false);
 
@@ -82,8 +87,9 @@
   async function loadThemes() {
     allThemes = await services.repo.listThemes();
     themes = allThemes.filter((t) => !isDomain(t)).sort((a, b) => a.order - b.order);
-    if (!themes.some((t) => t.id === themeId)) themeId = groupByDomain(allThemes).flatMap((g) => g.themes)[0]?.id ?? '';
+    if (themeId !== CONTRAST_THEME && !themes.some((t) => t.id === themeId)) themeId = groupByDomain(allThemes).flatMap((g) => g.themes)[0]?.id ?? '';
     if (!allThemes.some((t) => t.id === importDomain && isDomain(t))) importDomain = allThemes.filter(isDomain).sort((a, b) => a.order - b.order)[0]?.id ?? '';
+    if (!allThemes.some((t) => t.id === contrastDomain && isDomain(t))) contrastDomain = allThemes.filter(isDomain).sort((a, b) => a.order - b.order)[0]?.id ?? '';
   }
 
   /** Last reword request handled: cancelling must not bring it back. */
@@ -119,19 +125,22 @@
       const inDomain = new Set(allThemes.filter((t) => !isDomain(t) && domainOf(t, ids) === domain.id).map((t) => t.id));
       const notes = (await services.repo.listNotes()).filter((n) => inDomain.has(n.themeId) && n.fields.type !== 'image' && !n.suspended);
       if (notes.length < 4) return void (error = `Il faut au moins 4 cartes dans « ${domain.name} » pour trouver des notions proches.`);
+      if (pending && !confirm(`Remplacer les ${pending} propositions pas encore ajoutées ?`)) return;
       const existing = allThemes.find((t) => !isDomain(t) && inDomain.has(t.id) && t.name.trim().toLowerCase() === 'contrastes');
-      themeId = existing?.id ?? (await services.createTheme('Contrastes', domain.id)).id;
-      await loadThemes();
+      // Cards already in « Contrastes » are not sent back as source.
+      const built = buildContrastSource(notes.filter((n) => n.themeId !== existing?.id));
+      beforeContrast ??= { types, themeId, count };
+      contrastThemeId = null;
+      themeId = existing?.id ?? CONTRAST_THEME;
       parts = [];
       rewriting = null;
-      source = buildContrastSource(notes);
+      source = built.text;
       sourceTitle = `Contrastes — ${domain.name}`;
       instruction = CONTRAST_INSTRUCTION;
       types = TYPES.filter((t) => (t === 'scenario' ? coachingProfile : t === 'classify' || t === 'mcq'));
       count = 8;
       items = [];
-      contrast = { domain: domain.name, cards: notes.length };
-      onchange();
+      contrast = { domain: domain.name, domainId: domain.id, cards: built.used, total: notes.length };
     } finally {
       contrastBusy = false;
     }
@@ -142,7 +151,9 @@
     instruction = '';
     source = '';
     sourceTitle = '';
-    count = 8;
+    if (beforeContrast) ({ types, themeId, count } = beforeContrast);
+    beforeContrast = null;
+    void loadThemes();
   }
 
   function toggle(t: NoteType) {
@@ -244,7 +255,7 @@
             const theme = themes.find((t) => t.id === p.dest);
             return [{ part: { ...p, section: { ...p.section, title: p.section.title } }, source: p.section.text, themeName: theme?.name ?? themeNameOf(p.section), domainName: theme ? domainNameOf(theme) : allThemes.find((t) => t.id === importDomain)?.name }];
           })
-        : [{ part: null as Part | null, source, themeName: themes.find((t) => t.id === themeId)!.name, domainName: domainNameOf(themes.find((t) => t.id === themeId)) }];
+        : [{ part: null as Part | null, source, themeName: themes.find((t) => t.id === themeId)?.name ?? 'Contrastes', domainName: themeId === CONTRAST_THEME ? contrast?.domain : domainNameOf(themes.find((t) => t.id === themeId)) }];
       const found: Item[] = [];
       let dropped = 0;
       const failures: string[] = [];
@@ -277,6 +288,11 @@
 
   /** Theme of an item; a section's new theme is created on its first card, or reused when the domain has one of that name. */
   async function targetOf(item: Item): Promise<string> {
+    if (item.part === null && themeId === CONTRAST_THEME && contrast) {
+      const domainId = contrast.domainId;
+      contrastThemeId ??= services.createTheme('Contrastes', domainId).then((t) => t.id);
+      return contrastThemeId;
+    }
     if (item.part === null) return themeId;
     const p = item.part;
     if (p.dest !== NEW) return p.dest;
@@ -399,7 +415,7 @@
 
     <form class="panel form" onsubmit={generate} novalidate>
       {#if contrast}
-        <p class="notice">Cartes de contraste pour « {contrast.domain} » : Claude lit tes {contrast.cards} cartes existantes et propose des cartes qui obligent à distinguer les notions proches. Elles iront dans le thème choisi ci-dessous.
+        <p class="notice">Cartes de contraste pour « {contrast.domain} » : Claude lit {contrast.cards < contrast.total ? `les ${contrast.cards} premières de tes ${contrast.total} cartes` : `tes ${contrast.cards} cartes existantes`} et propose des cartes qui obligent à distinguer les notions proches. Elles iront dans le thème choisi ci-dessous.
           <button type="button" class="link" onclick={cancelContrast}>Annuler</button>
         </p>
       {/if}
@@ -449,6 +465,7 @@
           <div class="field">
             <label for="g-theme">Thème des cartes</label>
             <select id="g-theme" bind:value={themeId}>
+              {#if contrast && themeId === CONTRAST_THEME}<option value={CONTRAST_THEME}>Nouveau thème « Contrastes » ({contrast.domain}), créé au premier ajout</option>{/if}
               {#each groupByDomain(allThemes) as g (g.domain?.id ?? 'loose')}
                 {#if g.themes.length}
                   <optgroup label={g.domain?.name ?? 'Sans domaine'}>

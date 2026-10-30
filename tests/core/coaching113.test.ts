@@ -9,10 +9,13 @@ const note = (id: string, front: string, back: string): Note => ({ id, themeId: 
 describe('contrast cards', () => {
   test('the source lists the existing cards, one per block, within the size limit', () => {
     const src = buildContrastSource([note('a', 'Recadrage ?', 'Changer le sens.'), note('b', 'Reformulation ?', 'Redire avec ses mots.')]);
-    expect(src).toContain('Question : Recadrage ?');
-    expect(src).toContain('Question : Reformulation ?');
+    expect(src.text).toContain('Question : Recadrage ?');
+    expect(src.text).toContain('Question : Reformulation ?');
+    expect(src.used).toBe(2);
     const many = Array.from({ length: 2000 }, (_, i) => note(`n${i}`, `Question numéro ${i} assez longue pour remplir`, 'Réponse'));
-    expect(buildContrastSource(many).length).toBeLessThanOrEqual(MAX_SOURCE_CHARS);
+    const cut = buildContrastSource(many);
+    expect(cut.text.length).toBeLessThanOrEqual(MAX_SOURCE_CHARS);
+    expect(cut.used).toBeLessThan(2000);
   });
   test('the instruction asks to tell close notions apart and explain the difference', () => {
     expect(CONTRAST_INSTRUCTION).toMatch(/confondre/);
