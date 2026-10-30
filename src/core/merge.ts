@@ -49,7 +49,20 @@ export function stampFields<T extends Stamped>(prev: T | undefined, next: T, fie
     // An unchanged field keeps the time it really changed, not this write's.
     else if (p[f] !== undefined) times[f] = prev.fieldTimes?.[f] ?? prev.updatedAt ?? 0;
   }
-  return Object.keys(times).length ? { ...next, fieldTimes: times } : next;
+  return withTimes(next, times, fields);
+}
+
+/** Field times equal to `updatedAt` on a present field are implied: leave them out, so equal records stay equal. */
+function withTimes<T extends Stamped>(rec: T, times: Record<string, number>, fields: readonly string[]): T {
+  const r = rec as Record<string, unknown>;
+  const kept: Record<string, number> = {};
+  for (const f of fields) {
+    const t = times[f];
+    if (t === undefined || (r[f] !== undefined && t === (rec.updatedAt ?? 0))) continue;
+    kept[f] = t;
+  }
+  const { fieldTimes: _, ...rest } = rec;
+  return (Object.keys(kept).length ? { ...rest, fieldTimes: kept } : rest) as T;
 }
 
 /**
@@ -79,9 +92,7 @@ export function mergeRecord<T extends Stamped & { id: string }>(x: T, y: T, fiel
   }
   out.updatedAt = Math.max(x.updatedAt ?? 0, y.updatedAt ?? 0);
   if (x.updatedAt === undefined && y.updatedAt === undefined) delete out.updatedAt;
-  if (Object.keys(times).length) out.fieldTimes = times;
-  else delete out.fieldTimes;
-  return out as T;
+  return withTimes(out as T, times, fields);
 }
 
 const same = <T extends object>(x: T, y: T) => (x === y || key(x) >= key(y) ? x : y);

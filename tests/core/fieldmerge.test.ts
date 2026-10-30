@@ -7,7 +7,7 @@ const base: Note = { id: 'n', themeId: 't', fields: { type: 'basic', front: 'Q',
 describe('stampFields', () => {
   test('records when each changed field changed, including a removed optional field', () => {
     const next = stampFields(base, { ...base, explanation: 'Parce que.', updatedAt: 20 }, NOTE_FIELDS);
-    expect(next.fieldTimes).toEqual({ themeId: 10, fields: 10, tags: 10, explanation: 20 });
+    expect(next.fieldTimes).toEqual({ themeId: 10, fields: 10, tags: 10 });
     const cleared = stampFields(next, { ...base, updatedAt: 30, fieldTimes: next.fieldTimes }, NOTE_FIELDS);
     expect(cleared.fieldTimes).toMatchObject({ fields: 10, explanation: 30 });
     expect(cleared.explanation).toBeUndefined();
