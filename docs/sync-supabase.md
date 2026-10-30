@@ -93,7 +93,20 @@ Dans **Authentication → Sign In / Providers → Email** :
 - laisse **Confirm email** activé si tu veux que l'adresse soit vérifiée : après « Créer le compte », ouvre le lien reçu, puis reviens dans Ancrage et clique « Se connecter » ;
 - ou désactive-le pour un usage strictement personnel : « Créer le compte » connecte directement.
 
-## 4. Connecter chaque appareil
+## 4. Intégrer le projet à l'application (comptes)
+
+Pour que chacun crée son compte sans saisir d'adresse ni de clé, intègre le projet au déploiement :
+
+1. Sur GitHub : **Settings → Secrets and variables → Actions → Variables → New repository variable**. Crée `SUPABASE_URL` (l'URL du projet) et `SUPABASE_ANON_KEY` (la clé anon). Ce sont des variables, pas des secrets : la clé anon est publique par conception.
+2. Exécute **les deux** scripts SQL ci-dessus (table et synchronisation rapide).
+3. Relance le déploiement (**Actions → Deploy to GitHub Pages → Run workflow**).
+4. Dans **Authentication → URL Configuration**, la **Site URL** doit être l'adresse de l'application : c'est là que mènent les liens de confirmation et de « Mot de passe oublié ».
+
+Au premier lancement sur un nouvel appareil, Ancrage propose alors **Se connecter**, **Créer un compte** (prénom et « Pour réviser quoi ? », gardés avec le compte) ou **Continuer sans compte**. En se connectant à un compte existant, l'appareil récupère d'abord les cartes du compte, sans ajouter les cartes d'exemple. Chaque profil a son compte : **Ouvrir un autre compte** sur « Qui révise ? », ou **Ajouter le profil d’un compte existant** dans Réglages → Profils, ajoute un profil pour ce compte.
+
+Sans ces variables, l'application fonctionne comme avant : chacun peut brancher son propre projet dans Réglages.
+
+## 5. Connecter chaque appareil (projet personnel)
 
 Dans Ancrage : **Réglages → Synchronisation**. Saisis l'adresse du projet, la clé anon, ton e-mail et un mot de passe, puis :
 

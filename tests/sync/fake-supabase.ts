@@ -1,6 +1,6 @@
 /** A small stand-in for Supabase Auth (GoTrue) and the ancrage_snapshots table (PostgREST), behind `fetch`. */
 export function fakeSupabase(opts: { confirmEmail?: boolean; noTable?: boolean } = {}) {
-  const users = new Map<string, { password: string; id: string; confirmed: boolean }>();
+  const users = new Map<string, { password: string; id: string; confirmed: boolean; meta: Record<string, unknown> }>();
   const tokens = new Map<string, { userId: string; expiresAt: number }>();
   const refresh = new Map<string, string>();
   const rows = new Map<string, { data: unknown; version: number }>();
@@ -15,11 +15,12 @@ export function fakeSupabase(opts: { confirmEmail?: boolean; noTable?: boolean }
 
   const json = (status: number, body: unknown) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
   const issue = (userId: string, email: string) => {
+    const meta = users.get(email)?.meta ?? {};
     const access = `at-${Math.random()}`;
     const ref = `rt-${Math.random()}`;
     tokens.set(access, { userId, expiresAt: clock + 3600 });
     refresh.set(ref, userId);
-    return { access_token: access, refresh_token: ref, expires_in: 3600, expires_at: clock + 3600, token_type: 'bearer', user: { id: userId, email } };
+    return { access_token: access, refresh_token: ref, expires_in: 3600, expires_at: clock + 3600, token_type: 'bearer', user: { id: userId, email, user_metadata: meta } };
   };
   const emailOf = (userId: string) => [...users.entries()].find(([, u]) => u.id === userId)![0];
 
@@ -34,7 +35,7 @@ export function fakeSupabase(opts: { confirmEmail?: boolean; noTable?: boolean }
     if (url.pathname === '/auth/v1/signup') {
       if (users.has(body.email)) return json(422, { code: 422, error_code: 'user_already_exists', msg: 'User already registered' });
       const id = `u-${users.size + 1}`;
-      users.set(body.email, { password: body.password, id, confirmed: !opts.confirmEmail });
+      users.set(body.email, { password: body.password, id, confirmed: !opts.confirmEmail, meta: body.data ?? {} });
       return opts.confirmEmail ? json(200, { id, email: body.email }) : json(200, issue(id, body.email));
     }
     if (url.pathname === '/auth/v1/token') {
@@ -51,6 +52,14 @@ export function fakeSupabase(opts: { confirmEmail?: boolean; noTable?: boolean }
         refresh.delete(body.refresh_token);
         return json(200, issue(userId, emailOf(userId)));
       }
+    }
+    if (url.pathname === '/auth/v1/recover') return json(200, {});
+    if (url.pathname === '/auth/v1/user' && init.method === 'PUT') {
+      const auth = tokens.get((headers.authorization ?? '').replace('Bearer ', ''));
+      if (!auth || auth.expiresAt <= clock) return json(401, { code: 401, msg: 'invalid JWT' });
+      if (String(body.password ?? '').length < 6) return json(422, { code: 422, error_code: 'weak_password', msg: 'Password should be at least 6 characters.' });
+      users.get(emailOf(auth.userId))!.password = body.password;
+      return json(200, { id: auth.userId, email: emailOf(auth.userId) });
     }
     if (url.pathname === '/rest/v1/ancrage_items') {
       if (!items) return json(404, { code: 'PGRST205', message: "Could not find the table 'public.ancrage_items' in the schema cache" });
@@ -117,5 +126,7 @@ export function fakeSupabase(opts: { confirmEmail?: boolean; noTable?: boolean }
     advance: (seconds: number) => (clock += seconds),
     now: () => clock * 1000,
     confirm: (email: string) => (users.get(email)!.confirmed = true),
+    /** The address a « new password » e-mail links to. */
+    recoveryLink: (email: string) => `#access_token=${issue(users.get(email)!.id, email).access_token}&expires_in=3600&type=recovery`,
   };
 }

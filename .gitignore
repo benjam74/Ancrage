@@ -5,3 +5,4 @@ dist/
 .env*
 .superpowers/
 smoke-output/
+dist-accounts/
