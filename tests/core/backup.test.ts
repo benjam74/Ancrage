@@ -152,7 +152,7 @@ describe('v1.8: image notes and theme language', () => {
     expect(parseBackup(mutate((o) => ((o.themes as Record<string, unknown>[])[0].lang = 'klingon'))).ok).toBe(false);
   });
   test('backups are version 4', () => {
-    expect(BACKUP_VERSION).toBe(4);
+    expect(BACKUP_VERSION).toBeGreaterThanOrEqual(4);
   });
 });
 

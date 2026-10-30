@@ -1,4 +1,6 @@
 import type { RemoteStore } from './remote';
+import { ItemsMissing, type ItemsRemote, type RemoteItem } from './items-remote';
+import type { Item } from '../core/items';
 
 /**
  * Supabase over plain REST (no SDK): Auth (GoTrue) for e-mail + password sessions, and one row
@@ -22,6 +24,13 @@ type Clock = () => number;
 type AuthResult = { ok: true; session: AuthSession } | { ok: false; error: string; network?: boolean };
 
 const TABLE = 'ancrage_snapshots';
+const ITEMS_TABLE = 'ancrage_items';
+/** Ids per request when fetching contents, to keep URLs short. */
+const FETCH_CHUNK = 60;
+/** Rows per listing page. */
+const LIST_PAGE = 1000;
+/** Bytes of JSON per write. */
+const PUSH_BYTES = 1_500_000;
 const REFRESH_MARGIN_MS = 60_000;
 export const NETWORK_ERROR = 'Impossible de joindre le serveur. Vérifie ta connexion et l’adresse du projet.';
 
@@ -88,13 +97,8 @@ export const signIn = (config: SyncConfig, email: string, password: string, fetc
 export const signUp = (config: SyncConfig, email: string, password: string, fetchFn: Fetch = fetch, now: Clock = Date.now) =>
   auth(config, 'signup', { email, password }, fetchFn, now);
 
-export function createSupabaseRemote(
-  config: SyncConfig,
-  getSession: () => AuthSession | null,
-  saveSession: (s: AuthSession | null) => void,
-  fetchFn: Fetch = fetch,
-  now: Clock = Date.now,
-): RemoteStore {
+/** Authenticated PostgREST calls on one table, refreshing the session when needed. */
+function restClient(config: SyncConfig, getSession: () => AuthSession | null, saveSession: (s: AuthSession | null) => void, fetchFn: Fetch, now: Clock) {
   async function refreshNow(session: AuthSession): Promise<string> {
     const res = await auth(config, 'token?grant_type=refresh_token', { refresh_token: session.refreshToken }, fetchFn, now);
     if (res.ok) {
@@ -114,11 +118,11 @@ export function createSupabaseRemote(
     return refreshNow(session);
   }
 
-  async function rest(query: string, init: RequestInit) {
+  return async function rest(table: string, query: string, init: RequestInit & { prefer?: string }) {
     const send = async (accessToken: string) =>
-      call(fetchFn, `${base(config)}/rest/v1/${TABLE}${query}`, {
+      call(fetchFn, `${base(config)}/rest/v1/${table}${query}`, {
         ...init,
-        headers: { apikey: config.anonKey, Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json', Prefer: 'return=representation' },
+        headers: { apikey: config.anonKey, Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json', Prefer: init.prefer ?? 'return=representation' },
       });
     let res = await send(await token());
     if (res.status === 401) {
@@ -131,12 +135,23 @@ export function createSupabaseRemote(
         throw new Error('Session expirée : reconnecte-toi.');
       }
     }
+    if (res.status === 404 && table === ITEMS_TABLE) throw new ItemsMissing();
     if (res.status === 404 && /PGRST205|ancrage_snapshots/.test(JSON.stringify(res.body))) {
       throw new Error('La table ancrage_snapshots est absente du projet : exécute le script SQL du guide de synchronisation.');
     }
     return res;
-  }
+  };
+}
 
+export function createSupabaseRemote(
+  config: SyncConfig,
+  getSession: () => AuthSession | null,
+  saveSession: (s: AuthSession | null) => void,
+  fetchFn: Fetch = fetch,
+  now: Clock = Date.now,
+): RemoteStore {
+  const call = restClient(config, getSession, saveSession, fetchFn, now);
+  const rest = (query: string, init: RequestInit) => call(TABLE, query, init);
   return {
     async get() {
       const { status, body } = await rest('?select=data,version', { method: 'GET' });
@@ -154,6 +169,71 @@ export function createSupabaseRemote(
       const { status, body } = await rest(`?version=eq.${expected}&select=version`, { method: 'PATCH', body: JSON.stringify({ data, version: expected + 1 }) });
       if (status < 200 || status >= 300) throw new Error('Écriture impossible sur le serveur de synchronisation.');
       return Array.isArray(body) && body.length ? { ok: true, version: expected + 1 } : { ok: false, conflict: true };
+    },
+  };
+}
+
+/** The `ancrage_items` table: one row per record, `seq` growing with every write (see docs/sync-supabase.md). */
+export function createSupabaseItems(
+  config: SyncConfig,
+  getSession: () => AuthSession | null,
+  saveSession: (s: AuthSession | null) => void,
+  fetchFn: Fetch = fetch,
+  now: Clock = Date.now,
+): ItemsRemote {
+  const rest = restClient(config, getSession, saveSession, fetchFn, now);
+  const ok = (status: number) => status >= 200 && status < 300;
+  const quote = (v: string) => `"${v.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`;
+  return {
+    async list(after) {
+      const out: { kind: string; id: string; seq: number }[] = [];
+      let from = after;
+      for (;;) {
+        const { status, body } = await rest(ITEMS_TABLE, `?select=kind,id,seq&seq=gt.${from}&order=seq.asc&limit=${LIST_PAGE}`, { method: 'GET' });
+        if (!ok(status) || !Array.isArray(body)) throw new Error('Lecture impossible sur le serveur de synchronisation.');
+        out.push(...body.map((r: { kind: string; id: string; seq: number | string }) => ({ kind: r.kind, id: r.id, seq: Number(r.seq) })));
+        if (body.length < LIST_PAGE) return out;
+        from = out[out.length - 1].seq;
+      }
+    },
+    async fetch(keys) {
+      const out: RemoteItem[] = [];
+      const byKind = new Map<string, string[]>();
+      for (const k of keys) byKind.set(k.kind, [...(byKind.get(k.kind) ?? []), k.id]);
+      for (const [kind, ids] of byKind) {
+        for (let i = 0; i < ids.length; i += FETCH_CHUNK) {
+          const list = encodeURIComponent(`(${ids.slice(i, i + FETCH_CHUNK).map(quote).join(',')})`);
+          const { status, body } = await rest(ITEMS_TABLE, `?select=kind,id,data,seq&kind=eq.${encodeURIComponent(kind)}&id=in.${list}`, { method: 'GET' });
+          if (!ok(status) || !Array.isArray(body)) throw new Error('Lecture impossible sur le serveur de synchronisation.');
+          out.push(...body.map((r: RemoteItem & { seq: number | string }) => ({ kind: r.kind, id: r.id, data: r.data, seq: Number(r.seq) })));
+        }
+      }
+      return out;
+    },
+    async push(items) {
+      const out: { kind: string; id: string; seq: number }[] = [];
+      let batch: Item[] = [];
+      let size = 0;
+      const send = async () => {
+        if (!batch.length) return;
+        const { status, body } = await rest(ITEMS_TABLE, '?on_conflict=user_id,kind,id&select=kind,id,seq', {
+          method: 'POST',
+          prefer: 'resolution=merge-duplicates,return=representation',
+          body: JSON.stringify(batch.map((i) => ({ kind: i.kind, id: i.id, data: i.data }))),
+        });
+        if (!ok(status) || !Array.isArray(body)) throw new Error('Écriture impossible sur le serveur de synchronisation.');
+        out.push(...body.map((r: { kind: string; id: string; seq: number | string }) => ({ kind: r.kind, id: r.id, seq: Number(r.seq) })));
+        batch = [];
+        size = 0;
+      };
+      for (const item of items) {
+        const bytes = JSON.stringify(item.data).length;
+        if (size + bytes > PUSH_BYTES) await send();
+        batch.push(item);
+        size += bytes;
+      }
+      await send();
+      return out;
     },
   };
 }

@@ -3,8 +3,8 @@ import type { AppEvent, Card, Note, ReviewEntry, Settings, Theme, Tombstone } fr
 import { validateSettings } from './settings';
 
 export const BACKUP_FORMAT = 'ancrage-backup';
-// Version 3 adds the shop events, version 4 image notes and theme languages; older apps then ask to be updated instead of calling the file damaged.
-export const BACKUP_VERSION = 4;
+// Version 3 adds the shop events, version 4 image notes and theme languages, version 5 field times and synced items; older apps then ask to be updated instead of calling the file damaged.
+export const BACKUP_VERSION = 5;
 
 /** A full snapshot of the local database. */
 export interface Dump {
@@ -86,6 +86,11 @@ const CHECKS: Record<'themes' | 'notes' | 'cards' | 'reviews' | 'events', (r: Re
   // Types from a later version are kept as they are (so syncing never deletes them) and ignored by readers.
   events: (r) => isStr(r.id) && isNum(r.ts) && isStr(r.type) && (!knownEvent(r.type) || EVENT_SHAPES[r.type as string](r)),
 };
+/** One record of a table, checked alone (no cross-references): for records synced one by one. */
+export function validRecord(table: keyof typeof CHECKS, r: unknown): boolean {
+  return isObj(r) && CHECKS[table](r);
+}
+
 const LABELS = { themes: 'thèmes', notes: 'notes', cards: 'cartes', reviews: 'révisions', events: 'manches' } as const;
 
 export function parseBackup(text: string): { ok: true; dump: Dump; exportedAt: number } | { ok: false; error: string } {

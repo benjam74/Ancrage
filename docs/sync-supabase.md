@@ -35,6 +35,52 @@ create policy "Chacun met à jour sa copie" on public.ancrage_snapshots
 
 Chaque utilisateur ne voit et ne modifie que sa propre ligne.
 
+## Synchronisation rapide
+
+Depuis la version 1.11, Ancrage n'envoie que ce qui a changé (une révision, une carte modifiée) au lieu de toute ta base, images comprises. Il faut pour cela une seconde table. **Une seule fois**, dans **SQL Editor → New query**, colle et exécute :
+
+```sql
+create sequence if not exists public.ancrage_items_seq;
+
+create table if not exists public.ancrage_items (
+  user_id uuid not null default auth.uid() references auth.users on delete cascade,
+  kind text not null,
+  id text not null,
+  data jsonb not null,
+  seq bigint not null default nextval('public.ancrage_items_seq'),
+  primary key (user_id, kind, id)
+);
+
+create index if not exists ancrage_items_user_seq on public.ancrage_items (user_id, seq);
+
+-- Chaque écriture reçoit un nouveau numéro : un appareil demande ce qui a été écrit depuis son dernier passage.
+create or replace function public.ancrage_items_bump() returns trigger
+language plpgsql set search_path = public as $$
+begin
+  new.seq := nextval('public.ancrage_items_seq');
+  return new;
+end $$;
+
+drop trigger if exists ancrage_items_bump on public.ancrage_items;
+create trigger ancrage_items_bump before insert or update on public.ancrage_items
+  for each row execute function public.ancrage_items_bump();
+
+alter table public.ancrage_items enable row level security;
+grant select, insert, update on public.ancrage_items to authenticated;
+grant usage on sequence public.ancrage_items_seq to authenticated;
+
+create policy "Chacun lit ses éléments" on public.ancrage_items
+  for select to authenticated using (user_id = auth.uid());
+create policy "Chacun crée ses éléments" on public.ancrage_items
+  for insert to authenticated with check (user_id = auth.uid());
+create policy "Chacun met à jour ses éléments" on public.ancrage_items
+  for update to authenticated using (user_id = auth.uid()) with check (user_id = auth.uid());
+```
+
+Ensuite, sur chaque appareil, **mets d'abord l'application à jour**, puis « Synchroniser maintenant ». Le premier appareil reprend la copie complète et l'envoie élément par élément ; Réglages → Synchronisation affiche alors « Synchronisation rapide ». Un appareil resté sur une ancienne version demandera à être mis à jour.
+
+Sans ce script, Ancrage continue de fonctionner avec la copie complète, et Réglages te le rappelle.
+
 ## 3. Choisir la confirmation d'e-mail
 
 Dans **Authentication → URL Configuration**, mets l'adresse de ton application dans **Site URL** (par exemple `https://benjam74.github.io/Ancrage/`). Sinon le lien de confirmation renvoie vers `localhost`.
@@ -56,7 +102,7 @@ La synchronisation se fait à l'ouverture de l'application, après chaque manche
 ## Comment les conflits sont réglés
 
 - Les révisions et les manches de tous les appareils sont additionnées : rien ne se perd.
-- Une note ou un thème modifié sur deux appareils garde la version la plus récente.
+- Une note ou un thème modifié sur deux appareils est fusionné champ par champ : chaque champ (texte, explication, étiquettes, nom, langue…) garde sa valeur la plus récente. Modifier l'explication sur le téléphone et les étiquettes sur l'ordinateur garde les deux.
 - Une suppression l'emporte sur les versions plus anciennes ; une modification faite après la suppression fait revenir la note.
 - Si deux appareils écrivent en même temps, le second relit la copie du serveur, refusionne et réessaie.
 

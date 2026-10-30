@@ -172,3 +172,30 @@ describe('cloud sync service', () => {
     expect((await cloud.sync()).state).toBe('off');
   });
 });
+
+describe('fast sync through the items table', () => {
+  test('without the table, the app keeps the whole copy and says so; with it, only changes travel', async () => {
+    const srv = fakeSupabase();
+    const repo = createDexieRepo(`fast-${newId()}`);
+    await seedIfEmpty(repo, 1000);
+    const cloud = createCloudSync(repo, memoryStorage(), srv.fetchFn, srv.now);
+    cloud.configure(config);
+    await cloud.signUp('f@ex.fr', 'secret12');
+    expect(await cloud.sync()).toMatchObject({ state: 'ok', mode: 'full' });
+
+    srv.enableItems();
+    expect(await cloud.sync()).toMatchObject({ state: 'ok', mode: 'fast' });
+    const sentFirst = srv.itemWrites();
+    expect(sentFirst).toBeGreaterThan(20);
+    expect(await cloud.sync()).toMatchObject({ mode: 'fast' });
+    expect(srv.itemWrites()).toBe(sentFirst);
+
+    // A second device on the same account receives everything through the items.
+    const repo2 = createDexieRepo(`fast2-${newId()}`);
+    const cloud2 = createCloudSync(repo2, memoryStorage(), srv.fetchFn, srv.now);
+    cloud2.configure(config);
+    await cloud2.signIn('f@ex.fr', 'secret12');
+    expect(await cloud2.sync()).toMatchObject({ state: 'ok', mode: 'fast' });
+    expect((await repo2.listNotes()).length).toBe((await repo.listNotes()).length);
+  });
+});

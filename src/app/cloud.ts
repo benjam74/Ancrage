@@ -1,6 +1,7 @@
 import type { Repo } from '../storage/repo';
-import { createSupabaseRemote, signIn, signUp, type AuthSession, type SyncConfig } from '../sync/supabase';
-import { syncOnce } from '../sync/sync';
+import { createSupabaseItems, createSupabaseRemote, signIn, signUp, type AuthSession, type SyncConfig } from '../sync/supabase';
+import { syncItems, syncOnce } from '../sync/sync';
+import { ItemsMissing } from '../sync/items-remote';
 
 export interface KeyValue {
   get(key: string): string | null;
@@ -12,6 +13,8 @@ export interface SyncStatus {
   state: 'off' | 'ok' | 'error';
   at?: number;
   message?: string;
+  /** `fast`: only changes travel (table ancrage_items) · `full`: the whole copy each time. */
+  mode?: 'fast' | 'full';
 }
 
 export interface CloudSync {
@@ -37,6 +40,14 @@ export function browserStorage(): KeyValue {
     set: (k, v) => { try { localStorage.setItem(k, v); } catch { /* best effort */ } },
     remove: (k) => { try { localStorage.removeItem(k); } catch { /* best effort */ } },
   };
+}
+
+/** Keys of `store` under a sub-space (sync state per account and project). */
+function scoped(store: KeyValue, space: string): KeyValue {
+  let h = 0;
+  for (let i = 0; i < space.length; i++) h = (Math.imul(h, 31) + space.charCodeAt(i)) | 0;
+  const k = (key: string) => `${key}.${(h >>> 0).toString(36)}`;
+  return { get: (key) => store.get(k(key)), set: (key, v) => store.set(k(key), v), remove: (key) => store.remove(k(key)) };
 }
 
 export function memoryStorage(): KeyValue {
@@ -104,8 +115,16 @@ export function createCloudSync(repo: Repo, store: KeyValue, fetchFn: typeof fet
         const config = self.config();
         if (!config || !session()) return { state: 'off' } as SyncStatus;
         try {
-          await syncOnce(repo, createSupabaseRemote(config, session, saveSession, fetchFn, now));
-          return record({ state: 'ok', at: now() });
+          const snapshot = createSupabaseRemote(config, session, saveSession, fetchFn, now);
+          try {
+            // The sync state belongs to one account on one project.
+            await syncItems(repo, createSupabaseItems(config, session, saveSession, fetchFn, now), scoped(store, `${config.url}|${session()?.email ?? ''}`), snapshot, now);
+            return record({ state: 'ok', at: now(), mode: 'fast' });
+          } catch (e) {
+            if (!(e instanceof ItemsMissing)) throw e;
+          }
+          await syncOnce(repo, snapshot);
+          return record({ state: 'ok', at: now(), mode: 'full' });
         } catch (e) {
           return record({ state: 'error', at: now(), message: (e as Error).message });
         }
