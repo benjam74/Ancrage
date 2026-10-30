@@ -163,3 +163,11 @@ describe('v1.9: order of new cards', () => {
     expect(parseBackup(mutate((o) => ((o.themes as Record<string, unknown>[])[0].newOrder = 'random'))).ok).toBe(false);
   });
 });
+
+describe('v1.10: explanations', () => {
+  test('an explanation round-trips; a non-string one is refused', () => {
+    const ok = parseBackup(mutate((o) => ((o.notes as Record<string, unknown>[])[0].explanation = 'Parce que.')));
+    expect(ok.ok && ok.dump.notes[0].explanation).toBe('Parce que.');
+    expect(parseBackup(mutate((o) => ((o.notes as Record<string, unknown>[])[0].explanation = 3))).ok).toBe(false);
+  });
+});

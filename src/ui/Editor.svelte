@@ -7,6 +7,7 @@
     themeId: string;
     tags: string[];
     source?: string;
+    explanation?: string;
   }
 </script>
 
@@ -22,6 +23,8 @@
   import { groupByDomain, isDomain } from '../core/domains';
   import { EXAMPLES } from '../app/current';
   import { prefs } from './prefs.svelte';
+  import { whyOf } from '../app/services';
+  import { MAX_EXPLANATION } from '../core/explain';
 
   let {
     services,
@@ -56,6 +59,8 @@
   const domains = $derived(allThemes.filter(isDomain));
   let tags = $state(initial?.tags.join(', ') ?? '');
   let source = $state(initial?.source ?? '');
+  // An example card shows its built-in explanation: editing it keeps that text in the note.
+  let explanation = $state(untrack(() => (editing ? (editing.explanation ?? whyOf(editing) ?? '') : (prefill?.explanation ?? ''))));
   let level = $state<'debutant' | 'avance'>('debutant');
   let submitted = $state(false);
   let message = $state('');
@@ -104,7 +109,7 @@
     message = '';
     saveErrors = {};
     if (!themeId || themeId === '__new') return;
-    const res = await services.saveNote({ id: editing?.id, themeId, fields, tags: tags.split(','), source }, Date.now());
+    const res = await services.saveNote({ id: editing?.id, themeId, fields, tags: tags.split(','), source, explanation }, Date.now());
     if (!res.ok) {
       saveErrors = res.errors;
       if (res.errors.themeId) await loadThemes();
@@ -114,6 +119,7 @@
     const theme = themes.find((t) => t.id === themeId)?.name ?? '';
     message = `Ajouté à « ${theme} » : ${res.cards} carte${res.cards > 1 ? 's' : ''}. ${when(res.cards, res.today)}`;
     drafts[type] = emptyDraft(type);
+    explanation = '';
     submitted = false;
     onsaved();
   }
@@ -199,6 +205,11 @@
         {/if}
       {/each}
 
+      <div class="field" class:invalid={!!saveErrors.explanation || explanation.trim().replace(/\s+/g, ' ').length > MAX_EXPLANATION}>
+        <label for="f-why">Pourquoi ? <span class="muted">(facultatif)</span></label>
+        <textarea id="f-why" bind:value={explanation} style="min-height:72px" aria-describedby="f-why-msg" placeholder="En une ou deux phrases : pourquoi c’est la bonne réponse."></textarea>
+        <span id="f-why-msg" class={saveErrors.explanation || explanation.trim().replace(/\s+/g, ' ').length > MAX_EXPLANATION ? 'error' : 'hint'}>{saveErrors.explanation ?? `Affiché après la réponse, ouvert d’office en cas d’erreur. ${explanation.trim().replace(/\s+/g, ' ').length} / ${MAX_EXPLANATION}`}</span>
+      </div>
       <div class="field">
         <label for="f-tags">Tags</label>
         <input id="f-tags" bind:value={tags} placeholder="Séparés par des virgules" />

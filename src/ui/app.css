@@ -478,3 +478,12 @@ p.error { font-weight: 700; color: var(--bad); }
 .path.map .node-row, .path.map .node-row:nth-child(n) { justify-content: center; padding: 0; }
 .path.map::before, .path.map::after { display: none; }
 .map-note { margin: 0 0 6px; }
+
+/* v1.10: explanations */
+.why { display: grid; gap: 8px; padding: 12px 16px; border-radius: var(--r-md); background: var(--surface); border: 2px solid var(--line); }
+.why summary { cursor: pointer; font-weight: 800; color: var(--petrol); }
+.why p { margin: 6px 0 0; }
+.why-inline { margin: 0; font-size: 15px; }
+.explain-review { display: grid; gap: 10px; margin: 8px 0; }
+.explain-row { display: grid; gap: 6px; }
+.explain-row .ta { min-height: 64px; }

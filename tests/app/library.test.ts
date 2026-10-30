@@ -204,3 +204,34 @@ describe('image notes', () => {
     if (!third.ok) expect(third.errors.image).toMatch(/limite/);
   });
 });
+
+describe('explanations', () => {
+  test('saved with the note, capped at 400 characters, cleared when empty, kept when editing other fields', async () => {
+    const t = await aTheme();
+    const fields = { type: 'basic' as const, front: 'Q', back: 'R', reverse: false };
+    const res = await services.saveNote({ themeId: t.id, fields, tags: [], explanation: '  Parce que.  ' }, NOW);
+    expect(res.ok && res.note.explanation).toBe('Parce que.');
+    const tooLong = await services.saveNote({ themeId: t.id, fields, tags: [], explanation: 'x'.repeat(401) }, NOW);
+    expect(tooLong.ok).toBe(false);
+    if (!tooLong.ok) expect(tooLong.errors.explanation).toMatch(/400/);
+    if (!res.ok) return;
+    await services.setExplanation(res.note.id, 'Autre raison.', NOW + 1);
+    expect((await repo.getNote(res.note.id))!.explanation).toBe('Autre raison.');
+    expect((await repo.getNote(res.note.id))!.updatedAt).toBeGreaterThan(res.note.updatedAt);
+    await services.setExplanation(res.note.id, '   ', NOW + 2);
+    expect((await repo.getNote(res.note.id))!.explanation).toBeUndefined();
+  });
+  test('example cards show their built-in explanation until edited', async () => {
+    await seedIfEmpty(repo, NOW);
+    const note = (await repo.getNote('ex-01'))!;
+    const card = (await repo.listCards()).find((c) => c.noteId === 'ex-01')!;
+    expect((await services.context(card.id)).why).toMatch(/thérapeute/);
+    expect(note.explanation).toBeUndefined();
+    // Putting it aside and back (a newer version, same content) keeps it.
+    await services.setSuspended('ex-01', true, NOW + 1);
+    await services.setSuspended('ex-01', false, NOW + 2);
+    expect((await services.context(card.id)).why).toMatch(/thérapeute/);
+    await services.saveNote({ id: 'ex-01', themeId: note.themeId, fields: { ...note.fields, back: 'Autre réponse.' } as typeof note.fields, tags: note.tags }, NOW + 5);
+    expect((await services.context(card.id)).why).toBeNull();
+  });
+});

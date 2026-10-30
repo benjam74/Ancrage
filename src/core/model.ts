@@ -55,6 +55,8 @@ export interface Note {
   fields: NoteFields;
   tags: string[];
   source?: string;
+  /** Why the answer is right, in one or two sentences; shown after answering. */
+  explanation?: string;
   /** Put aside: out of every queue, history kept, can be resumed. */
   suspended?: boolean;
   createdAt: number;

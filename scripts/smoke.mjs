@@ -796,6 +796,85 @@ await v19.locator('.path.map').waitFor();
 await v19.screenshot({ path: `${OUT}/home-map.png`, fullPage: true });
 await v19.close();
 
+// --- v1.10: explanations ---
+let explainCalls = 0;
+const ctx110 = await browser.newContext({ serviceWorkers: 'block', viewport: { width: 1280, height: 900 } });
+await ctx110.addInitScript(() => localStorage.setItem('ancrage.ai.key', 'sk-ant-test'));
+await ctx110.route('https://api.anthropic.com/**', async (route) => {
+  const headers = { 'access-control-allow-origin': '*', 'access-control-allow-headers': '*', 'access-control-allow-methods': '*' };
+  if (route.request().method() === 'OPTIONS') return route.fulfill({ status: 204, headers });
+  explainCalls++;
+  const req = JSON.parse(route.request().postData() ?? '{}');
+  const ids = [...req.messages[0].content.matchAll(/<carte id="([^"]+)">/g)].map((m) => m[1]);
+  const payload = { items: ids.map((id) => ({ id, explanation: `Explication de Claude pour ${id}.` })) };
+  const body = { id: 'msg_x', type: 'message', role: 'assistant', model: 'claude-opus-5-5', stop_reason: 'end_turn', content: [{ type: 'text', text: JSON.stringify(payload) }], usage: { input_tokens: 1, output_tokens: 1 } };
+  return route.fulfill({ status: 200, contentType: 'application/json', headers, body: JSON.stringify(body) });
+});
+const v110 = await ctx110.newPage();
+v110.on('pageerror', (e) => errors.push(`v1.10: ${e.message}`));
+// A wrong answer on an example card opens its built-in explanation.
+await v110.goto(`${URL}#reviser`);
+await v110.getByRole('button', { name: 'Aucun', exact: true }).click();
+await v110.locator('label.pick', { hasText: 'Méta-modèle' }).locator('input').check();
+await v110.locator('label.mode', { has: v110.locator('input[value=new]') }).click();
+await v110.getByRole('button', { name: /Commencer \(\d+ cartes?\)/ }).click();
+const firstOpt = v110.locator('.opts .opt').first();
+const typedIn = v110.locator('.cloze input');
+await firstOpt.or(typedIn).first().waitFor();
+if (await typedIn.isVisible()) await typedIn.fill('mauvaise réponse');
+else {
+  // Pick an option that is not the answer: check every option text against the card's answer after checking.
+  await firstOpt.click();
+}
+await v110.getByRole('button', { name: 'Vérifier' }).click();
+const verdict = await v110.locator('.verdict h3').innerText();
+if (verdict.includes('Pas tout à fait')) {
+  await v110.locator('details.why[open]').waitFor({ timeout: 3000 }).catch(() => fail('a wrong answer opens « Pourquoi ? »'));
+} else {
+  await v110.locator('details.why:not([open])').waitFor({ timeout: 3000 }).catch(() => fail('a right answer keeps « Pourquoi ? » closed'));
+}
+await v110.waitForTimeout(800);
+await v110.screenshot({ path: `${OUT}/why-session.png`, fullPage: true });
+await v110.getByRole('button', { name: 'Quitter la séance' }).click();
+await v110.locator('.session').waitFor({ state: 'detached' });
+
+// Own cards without explanation: Claude explains one in session, then completes the theme from the library.
+await v110.goto(`${URL}#bibliotheque`);
+await v110.locator('#new-theme').fill('Explications');
+await v110.locator('form', { has: v110.locator('#new-theme') }).getByRole('button', { name: 'Créer' }).click();
+await v110.getByText('Thème « Explications » créé.').waitFor();
+for (const [front, back] of [['Capitale du Japon ?', 'Tokyo'], ['Capitale du Canada ?', 'Ottawa']]) {
+  await v110.goto(`${URL}#creer`);
+  await v110.getByRole('button', { name: 'Recto / verso' }).click();
+  await v110.getByLabel('Thème').selectOption({ label: 'Explications' });
+  await v110.getByLabel('Recto').fill(front);
+  await v110.getByLabel('Verso').fill(back);
+  await v110.getByRole('button', { name: 'Ajouter au thème' }).click();
+  await v110.getByText(/Ajouté à «.Explications.»/).waitFor();
+}
+await v110.goto(`${URL}#reviser`);
+await v110.getByRole('button', { name: 'Aucun', exact: true }).click();
+await v110.locator('label.pick', { hasText: 'Explications' }).locator('input').check();
+await v110.locator('label.mode', { has: v110.locator('input[value=new]') }).click();
+await v110.getByRole('button', { name: /Commencer \(2 cartes\)/ }).click();
+await v110.getByRole('button', { name: 'Afficher la réponse' }).click();
+await v110.getByRole('button', { name: 'Expliquer avec Claude' }).click();
+await v110.getByLabel('Explication proposée').waitFor();
+await v110.getByRole('button', { name: 'Enregistrer dans la carte' }).click();
+await v110.getByText('Explication enregistrée dans la carte.').waitFor();
+await v110.getByRole('button', { name: 'Quitter la séance' }).click();
+await v110.locator('.session').waitFor({ state: 'detached' });
+await v110.goto(`${URL}#bibliotheque`);
+const lot = v110.locator('section.panel', { has: v110.getByRole('heading', { name: 'Explications', exact: true }) });
+await lot.getByRole('button', { name: 'Compléter les explications (1)' }).click();
+await lot.getByRole('button', { name: /Enregistrer les explications cochées \(1\)/ }).click();
+await v110.getByText('1 explication enregistrée dans « Explications ».').waitFor();
+const saved110 = await v110.evaluate(() => new Promise((res) => { const r = indexedDB.open('ancrage'); r.onsuccess = () => { const q = r.result.transaction('notes').objectStore('notes').getAll(); q.onsuccess = () => res(q.result.filter((n) => n.fields.front?.startsWith('Capitale')).map((n) => n.explanation)); }; }));
+if (!saved110.every((e) => typeof e === 'string' && e.startsWith('Explication de Claude'))) fail(`both own cards should now have an explanation: ${JSON.stringify(saved110)}`);
+if (explainCalls !== 2) fail(`expected 2 explanation calls, got ${explainCalls}`);
+await v110.screenshot({ path: `${OUT}/why-library.png`, fullPage: true });
+await ctx110.close();
+
 const mobile = await browser.newPage({ viewport: { width: 390, height: 844 }, colorScheme: 'dark' });
 mobile.on('pageerror', (e) => errors.push(e.message));
 await mobile.goto(URL);

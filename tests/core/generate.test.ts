@@ -77,7 +77,7 @@ describe('toProposals', () => {
     const { proposals, rejected } = toProposals(raw, ALL);
     expect(rejected).toBe(0);
     expect(proposals.map((p) => p.fields.type)).toEqual(ALL);
-    expect(proposals[0]).toEqual({ fields: { type: 'basic', front: 'Q', back: 'R', reverse: false }, rationale: 'r1' });
+    expect(proposals[0]).toEqual({ fields: { type: 'basic', front: 'Q', back: 'R', reverse: false }, rationale: 'r1', explanation: '' });
     expect(proposals[4].fields).toEqual({ type: 'mcq', question: 'Dernière étape ?', answer: 'Will', distractors: ['Goal', 'Options'] });
   });
 

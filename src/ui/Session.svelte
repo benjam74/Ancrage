@@ -16,7 +16,8 @@
   import { motionOn, prefs, updatePrefs } from './prefs.svelte';
   import WeekStrip from './WeekStrip.svelte';
   import Avatar from './Avatar.svelte';
-  import type { CharacterId, Lang, Slot } from '../core/model';
+  import type { CharacterId, Lang, Note, Slot } from '../core/model';
+  import Why from './Why.svelte';
   import { spokenText } from '../core/speech';
   import { canSpeak, primeSpeech, speak, stopSpeaking } from './voice';
   import { onDestroy } from 'svelte';
@@ -45,7 +46,7 @@
   } = $props();
   const played = new Set<string>();
 
-  type Shown = { cardId: string; ex: Exercise; mode: Mode; themeName: string; isNew: boolean; retry: boolean; shownAt: number; lapses: number; lang: Lang };
+  type Shown = { cardId: string; ex: Exercise; mode: Mode; themeName: string; isNew: boolean; retry: boolean; shownAt: number; lapses: number; lang: Lang; note: Note; why: string | null };
   type Result = { correct: boolean; entry: ReviewEntry | null; state: CardState | null; corrected: boolean };
 
   let round = $state<Round>(untrack(() => startRound(queue)));
@@ -112,6 +113,8 @@
       shownAt: Date.now(),
       lapses: state.lapses,
       lang: ctx.lang,
+      note: ctx.note,
+      why: ctx.why,
     };
     if (prefs.readAloud) speak(spokenText(ex, false), ctx.lang);
   }
@@ -247,6 +250,7 @@
     if (e.key === 'Escape') return void exit();
     // A focused control handles its own Enter and Space; global shortcuts must not override it.
     if (e.target instanceof HTMLButtonElement || e.target instanceof HTMLTextAreaElement) return;
+    if (e.target instanceof HTMLElement && e.target.closest('summary, input, select, [contenteditable]')) return;
     if (shown?.ex.kind === 'reveal' && revealed && !result && ['1', '2', '3'].includes(e.key)) {
       const grade = Number(e.key) as 1 | 2 | 3;
       return void record(grade > 1, grade);
@@ -345,6 +349,9 @@
             <Order ex={shown.ex} bind:answer checked={!!result} />
           {:else}
             <Reveal ex={shown.ex} {revealed} bind:verdict lang={shown.lang} />
+          {/if}
+          {#if result || revealed}
+            <Why {services} note={shown.note} why={shown.why} open={!!result && !result.correct} />
           {/if}
         </div>
       {/key}

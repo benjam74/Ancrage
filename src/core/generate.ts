@@ -1,6 +1,7 @@
 import { FIELD_SPECS, uniqueEntries } from './draft';
 import type { NoteFields, NoteType } from './model';
 import { validateFields } from './validate';
+import { capExplanation } from './explain';
 
 export const MAX_SOURCE_CHARS = 30_000;
 export const MAX_COUNT = 15;
@@ -22,6 +23,8 @@ export interface GenerationRequest {
 
 export interface Proposal {
   fields: NoteFields;
+  /** Why the answer is right, from the source text. */
+  explanation: string;
   /** Why this card, in the model's words (which passage it comes from). */
   rationale: string;
 }
@@ -51,6 +54,7 @@ export function buildPrompt(r: GenerationRequest): { system: string; user: strin
     'Chaque carte teste une seule idée, formulée clairement, et doit pouvoir se réviser seule, sans le texte sous les yeux.',
     'Tu t’appuies uniquement sur le texte fourni : n’ajoute pas de connaissances qui n’y figurent pas, et n’invente ni chiffres ni citations.',
     'Pour chaque carte, remplis seulement les champs de son type et laisse les autres vides (chaîne vide, liste vide, false). Dans rationale, indique en une phrase le passage du texte dont la carte vient.',
+    'Dans explanation, écris en une ou deux phrases pourquoi la réponse est la bonne (le principe ou la règle du texte qui la justifie), pour aider à comprendre après une erreur.',
   ].join(' ');
   const user = [
     r.domainName ? `Domaine : ${r.domainName}` : '',
@@ -87,6 +91,7 @@ const NOTE_PROPERTIES = {
   model: str,
   keyPoints: strList,
   rationale: str,
+  explanation: str,
 };
 
 /** Flat schema: every field is present, unused ones empty. Validation happens on our side anyway. */
@@ -127,7 +132,7 @@ export function toProposals(raw: unknown, allowed: NoteType[]): { proposals: Pro
       rejected++;
       continue;
     }
-    proposals.push({ fields, rationale: asString(o.rationale) });
+    proposals.push({ fields, rationale: asString(o.rationale), explanation: capExplanation(asString(o.explanation)) });
   }
   return { proposals, rejected };
 }

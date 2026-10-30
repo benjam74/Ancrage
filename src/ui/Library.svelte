@@ -6,6 +6,7 @@
   import { HARD_LAPSES } from '../core/hard';
   import { LANGS, type Lang, type NewOrder } from '../core/model';
   import { newOrderOf } from '../core/domains';
+  import ExplainTheme from './ExplainTheme.svelte';
   import { TYPE_LABEL } from './format';
   import { groupByDomain, isDomain } from '../core/domains';
   import { EXAMPLES } from '../app/current';
@@ -282,6 +283,7 @@
           </div>
         {/if}
       </div>
+      {#if notes.length}<ExplainTheme {services} {theme} notes={notes.map((n) => n.note)} ondone={(n) => done(n ? `${n} explication${n > 1 ? 's' : ''} enregistrée${n > 1 ? 's' : ''} dans « ${theme.name} ».` : 'Aucune explication enregistrée.')} />{/if}
       {#if notes.length === 0}
         <p class="muted">Aucune note dans ce thème.</p>
       {:else}
