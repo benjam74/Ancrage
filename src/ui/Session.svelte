@@ -54,6 +54,9 @@
   let shown = $state<Shown | null>(null);
   let answer = $state<Answer | null>(null);
   let revealed = $state(false);
+  /** « Sûr de moi », said before checking: a confident error is the one to fix first. */
+  let sure = $state(false);
+  let sureAtCheck = $state(false);
   /** Claude's verdict on a written scenario answer: highlights the matching grade. */
   let verdict = $state<Verdict | null>(null);
   const SUGGESTED: Record<Verdict, 1 | 2 | 3> = { a_revoir: 1, partiel: 2, reussi: 3 };
@@ -101,6 +104,7 @@
     answer = null;
     revealed = false;
     verdict = null;
+    sure = false;
     result = null;
     played.add(cardId);
     shown = {
@@ -141,13 +145,14 @@
 
   async function recordNow(correct: boolean, grade?: 1 | 2 | 3) {
     if (!shown || result) return;
+    sureAtCheck = !grade && sure;
     if (shown.retry) {
       result = { correct, entry: null, state: null, corrected: false };
       react(correct);
       return;
     }
     const durationMs = Date.now() - shown.shownAt;
-    const outcome = grade ? ({ kind: 'self', grade } as const) : ({ kind: 'auto', correct, durationMs, hintUsed: false } as const);
+    const outcome = grade ? ({ kind: 'self', grade } as const) : ({ kind: 'auto', correct, durationMs, hintUsed: false, confident: sure } as const);
     const { entry, state } = await services.engine.answer(shown.cardId, shown.mode, outcome, Date.now());
     result = { correct, entry, state, corrected: false };
     react(correct);
@@ -367,6 +372,7 @@
       {:else if result && shown}
         <div class="verdict" aria-live="polite">
           <h3>{result.correct ? 'Bien joué' : 'Pas tout à fait'}</h3>
+          {#if sureAtCheck && !result.correct}<p class="sure-note">Tu en étais sûr : c’est l’erreur à corriger en priorité. Lis le « Pourquoi ? ».</p>{/if}
           {#if !result.correct && shown.ex.kind !== 'reveal'}<p>Réponse attendue : {expectedText(shown.ex)}</p>{/if}
           {#if result.entry && result.state}
             <p class="engine">{MODE_LABEL[shown.mode]} · noté {RATING_LABEL[result.entry.rating]} · revient {inHowLong(result.state.due.getTime(), Date.now())}</p>
@@ -391,7 +397,8 @@
           <span></span><button class="btn ok" onclick={() => (revealed = true)}>Afficher la réponse</button>
         {/if}
       {:else}
-        <span></span><button class="btn ok" disabled={!answer} onclick={check}>Vérifier</button>
+        <button class="btn small ghost sure-btn" aria-pressed={sure} onclick={() => (sure = !sure)} onkeydown={(e) => { if (e.key === 'Enter' && answer) { e.preventDefault(); void check(); } }} title="Dis-le avant de vérifier : une erreur commise en étant sûr se retient mieux une fois corrigée.">{sure ? '✓ Sûr de moi' : 'Sûr de moi ?'}</button>
+        <button class="btn ok" disabled={!answer} onclick={check}>Vérifier</button>
       {/if}
     </div>
   </div>

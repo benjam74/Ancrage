@@ -1,5 +1,5 @@
 import { FIELD_SPECS, uniqueEntries } from './draft';
-import type { NoteFields, NoteType } from './model';
+import type { Note, NoteFields, NoteType } from './model';
 import { validateFields } from './validate';
 import { capExplanation } from './explain';
 
@@ -152,3 +152,19 @@ export function describeNote(f: NoteFields): string {
 
 export const REWORD_INSTRUCTION =
   'Cette carte est souvent oubliée. Propose 1 à 3 cartes qui testent la même connaissance plus facilement : scinde-la si elle contient plusieurs idées, rends la question plus précise, ajoute un exemple concret si cela aide. Ne change pas le contenu à retenir.';
+
+export const CONTRAST_INSTRUCTION =
+  'Le texte source est la liste des cartes qui existent déjà. Les catégories d’un classement peuvent être des notions proches tirées de cartes différentes, et une mise en situation peut venir de n’importe quelle notion du texte. Repère les notions, outils ou techniques proches qu’on risque de confondre, et crée des cartes qui obligent à les distinguer : des situations où il faut choisir le bon outil, des énoncés à classer entre ces notions proches (elles servent de catégories), des QCM dont les mauvaises réponses sont ces notions proches. Ne recopie pas une carte existante. Dans explanation, dis ce qui distingue la bonne réponse de la notion voisine, en t’appuyant seulement sur ce que disent les cartes.';
+
+/** Existing cards as the source of contrast cards, within the source limit; `used`: how many fit. */
+export function buildContrastSource(notes: Note[]): { text: string; used: number } {
+  let out = '';
+  let used = 0;
+  for (const n of notes) {
+    const block = `${describeNote(n.fields)}\n\n`;
+    if (out.length + block.length > MAX_SOURCE_CHARS) break;
+    out += block;
+    used++;
+  }
+  return { text: out.trim(), used };
+}

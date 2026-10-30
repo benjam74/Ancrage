@@ -8,7 +8,8 @@ export const DURATION_MAX_MS = 600_000;
 const BASIC_MIN_DISTRACTORS = 3;
 
 export type Outcome =
-  | { kind: 'auto'; correct: boolean; durationMs: number; hintUsed: boolean }
+  /** `confident`: the learner said they were sure before checking (hypercorrection). */
+  | { kind: 'auto'; correct: boolean; durationMs: number; hintUsed: boolean; confident?: boolean }
   | { kind: 'self'; grade: 1 | 2 | 3 };
 
 function isYoung(card: { state: State; stability: number }): boolean {

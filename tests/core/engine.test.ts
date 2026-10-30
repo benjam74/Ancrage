@@ -99,3 +99,21 @@ describe('engine', () => {
     await expect(engine.answer('missing', 'recognition', ok(), T0)).rejects.toThrow('missing');
   });
 });
+
+describe('sure of the answer', () => {
+  test('an answer marked sure is recorded as such, and keeps it when corrected', async () => {
+    const { createDexieRepo } = await import('../../src/storage/dexie-repo');
+    const { createEngine } = await import('../../src/core/engine');
+    const { newId } = await import('../../src/core/ids');
+    const repo = createDexieRepo(`sure-${newId()}`);
+    await repo.putTheme({ id: 't', name: 'T', order: 0 });
+    const [card] = await repo.putNote({ id: 'n', themeId: 't', fields: { type: 'cloze', text: '{{a}}' }, tags: [], createdAt: 0, updatedAt: 0 });
+    const engine = createEngine(repo, 'd');
+    const { entry } = await engine.answer(card.id, 'production', { kind: 'auto', correct: false, durationMs: 2000, hintUsed: false, confident: true }, 1000);
+    expect(entry.confident).toBe(true);
+    await engine.correctLast(entry.id, true, 2000);
+    expect((await repo.listReviews(card.id))[0].confident).toBe(true);
+    const plain = await engine.answer(card.id, 'production', { kind: 'auto', correct: true, durationMs: 2000, hintUsed: false }, 3000);
+    expect(plain.entry).not.toHaveProperty('confident');
+  });
+});

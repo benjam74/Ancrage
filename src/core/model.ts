@@ -90,6 +90,8 @@ export interface ReviewEntry {
   durationMs: number;
   hintUsed: boolean;
   deviceId: string;
+  /** The learner said they were sure before checking. */
+  confident?: true;
 }
 
 export interface Settings {

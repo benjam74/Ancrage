@@ -42,6 +42,8 @@ export interface Effectiveness {
   byDomain: Rate[];
   /** Median time per answer over 90 days. */
   medianMs: number | null;
+  /** Over 30 days: answers the learner was sure of, and how many of them were wrong. */
+  confident: { sure: number; wrong: number };
 }
 
 function rates(entries: ReviewEntry[], keyOf: (e: ReviewEntry) => string | undefined): Rate[] {
@@ -76,6 +78,7 @@ export function effectiveness(
       activeDays: new Set(recent.map((e) => studyDayStart(e.ts))).size,
     };
   });
+  const sure = since(30).filter((e) => e.confident);
   const last90 = since(90);
   const due90 = last90.filter((e) => kinds.get(e.id) === 'due');
   // Self-graded answers are recorded without a duration.
@@ -86,5 +89,6 @@ export function effectiveness(
     byType: rates(due90, (e) => typeOf(e.cardId)),
     byDomain: rates(due90, (e) => domainOf(e.cardId)),
     medianMs: durations.length ? (durations.length % 2 ? durations[mid] : (durations[mid - 1] + durations[mid]) / 2) : null,
+    confident: { sure: sure.length, wrong: sure.filter((e) => !e.correct).length },
   };
 }
