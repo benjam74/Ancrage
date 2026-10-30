@@ -50,3 +50,33 @@ export function starterNotes(now: number): Note[] {
     updatedAt: 0,
   }));
 }
+
+/** Why each example answer is right, in the order of the examples (ex-01, ex-02…). */
+const WHY = [
+  'Le coach part du principe que le client va bien et cherche à avancer ; si une souffrance psychique domine, il oriente vers un thérapeute.',
+  'On pose d’abord le cadre (le contrat), on comprend la situation avant de chercher des pistes, puis on transforme une piste en action et on vérifie que le client s’y engage.',
+  'Chacun réagit à sa représentation du monde, pas au monde lui-même : le coach explore la « carte » du client au lieu de la corriger.',
+  'Une solution trouvée par le client est mieux comprise et mieux appliquée ; le coach apporte des questions, pas des réponses.',
+  'Les changements de posture, de voix ou de respiration signalent un changement d’état ; les repérer permet d’ajuster ses questions au bon moment.',
+  'Sans contrat clair, on ne sait ni ce qu’on vise ni quand s’arrêter ; il protège aussi la relation en fixant les rôles.',
+  'Le modèle va de l’objectif (Goal) à l’engagement (Will) en passant par la réalité actuelle et les options possibles.',
+  'Will, c’est la volonté d’agir : mesurer l’engagement sur 10 montre si le plan sera vraiment suivi, et ce qui manque pour monter d’un cran.',
+  '« Que ça aille mieux » ne se mesure pas : tant que l’objectif n’a pas de critère observable, impossible de savoir s’il est atteint.',
+  'Des options trouvées trop tôt répondent au problème tel que le coach l’imagine ; explorer la réalité révèle les vraies contraintes et ressources.',
+  'En parlant, on simplifie l’expérience de trois façons : on généralise un cas, on déforme le sens, on omet des informations. Le méta-modèle sert à les repérer.',
+  '« Jamais » transforme quelques situations en règle absolue : c’est une généralisation (quantificateur universel).',
+  'La personne attribue une intention à l’autre sans preuve (lecture de pensée) : c’est une distorsion du sens.',
+  'Contrarié par quoi, par qui, comment ? L’information manque : c’est une omission, qu’on comble avec « par quoi précisément ? ».',
+  '« Personne » et « jamais » sont des quantificateurs universels : un seul contre-exemple suffit à ébranler la règle.',
+  '« Je dois » cache une conséquence redoutée : la faire nommer permet de vérifier si elle est réelle et de retrouver du choix.',
+  '« Je ne peux pas » présente une limite comme une impossibilité ; demander ce qui empêche fait apparaître l’obstacle concret, souvent modifiable.',
+  'Dilts va de l’environnement (où, quand) jusqu’à la mission (pour quoi de plus grand), chaque niveau organisant ceux du dessous.',
+  'Les croyances et valeurs disent ce qui compte et ce qu’on tient pour vrai : c’est là que se trouvent les « parce que ».',
+  '« Je suis » parle de qui l’on est, pas de ce qu’on sait faire : c’est l’identité. Le coach ramène souvent à « qu’est-ce que tu ne sais pas encore faire ? ».',
+  'Lever les contraintes imaginées libère des idées que le client s’interdisait ; on vérifie ensuite ce qui est réaliste.',
+  'Anticiper l’obstacle et prévoir sa réponse (« si…, alors… ») augmente nettement la probabilité de passer à l’action.',
+  '« Tout » est une généralisation : faire lister ce qui a été essayé montre qu’il reste des pistes, et chaque essai devient une source d’apprentissage.',
+];
+
+/** Explanations of the starter notes, by note id. */
+export const STARTER_WHY: Record<string, string> = Object.fromEntries(WHY.map((why, i) => [`ex-${String(i + 1).padStart(2, '0')}`, why]));

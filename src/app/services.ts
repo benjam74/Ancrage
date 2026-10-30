@@ -12,6 +12,9 @@ import { capNewXp, classifyEntries, comebackRounds, goalDays, makeRestDayCheck, 
 import { dailyCounts, forecast, mastery, nextLevel, retention, stateBreakdown, type Level } from '../core/stats';
 import type { CardState } from '../core/scheduler';
 import { isHard } from '../core/hard';
+import { MAX_EXPLANATION, capExplanation } from '../core/explain';
+import { STARTER_WHY } from '../data/starter';
+import { COLLEGE5_WHY } from '../data/college5';
 import { effectiveness, memoryOf, reviewLoad, type Effectiveness } from '../core/insights';
 import { SITUATION_TYPES, buildCustomQueue, buildDailyQueue, countNewIntroduced, nextDue, studyDayStart, type CustomChoice, type QueueCandidate } from '../core/queue';
 import { makeScheduler } from '../core/scheduler';
@@ -35,6 +38,7 @@ export interface NoteInput {
   fields: NoteFields;
   tags: string[];
   source?: string;
+  explanation?: string;
 }
 
 /** `today`: how many of the note's cards are in today's queue (the others wait for later days). */
@@ -140,7 +144,9 @@ export interface Services {
   /** A session the learner picks (themes, mode, count); ignores the daily new-card limit. */
   custom(now: number, choice: CustomChoice): Promise<string[]>;
   /** `lang`: the theme's reading language, else its domain's, else French. */
-  context(cardId: string): Promise<{ note: Note; card: Card; pool: Note[]; theme: Theme; lang: Lang }>;
+  context(cardId: string): Promise<{ note: Note; card: Card; pool: Note[]; theme: Theme; lang: Lang; why: string | null }>;
+  /** Sets or clears (empty text) a note's explanation. */
+  setExplanation(noteId: string, text: string, now: number): Promise<void>;
   /** How a domain introduces new cards; last writer wins on sync, like a rename. */
   setNewOrder(domainId: string, order: NewOrder): Promise<void>;
   /** Reading language of a theme or domain; null goes back to inheriting. */
@@ -177,6 +183,11 @@ export interface Services {
 
 /** Total size of the images of a profile, as data URL characters (about 10 MB). */
 export const MAX_IMAGES_CHARS = 14_000_000;
+
+/** A note's explanation; example cards have a built-in one until they are edited. */
+export function whyOf(note: Note): string | null {
+  return note.explanation ?? (note.updatedAt === 0 ? (STARTER_WHY[note.id] ?? COLLEGE5_WHY[note.id] ?? null) : null);
+}
 
 const HEATMAP_DAYS = 20 * 7;
 const FORECAST_DAYS = 7;
@@ -362,7 +373,15 @@ export function createServices(repo: Repo, deviceId: string): Services {
       const theme = themes.find((t) => t.id === note.themeId) ?? { id: note.themeId, name: 'Sans thème', order: 0 };
       const pool = (await repo.listNotes(note.themeId)).filter((n) => n.id !== note.id);
       const domain = themes.find((t) => t.id === domainOf(theme, new Set(themes.filter(isDomain).map((d) => d.id))));
-      return { note, card, pool, theme, lang: theme.lang ?? domain?.lang ?? 'fr-FR' };
+      return { note, card, pool, theme, lang: theme.lang ?? domain?.lang ?? 'fr-FR', why: whyOf(note) };
+    },
+
+    async setExplanation(noteId, text, now) {
+      const note = await repo.getNote(noteId);
+      const clean = capExplanation(text);
+      if (!note || (note.explanation ?? '') === clean) return;
+      const { explanation: _, ...rest } = note;
+      await repo.putNote({ ...rest, ...(clean ? { explanation: clean } : {}), updatedAt: Math.max(now, note.updatedAt + 1) });
     },
 
     async setNewOrder(domainId, order) {
@@ -380,6 +399,8 @@ export function createServices(repo: Repo, deviceId: string): Services {
 
     async saveNote(input, now) {
       const errors = validateFields(input.fields);
+      const explanation = input.explanation?.trim().replace(/\s+/g, ' ') ?? '';
+      if (explanation.length > MAX_EXPLANATION) errors.explanation = `L’explication dépasse ${MAX_EXPLANATION} caractères (${explanation.length}). Garde une ou deux phrases.`;
       if (input.fields.type === 'image' && !errors.image) {
         // Images travel in every sync and backup: their total stays reasonable on a phone.
         const others = (await repo.listNotes()).reduce((n, x) => n + (x.id !== input.id && x.fields.type === 'image' ? x.fields.image.length : 0), 0);
@@ -395,6 +416,8 @@ export function createServices(repo: Repo, deviceId: string): Services {
         tags: [...new Set(input.tags.map((t) => t.trim()).filter(Boolean))],
         ...(input.source?.trim() ? { source: input.source.trim() } : {}),
         ...(existing?.suspended ? { suspended: true } : {}),
+        // An explanation is kept unless the editor sends one (empty clears it).
+        ...((input.explanation !== undefined ? explanation : existing?.explanation) ? { explanation: input.explanation !== undefined ? explanation : existing!.explanation } : {}),
         createdAt: existing?.createdAt ?? now,
         // A device whose clock is behind must still produce the newest version.
         updatedAt: Math.max(now, (existing?.updatedAt ?? 0) + 1),
