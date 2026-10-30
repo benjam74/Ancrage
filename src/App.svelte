@@ -1,12 +1,12 @@
 <script lang="ts">
-  import { boot, wasSeeded, type Progress as ProgressData, type Services, type ShopState, type Today } from './app/services';
+  import { boot, seedEmptyAccount, wasSeeded, type Progress as ProgressData, type Services, type ShopState, type Today } from './app/services';
   import Shop from './ui/Shop.svelte';
   import { createCloudSync, type CloudSync } from './app/cloud';
   import { currentProfile, mustChoose, profileStore } from './app/current';
   import WhoReviews from './ui/WhoReviews.svelte';
   import Welcome from './ui/Welcome.svelte';
   import NewPassword from './ui/NewPassword.svelte';
-  import { isAuthFragment, recoveryToken } from './sync/supabase';
+  import { isAuthFragment, linkNotice, recoveryToken } from './sync/supabase';
   import { BUILTIN_SYNC } from './app/builtin';
   import { seedFor, settled, welcomeNeeded } from './app/account';
   import type { Note } from './core/model';
@@ -27,6 +27,9 @@
   // Links from the project's e-mails come back with tokens in the address: read once, then removed.
   const linkToken = BUILTIN_SYNC ? recoveryToken(location.hash) : null;
   let resetToken = $state(linkToken);
+  const notice = linkNotice(location.hash);
+  // Shown in the app when the welcome page (which shows it otherwise) does not open.
+  let linkMessage = $state(notice);
   if (isAuthFragment(location.hash)) history.replaceState(null, '', location.pathname + location.search);
 
   const VIEWS = ['accueil', 'creer', 'progres', 'bibliotheque', 'boutique', 'reglages', 'reviser'] as const;
@@ -114,8 +117,9 @@
   async function syncInBackground() {
     if (!cloud || inSession) return;
     lastSync = Date.now();
-    const res = await cloud.sync();
-    settled(profileStore(), res);
+    let res = await cloud.sync();
+    // First sync of an account opened on this device: an account with no cards yet gets its examples.
+    if (settled(profileStore(), res) && services && (await seedEmptyAccount(services.repo, currentProfile.starter))) res = await cloud.sync();
     if (res.state === 'ok' && !inSession) await refresh();
   }
 
@@ -150,13 +154,19 @@
 {:else if picking}
   <WhoReviews current={currentProfile.id} onkeep={() => { picking = false; void start(); }} />
 {:else if welcome}
-  <Welcome ondone={() => void start()} />
+  <Welcome {notice} ondone={() => { linkMessage = null; void start(); }} />
 {:else if error}
   <main class="page"><h1>Ancrage</h1><p>Impossible d’ouvrir la base locale : {error}</p></main>
 {:else if services && today && progress && shop}
   {#if inSession}
     <Session {services} queue={spec?.queue ?? today.queue} more={spec?.more ?? (async () => [])} kind={spec?.kind ?? 'daily'} look={{ character: shop.avatar.character, outfit: shop.outfit }} onexit={async () => { if (reloadAfterSession) return location.reload(); await refresh(); inSession = false; spec = null; void syncInBackground(); }} />
   {:else}
+    {#if linkMessage}
+      <div class="update" role="status">
+        <span>{linkMessage}</span>
+        <button class="btn small ghost" onclick={() => (linkMessage = null)}>OK</button>
+      </div>
+    {/if}
     {#if updateReady}
       <div class="update" role="status">
         <span>Une nouvelle version d’Ancrage est disponible.</span>

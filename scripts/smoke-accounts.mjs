@@ -135,7 +135,7 @@ await welcome(c).click();
 await c.locator('.hero').waitFor();
 if (!(await notes(c)).some((id) => id.startsWith('ex-'))) fail('without an account, the usual examples are there');
 await c.goto(`${URL}#reglages`);
-await c.getByRole('button', { name: 'Ajouter avec un compte' }).click();
+await c.getByRole('button', { name: 'Ajouter le profil d’un compte existant' }).click();
 await c.getByLabel('E-mail du compte').fill('lea@exemple.fr');
 await c.getByLabel('Mot de passe du compte').fill('secret12');
 await c.getByRole('button', { name: 'Ouvrir ce compte' }).click();
@@ -147,7 +147,7 @@ let notesC = [];
 for (let i = 0; i < 30 && notesC.length < notesA.length; i++) { await c.waitForTimeout(200); notesC = await notes(c, `ancrage-${leaC.id}`); }
 if (notesC.length !== notesA.length) fail(`the added profile gets the account's ${notesA.length} cards, has ${notesC.length}`);
 await c.goto(`${URL}#reglages`);
-await c.getByRole('button', { name: 'Ajouter avec un compte' }).click();
+await c.getByRole('button', { name: 'Ajouter le profil d’un compte existant' }).click();
 await c.getByLabel('E-mail du compte').fill('lea@exemple.fr');
 await c.getByLabel('Mot de passe du compte').fill('secret12');
 await c.getByRole('button', { name: 'Ouvrir ce compte' }).click();
@@ -169,7 +169,7 @@ await d.goto(`${URL}#access_token=${token}&expires_in=3600&refresh_token=x&token
 await d.getByRole('heading', { name: 'Nouveau mot de passe' }).waitFor();
 if (d.url().includes('access_token')) fail('the token is removed from the address');
 await d.getByLabel('Nouveau mot de passe').fill('nouveau12');
-await d.getByLabel('Encore une fois').fill('nouveau12');
+await d.getByLabel('Confirme le mot de passe').fill('nouveau12');
 await d.getByRole('button', { name: 'Enregistrer' }).click();
 await d.getByText('Mot de passe changé.', { exact: false }).waitFor();
 await d.getByRole('button', { name: 'Continuer' }).click();
@@ -178,6 +178,22 @@ await d.getByLabel('E-mail').fill('lea@exemple.fr');
 await d.getByLabel('Mot de passe').fill('nouveau12');
 await d.getByRole('button', { name: 'Se connecter' }).click();
 await d.locator('.hero').waitFor({ timeout: 8000 }).catch(() => fail('the new password works'));
+
+// An expired link from an e-mail says so on the welcome page.
+const e = await device('E');
+await e.goto(`${URL}#error=access_denied&error_code=otp_expired&error_description=Email+link+is+invalid+or+has+expired`);
+await e.getByText(/Ce lien a expiré/).waitFor({ timeout: 5000 }).catch(() => fail('an expired link is explained'));
+// An account confirmed by e-mail, never used: its first device gets the examples it was created for.
+cloud.users.set('tom@exemple.fr', { password: 'secret12', meta: { name: 'Tom', audience: 'élève de 5e', starter: 'college5', color: 'sun' } });
+await e.getByLabel('E-mail').fill('tom@exemple.fr');
+await e.getByLabel('Mot de passe').fill('secret12');
+await e.getByRole('button', { name: 'Se connecter' }).click();
+await e.locator('.hero').waitFor({ timeout: 8000 });
+let notesE = [];
+for (let i = 0; i < 30 && !notesE.length; i++) { await e.waitForTimeout(200); notesE = await notes(e); }
+if (!notesE.length || !notesE.every((id) => id.startsWith('c5-'))) fail(`an empty account gets its collège 5e examples, has ${notesE.length}`);
+for (let i = 0; i < 30 && !cloud.rows.get('tom@exemple.fr')?.data; i++) await e.waitForTimeout(200);
+if (!cloud.rows.get('tom@exemple.fr')) fail('the examples go to the account');
 
 await browser.close();
 server.kill();

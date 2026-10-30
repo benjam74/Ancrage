@@ -51,18 +51,29 @@ export function applyMeta(store: KeyValue, profileId: string, meta: AccountMeta)
   return kept.ok ? kept.profile : null;
 }
 
-/** A new profile on this device for an existing account (« Qui révise ? » → « Se connecter avec un compte »). */
-export function profileForAccount(store: KeyValue, session: AuthSession): { ok: true; profile: Profile } | { ok: false; error: string } {
-  const meta = metaFrom(session.meta);
-  const already = loadRegistry(store).profiles.find((p) => {
+/**
+ * Two profiles on one account would share and reschedule each other's cards: the account opens in one profile only.
+ * Returns the message to show, or null when the account is not open in another profile of this device.
+ */
+export function openElsewhere(store: KeyValue, email: string, profileId: string | null): string | null {
+  const wanted = email.trim().toLowerCase();
+  const other = loadRegistry(store).profiles.find((p) => {
+    if (p.id === profileId) return false;
     const s = scopedStorage(store, p.id).get(SESSION_KEY);
     try {
-      return s ? (JSON.parse(s) as AuthSession).email === session.email : false;
+      return s ? (JSON.parse(s) as AuthSession).email.toLowerCase() === wanted : false;
     } catch {
       return false;
     }
   });
-  if (already) return { ok: false, error: `Ce compte est déjà ouvert ici, dans le profil « ${already.name} ».` };
+  return other ? `Ce compte est déjà ouvert ici, dans le profil « ${other.name} ».` : null;
+}
+
+/** A new profile on this device for an existing account (« Qui révise ? » → « Se connecter avec un compte »). */
+export function profileForAccount(store: KeyValue, session: AuthSession): { ok: true; profile: Profile } | { ok: false; error: string } {
+  const meta = metaFrom(session.meta);
+  const already = openElsewhere(store, session.email, null);
+  if (already) return { ok: false, error: already };
   const base = meta?.name || session.email.split('@')[0].slice(0, 20) || 'Profil';
   const names = new Set(loadRegistry(store).profiles.map((p) => p.name.toLowerCase()));
   let name = base;
@@ -83,14 +94,21 @@ export function seedFor(scoped: KeyValue, profile: Profile): Starter {
   return scoped.get(PULL_FIRST) ? 'none' : profile.starter;
 }
 
-/** After a sync: once the account's data has arrived, the device behaves as usual. */
-export function settled(scoped: KeyValue, status: Pick<SyncStatus, 'state'>): void {
-  if (status.state === 'ok') scoped.remove(PULL_FIRST);
+/**
+ * After a sync: once the account's data has arrived, the device behaves as usual.
+ * True for the first sync of a signed-in account (its cards are here now, or it has none: then examples may go in).
+ */
+export function settled(scoped: KeyValue, status: Pick<SyncStatus, 'state'>): boolean {
+  if (status.state !== 'ok' || !scoped.get(PULL_FIRST)) return false;
+  scoped.remove(PULL_FIRST);
+  return true;
 }
 
 type Fetch = typeof fetch;
 
 export async function signInAccount(store: KeyValue, profileId: string, config: SyncConfig, email: string, password: string, fetchFn: Fetch = fetch, now: () => number = Date.now): Promise<{ ok: true } | { ok: false; error: string }> {
+  const already = openElsewhere(store, email, profileId);
+  if (already) return { ok: false, error: already };
   const res = await signIn(config, email.trim(), password, fetchFn, now);
   if (!res.ok) return { ok: false, error: res.error };
   const meta = metaFrom(res.session.meta);

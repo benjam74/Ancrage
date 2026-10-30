@@ -210,12 +210,23 @@ export async function seedIfEmpty(repo: Repo, now: number = Date.now(), starter:
     await repo.setFlag(SEEDED);
     return false;
   }
+  await putStarter(repo, now, starter);
+  await repo.setFlag(SEEDED);
+  return true;
+}
+
+/** An account signed in on a new device turned out to have no cards: it gets the examples it was created for. */
+export async function seedEmptyAccount(repo: Repo, starter: Starter, now: number = Date.now()): Promise<boolean> {
+  if (starter === 'none' || (await repo.listNotes()).length > 0 || (await repo.listThemes()).length > 0) return false;
+  await putStarter(repo, now, starter);
+  return true;
+}
+
+async function putStarter(repo: Repo, now: number, starter: Starter): Promise<void> {
   // Starter ids are fixed, so an interrupted seed is completed on the next launch without duplicates.
   const [themes, notes] = starter === 'college5' ? [COLLEGE5_THEMES, college5Notes(now)] : [STARTER_THEMES, starterNotes(now)];
   for (const theme of themes) await repo.putTheme(theme);
   for (const note of notes) await repo.putNote(note);
-  await repo.setFlag(SEEDED);
-  return true;
 }
 
 /** Gives themes created before domains a default domain; runs at every start (cheap, idempotent). */

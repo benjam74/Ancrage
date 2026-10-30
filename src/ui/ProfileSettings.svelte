@@ -210,7 +210,7 @@
   {:else}
     <div class="actions">
       <button class="btn small" onclick={() => { creating = true; created = null; message = ''; name = audience = pin = ''; color = 'coral'; starter = 'college5'; error = ''; }}>Ajouter un profil</button>
-      {#if BUILTIN_SYNC}<button class="btn small ghost" onclick={() => (withAccount = true)}>Ajouter avec un compte</button>{/if}
+      {#if BUILTIN_SYNC}<button class="btn small ghost" onclick={() => (withAccount = true)}>Ajouter le profil d’un compte existant</button>{/if}
       {#if profiles.length > 1}<button class="btn small ghost" onclick={() => { forgetChoice(); location.hash = 'accueil'; location.reload(); }}>Changer de profil</button>{/if}
     </div>
   {/if}

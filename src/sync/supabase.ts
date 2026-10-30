@@ -34,7 +34,7 @@ const LIST_PAGE = 1000;
 /** Bytes of JSON per write. */
 const PUSH_BYTES = 1_500_000;
 const REFRESH_MARGIN_MS = 60_000;
-export const NETWORK_ERROR = 'Impossible de joindre le serveur. Vérifie ta connexion et l’adresse du projet.';
+export const NETWORK_ERROR = 'Impossible de joindre le serveur. Vérifie ta connexion, puis réessaie.';
 
 const base = (config: SyncConfig) => config.url.replace(/\/+$/, '');
 
@@ -72,7 +72,7 @@ function authError(body: any): string {
   if (text.includes('already registered')) return 'Un compte existe déjà avec cette adresse : connecte-toi.';
   if (text.includes('password')) return 'Mot de passe refusé : utilise au moins 6 caractères.';
   if (text.includes('api key')) return 'Clé publique du projet invalide.';
-  return 'Le serveur a refusé la demande. Vérifie l’adresse et la clé du projet.';
+  return 'Le serveur a refusé la demande. Réessaie dans un moment.';
 }
 
 async function auth(config: SyncConfig, path: string, payload: object, fetchFn: Fetch, now: Clock): Promise<AuthResult> {
@@ -90,7 +90,7 @@ async function auth(config: SyncConfig, path: string, payload: object, fetchFn: 
     if (status >= 500) return { ok: false, error: NETWORK_ERROR, network: true };
     return { ok: false, error: authError(body) };
   } catch (e) {
-    return { ok: false, error: (e as Error).message, network: true };
+    return { ok: false, error: NETWORK_ERROR, network: true };
   }
 }
 
@@ -112,7 +112,7 @@ export async function recoverPassword(config: SyncConfig, email: string, fetchFn
     if (status === 429) return { ok: false, error: 'Trop de demandes : réessaie dans une minute.' };
     return { ok: false, error: 'Le serveur a refusé la demande. Vérifie l’adresse e-mail.' };
   } catch (e) {
-    return { ok: false, error: (e as Error).message };
+    return { ok: false, error: NETWORK_ERROR };
   }
 }
 
@@ -124,6 +124,14 @@ export function recoveryToken(hash: string): string | null {
 
 /** Address fragments left by the project's links (confirmation, new password), not app pages. */
 export const isAuthFragment = (hash: string) => /(^|[#&])(access_token|error_description)=/.test(hash);
+
+/** What to tell someone arriving from a link of the project's e-mails (expired link, confirmed address). */
+export function linkNotice(hash: string): string | null {
+  const params = new URLSearchParams(hash.replace(/^#/, ''));
+  if (params.get('error_description') || params.get('error')) return 'Ce lien a expiré ou a déjà servi. Redemande-le depuis « Mot de passe oublié ? », ou connecte-toi.';
+  if (params.get('access_token') && params.get('type') === 'signup') return 'Adresse e-mail confirmée : connecte-toi.';
+  return null;
+}
 
 export async function setPassword(config: SyncConfig, accessToken: string, password: string, fetchFn: Fetch = fetch): Promise<{ ok: true } | { ok: false; error: string }> {
   try {
@@ -137,7 +145,7 @@ export async function setPassword(config: SyncConfig, accessToken: string, passw
     if (status === 422) return { ok: false, error: String(body?.msg ?? '').toLowerCase().includes('different') ? 'Choisis un mot de passe différent de l’ancien.' : 'Mot de passe refusé : utilise au moins 6 caractères.' };
     return { ok: false, error: 'Le serveur a refusé la demande. Réessaie plus tard.' };
   } catch (e) {
-    return { ok: false, error: (e as Error).message };
+    return { ok: false, error: NETWORK_ERROR };
   }
 }
 

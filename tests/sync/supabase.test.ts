@@ -38,7 +38,7 @@ describe('Supabase auth', () => {
   test('network down gives a French message', async () => {
     const srv = fakeSupabase();
     srv.setOffline(true);
-    expect(await signIn(config, 'b@ex.fr', 'x', srv.fetchFn, srv.now)).toMatchObject({ ok: false, error: 'Impossible de joindre le serveur. Vérifie ta connexion et l’adresse du projet.' });
+    expect(await signIn(config, 'b@ex.fr', 'x', srv.fetchFn, srv.now)).toMatchObject({ ok: false, error: 'Impossible de joindre le serveur. Vérifie ta connexion, puis réessaie.' });
   });
 });
 

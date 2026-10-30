@@ -36,7 +36,7 @@
 </script>
 
 <main class="who">
-  <h1>{asking ? asking.name : account ? 'Se connecter' : 'Qui révise ?'}</h1>
+  <h1>{asking ? asking.name : account ? 'Ouvrir un compte' : 'Qui révise ?'}</h1>
   {#if asking}
     <form class="actions" style="justify-content:center" onsubmit={(e) => { e.preventDefault(); open(asking!); }}>
       <label for="pin" style="flex:1 1 100%">Entre ton code</label>
@@ -59,6 +59,6 @@
         </button>
       {/each}
     </div>
-    {#if BUILTIN_SYNC}<button class="btn ghost small" onclick={() => (account = true)}>Se connecter avec un autre compte</button>{/if}
+    {#if BUILTIN_SYNC}<button class="btn ghost small" onclick={() => (account = true)}>Ouvrir un autre compte</button>{/if}
   {/if}
 </main>

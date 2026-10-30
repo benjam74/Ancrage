@@ -1,9 +1,9 @@
 import { describe, expect, test } from 'vitest';
 import { memoryStorage } from '../../src/app/cloud';
 import { builtinConfig } from '../../src/app/builtin';
-import { PULL_FIRST, WELCOME_DONE, applyMeta, attachAccount, metaFrom, profileForAccount, seedFor, settled, signInAccount, signUpAccount, welcomeNeeded } from '../../src/app/account';
+import { PULL_FIRST, WELCOME_DONE, openElsewhere, applyMeta, attachAccount, metaFrom, profileForAccount, seedFor, settled, signInAccount, signUpAccount, welcomeNeeded } from '../../src/app/account';
 import { MAIN, loadRegistry, scopedStorage } from '../../src/app/profiles';
-import { isAuthFragment, recoverPassword, recoveryToken, setPassword, signIn, signUp } from '../../src/sync/supabase';
+import { isAuthFragment, linkNotice, recoverPassword, recoveryToken, setPassword, signIn, signUp } from '../../src/sync/supabase';
 import { fakeSupabase } from '../sync/fake-supabase';
 
 const session = (email: string, meta?: Record<string, unknown>) => ({ accessToken: 'a', refreshToken: 'r', expiresAt: 1, email, ...(meta ? { meta } : {}) });
@@ -95,10 +95,11 @@ describe('welcome page', () => {
     expect(profile).toMatchObject({ name: 'Léa', starter: 'college5' });
     // No examples while the account's cards are on their way.
     expect(seedFor(store, profile)).toBe('none');
-    settled(store, { state: 'error' });
+    expect(settled(store, { state: 'error' })).toBe(false);
     expect(seedFor(store, profile)).toBe('none');
-    settled(store, { state: 'ok' });
+    expect(settled(store, { state: 'ok' })).toBe(true);
     expect(store.get(PULL_FIRST)).toBeNull();
+    expect(settled(store, { state: 'ok' })).toBe(false);
   });
 
   test('an account created before accounts had a setup keeps the profile as it is', async () => {
@@ -127,4 +128,25 @@ describe('forgotten password', () => {
     srv.advance(7200);
     expect(await setPassword(config, token, 'encore12', srv.fetchFn)).toMatchObject({ ok: false, error: expect.stringContaining('expiré') });
   });
+});
+
+test('links from e-mails that fail or confirm an address say so', () => {
+  expect(linkNotice('#error=access_denied&error_code=otp_expired&error_description=Email+link+is+invalid+or+has+expired')).toMatch(/expiré/);
+  expect(linkNotice('#access_token=x&type=signup')).toMatch(/confirmée/);
+  expect(linkNotice('#access_token=x&type=recovery')).toBeNull();
+  expect(linkNotice('#reglages')).toBeNull();
+});
+
+test('an account already open in another profile of the device is not opened again', async () => {
+  const srv = fakeSupabase();
+  const config = { url: 'https://projet.supabase.co', anonKey: 'anon-key' };
+  await signUp(config, 'papa@ex.fr', 'secret12', srv.fetchFn, srv.now);
+  const store = memoryStorage();
+  attachAccount(store, MAIN, session('Papa@ex.fr'), false);
+  const added = profileForAccount(store, session('lea@ex.fr'));
+  if (!added.ok) throw new Error(added.error);
+  expect(openElsewhere(store, 'papa@ex.fr', MAIN)).toBeNull();
+  const res = await signInAccount(store, added.profile.id, config, 'papa@ex.fr', 'secret12', srv.fetchFn, srv.now);
+  expect(res).toMatchObject({ ok: false, error: expect.stringContaining('Principal') });
+  expect(JSON.parse(scopedStorage(store, added.profile.id).get('ancrage.sync.session')!).email).toBe('lea@ex.fr');
 });

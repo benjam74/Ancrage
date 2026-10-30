@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { tick } from 'svelte';
   import { BUILTIN_SYNC } from '../app/builtin';
   import { setPassword } from '../sync/supabase';
 
@@ -9,6 +10,7 @@
   let again = $state('');
   let busy = $state(false);
   let done = $state(false);
+  let message = $state('');
   let error = $state('');
 
   async function submit() {
@@ -19,8 +21,11 @@
     busy = true;
     try {
       const res = await setPassword(BUILTIN_SYNC, token, password);
-      if (res.ok) done = true;
-      else error = res.error;
+      if (!res.ok) return void (error = res.error);
+      done = true;
+      message = 'Mot de passe changé. Utilise-le pour te connecter sur tes appareils.';
+      await tick();
+      document.getElementById('np-continue')?.focus();
     } finally {
       busy = false;
     }
@@ -29,17 +34,18 @@
 
 <main class="who welcome">
   <h1>Nouveau mot de passe</h1>
+  <p role="status">{message}</p>
   {#if done}
-    <p role="status">Mot de passe changé. Utilise-le pour te connecter sur tes appareils.</p>
-    <button class="btn" onclick={onclose}>Continuer</button>
+    <button id="np-continue" class="btn" onclick={onclose}>Continuer</button>
   {:else}
     <form class="form welcome-form" onsubmit={(e) => { e.preventDefault(); void submit(); }} novalidate>
       <div class="field">
         <label for="np-1">Nouveau mot de passe</label>
-        <input id="np-1" type="password" bind:value={password} autocomplete="new-password" />
+        <input id="np-1" type="password" bind:value={password} autocomplete="new-password" aria-describedby="np-hint" />
+        <span id="np-hint" class="hint">6 caractères minimum.</span>
       </div>
       <div class="field">
-        <label for="np-2">Encore une fois</label>
+        <label for="np-2">Confirme le mot de passe</label>
         <input id="np-2" type="password" bind:value={again} autocomplete="new-password" />
       </div>
       <button class="btn" disabled={busy}>{busy ? 'Un instant…' : 'Enregistrer'}</button>

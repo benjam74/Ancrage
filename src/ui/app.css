@@ -398,7 +398,7 @@ p.error { font-weight: 700; color: var(--bad); }
 .welcome-form { text-align: left; }
 .welcome-form fieldset { border: 0; padding: 0; margin: 0; display: grid; gap: 8px; }
 .welcome-form legend { font-weight: 700; margin-bottom: 4px; }
-.welcome-form .btn.ghost.small { justify-self: center; }
+.welcome-form .link { justify-self: center; font-size: 15px; }
 .welcome > div > .muted { margin-top: 4px; }
 .face { width: 72px; height: 72px; border-radius: 50%; display: grid; place-items: center; font-family: var(--display); font-weight: 900; font-size: 30px; color: #fff; background: var(--pc, var(--petrol)); box-shadow: 0 4px 0 color-mix(in srgb, var(--pc, var(--petrol)) 70%, #000); }
 .face.small { width: 30px; height: 30px; font-size: 14px; box-shadow: none; }

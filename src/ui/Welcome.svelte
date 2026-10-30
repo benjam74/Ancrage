@@ -4,8 +4,9 @@
   import { browserStorage } from '../app/cloud';
   import { currentProfile, profileStore } from '../app/current';
   import { recoverPassword } from '../sync/supabase';
+  import { tick } from 'svelte';
 
-  let { ondone }: { ondone: () => void } = $props();
+  let { ondone, notice = null }: { ondone: () => void; notice?: string | null } = $props();
 
   type Mode = 'in' | 'up' | 'forgot';
   let mode = $state<Mode>('in');
@@ -15,14 +16,18 @@
   let kind = $state<keyof typeof ACCOUNT_KINDS>(currentProfile.starter === 'college5' ? 'college5' : currentProfile.starter === 'none' ? 'autre' : 'coaching');
   let busy = $state(false);
   let error = $state('');
-  let message = $state('');
+  // svelte-ignore state_referenced_locally
+  let message = $state(notice ?? '');
 
   const config = BUILTIN_SYNC!;
 
-  function switchTo(next: Mode) {
+  async function switchTo(next: Mode) {
     mode = next;
     error = '';
     message = '';
+    // The button that was pressed may be gone: keep the keyboard where the form starts.
+    await tick();
+    document.getElementById(next === 'up' ? 'w-name' : 'w-email')?.focus();
   }
 
   async function submit() {
@@ -105,14 +110,15 @@
     {#if mode !== 'forgot'}
       <div class="field">
         <label for="w-password">Mot de passe</label>
-        <input id="w-password" type="password" bind:value={password} autocomplete={mode === 'up' ? 'new-password' : 'current-password'} />
+        <input id="w-password" type="password" bind:value={password} autocomplete={mode === 'up' ? 'new-password' : 'current-password'} aria-describedby={mode === 'up' ? 'w-pw-hint' : undefined} />
+        {#if mode === 'up'}<span id="w-pw-hint" class="hint">6 caractères minimum.</span>{/if}
       </div>
     {/if}
     <button class="btn" disabled={busy}>{busy ? 'Un instant…' : mode === 'in' ? 'Se connecter' : mode === 'up' ? 'Créer mon compte' : 'Envoyer le lien'}</button>
     {#if mode === 'in'}
-      <button type="button" class="btn ghost small" onclick={() => switchTo('forgot')}>Mot de passe oublié ?</button>
+      <button type="button" class="link" onclick={() => switchTo('forgot')}>Mot de passe oublié ?</button>
     {:else if mode === 'forgot'}
-      <button type="button" class="btn ghost small" onclick={() => switchTo('in')}>Retour</button>
+      <button type="button" class="link" onclick={() => switchTo('in')}>Retour à la connexion</button>
     {/if}
     <p role="status" class="muted">{message}</p>
     {#if error}<p class="error" role="alert">{error}</p>{/if}

@@ -3,8 +3,10 @@
   import type { CloudSync, SyncStatus } from '../app/cloud';
   import { howLongAgo } from './format';
   import { BUILTIN_SYNC } from '../app/builtin';
-  import { settled } from '../app/account';
-  import { currentProfile, profileStore } from '../app/current';
+  import { openElsewhere } from '../app/account';
+  import { currentProfile } from '../app/current';
+  import { browserStorage } from '../app/cloud';
+  import { recoverPassword } from '../sync/supabase';
 
   let { cloud, onsynced }: { cloud: CloudSync; onsynced: () => void } = $props();
 
@@ -43,6 +45,8 @@
         const conf = cloud.configure({ url, anonKey });
         if (!conf.ok) return void (error = conf.error);
       }
+      const already = openElsewhere(browserStorage(), email, currentProfile.id);
+      if (already) return void (error = already);
       // The account keeps who it is for, to set up the next devices the same way.
       const meta = { name: currentProfile.name, audience: currentProfile.audience, starter: currentProfile.starter, color: currentProfile.color };
       const res = mode === 'in' ? await cloud.signIn(email, password) : await cloud.signUp(email, password, meta);
@@ -56,9 +60,17 @@
       await syncNow();
     });
 
+  const forgot = () =>
+    run(async () => {
+      if (!BUILTIN_SYNC) return;
+      if (!email.trim()) return void (error = 'Indique d’abord ton adresse e-mail.');
+      const res = await recoverPassword(BUILTIN_SYNC, email.trim());
+      if (res.ok) message = 'Si un compte existe pour cette adresse, un e-mail vient de partir avec un lien pour choisir un nouveau mot de passe.';
+      else error = res.error;
+    });
+
   async function syncNow() {
     status = await cloud.sync();
-    settled(profileStore(), status);
     signedIn = !!cloud.email();
     if (status.state === 'ok') {
       message = 'Synchronisé.';
@@ -123,6 +135,7 @@
         <button class="btn" disabled={busy}>Se connecter</button>
         <button type="button" class="btn ghost" disabled={busy} onclick={() => connect('up')}>Créer le compte</button>
       </div>
+      {#if builtin}<button type="button" class="link" disabled={busy} onclick={forgot}>Mot de passe oublié ?</button>{/if}
     </form>
   {/if}
   <p role="status" class="muted">{message}</p>
